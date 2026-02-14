@@ -1,0 +1,585 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 flex" id="app-container">
+    <!-- Sidebar -->
+    <aside id="sidebar"
+        class="bg-bank-900 text-white transition-all duration-300 ease-in-out w-64 flex flex-col fixed h-full z-20 md:relative">
+        <div class="h-16 flex items-center justify-between px-4 bg-bank-800 border-b border-bank-700">
+            <div class="flex items-center space-x-2 overflow-hidden whitespace-nowrap">
+                <svg class="w-8 h-8 text-bank-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z" />
+                    <path fill-rule="evenodd"
+                        d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z"
+                        clip-rule="evenodd" />
+                </svg>
+                <span id="sidebar-title" class="text-xl font-bold tracking-tight transition-opacity duration-300">Banque
+                    Pro</span>
+            </div>
+            <!-- Mobile Close Button -->
+            <button id="mobile-close-sidebar" class="md:hidden text-gray-300 hover:text-white">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                    </path>
+                </svg>
+            </button>
+        </div>
+
+        <nav class="flex-1 py-6 space-y-1 px-3 overflow-y-auto">
+            <a href="#" class="group flex items-center px-2 py-2 text-sm font-medium rounded-md bg-bank-800 text-white">
+                <svg class="mr-3 h-6 w-6 text-bank-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                </svg>
+                <span class="sidebar-text transition-opacity duration-300">Vue d'ensemble</span>
+            </a>
+
+            <a href="#"
+                class="group flex items-center px-2 py-2 text-sm font-medium rounded-md text-bank-100 hover:bg-bank-700 hover:text-white transition-colors">
+                <svg class="mr-3 h-6 w-6 text-bank-300 group-hover:text-white" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span class="sidebar-text transition-opacity duration-300">Analyses</span>
+            </a>
+
+            <a href="#"
+                class="group flex items-center px-2 py-2 text-sm font-medium rounded-md text-bank-100 hover:bg-bank-700 hover:text-white transition-colors">
+                <svg class="mr-3 h-6 w-6 text-bank-300 group-hover:text-white" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span class="sidebar-text transition-opacity duration-300">Rapports</span>
+            </a>
+
+            <div class="border-t border-bank-700 my-4 mx-2"></div>
+
+            <a href="#"
+                class="group flex items-center px-2 py-2 text-sm font-medium rounded-md text-bank-100 hover:bg-bank-700 hover:text-white transition-colors">
+                <svg class="mr-3 h-6 w-6 text-bank-300 group-hover:text-white" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span class="sidebar-text transition-opacity duration-300">Paramètres</span>
+            </a>
+        </nav>
+
+        <div class="p-4 border-t border-bank-700 bg-bank-900">
+            <div class="flex items-center w-full">
+                <div class="flex-shrink-0">
+                    <div class="h-8 w-8 rounded-full bg-bank-500 flex items-center justify-center text-white font-bold">
+                        {{ session.get('user', 'U')[0] | upper }}
+                    </div>
+                </div>
+                <div class="ml-3 sidebar-text overflow-hidden">
+                    <p class="text-sm font-medium text-white group-hover:text-gray-900">{{ session.get('user',
+                        'Utilisateur') }}</p>
+                    <p class="text-xs font-medium text-bank-300 group-hover:text-gray-700">Connecté</p>
+                </div>
+                <a href="{{ url_for('logout') }}" class="ml-auto text-bank-300 hover:text-white" title="Déconnexion">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col min-w-0 bg-gray-50 overflow-hidden">
+        <!-- Top Header -->
+        <header class="bg-white shadow-sm h-16 flex items-center justify-between px-6 z-10">
+            <div class="flex items-center">
+                <button id="sidebar-toggle"
+                    class="text-gray-500 hover:text-bank-600 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-bank-500 p-2 rounded-md">
+                    <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 6h16M4 12h16M4 18h7" />
+                    </svg>
+                </button>
+                <h1 class="ml-4 text-xl font-semibold text-gray-800 hidden md:block">Tableau de Bord</h1>
+            </div>
+
+            <div class="flex items-center space-x-4">
+                <span class="text-sm text-gray-500 flex items-center">
+                    <span class="w-2 h-2 rounded-full bg-green-500 mr-2"></span>
+                    Système opérationnel
+                </span>
+            </div>
+        </header>
+
+        <!-- Scrollable Content -->
+        <div class="flex-1 overflow-auto p-8">
+            <div class="max-w-7xl mx-auto space-y-8">
+
+                <!-- Welcome Banner -->
+                <div
+                    class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex justify-between items-center bg-gradient-to-r from-white to-bank-50">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-900">Bienvenue, {{ session.get('user', 'Utilisateur') |
+                            capitalize }}</h2>
+                        <p class="text-gray-500 mt-1">Voici un résumé de l'activité financière d'aujourd'hui.</p>
+                    </div>
+                    <div class="hidden sm:block">
+                        <span
+                            class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-bank-100 text-bank-800">
+                            Dernière màj: Aujourd'hui
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Stats Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div
+                        class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 transition-shadow hover:shadow-md group">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-gray-500 text-sm font-medium uppercase tracking-wider">Transactions</h3>
+                            <span
+                                class="p-2 rounded-lg bg-bank-50 text-bank-600 group-hover:bg-bank-100 transition-colors">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                                </svg>
+                            </span>
+                        </div>
+                        <p class="text-3xl font-bold text-gray-900 group-hover:text-bank-600 transition-colors">2,450
+                        </p>
+                        <p class="text-sm text-green-600 mt-2 flex items-center">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
+                            </svg>
+                            +12.5% vs hier
+                        </p>
+                    </div>
+
+                    <div
+                        class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 transition-shadow hover:shadow-md group">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-gray-500 text-sm font-medium uppercase tracking-wider">Volume Total</h3>
+                            <span
+                                class="p-2 rounded-lg bg-green-50 text-green-600 group-hover:bg-green-100 transition-colors">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z">
+                                    </path>
+                                </svg>
+                            </span>
+                        </div>
+                        <p class="text-3xl font-bold text-gray-900 group-hover:text-green-600 transition-colors">45,230
+                            €</p>
+                        <p class="text-sm text-green-600 mt-2 flex items-center">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
+                            </svg>
+                            +5.2% vs hier
+                        </p>
+                    </div>
+
+                    <div
+                        class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 transition-shadow hover:shadow-md group">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-gray-500 text-sm font-medium uppercase tracking-wider">Nouveaux Clients</h3>
+                            <span
+                                class="p-2 rounded-lg bg-purple-50 text-purple-600 group-hover:bg-purple-100 transition-colors">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z">
+                                    </path>
+                                </svg>
+                            </span>
+                        </div>
+                        <p class="text-3xl font-bold text-gray-900 group-hover:text-purple-600 transition-colors">12</p>
+                        <p class="text-sm text-gray-400 mt-2">
+                            Stable
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Upload Section -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                        <h2 class="text-lg font-semibold text-gray-800">Importation de Données</h2>
+                        <span class="text-xs text-gray-500 bg-white border border-gray-200 px-2 py-1 rounded">ZIP, CSV,
+                            XLSX</span>
+                    </div>
+                    <div class="p-8">
+                        <form id="upload-form"
+                            class="relative border-2 border-dashed border-gray-300 rounded-lg p-12 text-center hover:border-bank-500 hover:bg-bank-50 transition-all duration-300 cursor-pointer group">
+                            <input type="file" name="file" id="file-input"
+                                class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+
+                            <div id="upload-ui">
+                                <div class="group-hover:scale-110 transform transition-transform duration-300 mb-4">
+                                    <div
+                                        class="w-16 h-16 bg-bank-100 text-bank-600 rounded-full flex items-center justify-center mx-auto">
+                                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12">
+                                            </path>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <h3 class="text-lg font-medium text-gray-900 group-hover:text-bank-700">Glissez-déposez
+                                    ou cliquez pour upload</h3>
+                                <p class="mt-2 text-sm text-gray-500 max-w-sm mx-auto">
+                                    Analyse automatique par Polars.
+                                </p>
+                            </div>
+
+                            <!-- Upload Loading State (Hidden by default) -->
+                            <div id="upload-loading" class="hidden">
+                                <div
+                                    class="animate-spin rounded-full h-12 w-12 border-b-2 border-bank-600 mx-auto mb-4">
+                                </div>
+                                <p class="text-bank-600 font-medium">Traitement en cours...</p>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Data Preview Section (Tabulator) -->
+                <div id="data-preview-container"
+                    class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hidden">
+                    <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                        <h2 class="text-lg font-semibold text-gray-800">Explorateur de Données</h2>
+                        <span id="row-count" class="text-sm text-gray-500"></span>
+                    </div>
+
+                    <!-- Skeleton Loader -->
+                    <div id="table-skeleton" class="p-6 space-y-4 hidden">
+                        <div class="flex space-x-4">
+                            <div class="h-8 bg-gray-200 rounded w-1/4 skeleton"></div>
+                            <div class="h-8 bg-gray-200 rounded w-1/4 skeleton"></div>
+                            <div class="h-8 bg-gray-200 rounded w-1/4 skeleton"></div>
+                            <div class="h-8 bg-gray-200 rounded w-1/4 skeleton"></div>
+                        </div>
+                        <div class="space-y-2">
+                            <div class="h-4 bg-gray-100 rounded w-full skeleton"></div>
+                            <div class="h-4 bg-gray-100 rounded w-full skeleton"></div>
+                            <div class="h-4 bg-gray-100 rounded w-full skeleton"></div>
+                            <div class="h-4 bg-gray-100 rounded w-full skeleton"></div>
+                            <div class="h-4 bg-gray-100 rounded w-full skeleton"></div>
+                        </div>
+                    </div>
+
+                    <div class="p-4">
+                        <div id="grid-table"></div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Settings Modal -->
+<div id="settings-modal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title" role="dialog"
+    aria-modal="true">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" id="modal-backdrop">
+        </div>
+        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+        <div
+            class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+            <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div class="sm:flex sm:items-start">
+                    <div
+                        class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-bank-100 sm:mx-0 sm:h-10 sm:w-10">
+                        <svg class="h-6 w-6 text-bank-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                        </svg>
+                    </div>
+                    <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                        <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">
+                            Paramètres du Dashboard
+                        </h3>
+                        <div class="mt-4">
+                            <p class="text-sm text-gray-500 mb-4">Personnalisez l'apparence de votre espace de travail.
+                            </p>
+
+                            <h4 class="text-sm font-semibold text-gray-700 mb-3">Thème Chromatique</h4>
+                            <div class="grid grid-cols-3 gap-3">
+                                <button
+                                    class="theme-btn flex flex-col items-center justify-center p-3 border-2 border-transparent hover:border-gray-200 rounded-lg focus:outline-none transition-all"
+                                    data-theme="default">
+                                    <div class="w-8 h-8 rounded-full bg-[#0ea5e9] mb-2 shadow-sm"></div>
+                                    <span class="text-xs font-medium text-gray-700">Classique</span>
+                                </button>
+                                <button
+                                    class="theme-btn flex flex-col items-center justify-center p-3 border-2 border-transparent hover:border-gray-200 rounded-lg focus:outline-none transition-all"
+                                    data-theme="red">
+                                    <div class="w-8 h-8 rounded-full bg-[#f43f5e] mb-2 shadow-sm"></div>
+                                    <span class="text-xs font-medium text-gray-700">Société G.</span>
+                                </button>
+                                <button
+                                    class="theme-btn flex flex-col items-center justify-center p-3 border-2 border-transparent hover:border-gray-200 rounded-lg focus:outline-none transition-all"
+                                    data-theme="violet">
+                                    <div class="w-8 h-8 rounded-full bg-[#8b5cf6] mb-2 shadow-sm"></div>
+                                    <span class="text-xs font-medium text-gray-700">Moderne</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <button type="button" id="save-modal"
+                    class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-bank-600 text-base font-medium text-white hover:bg-bank-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-bank-500 sm:ml-3 sm:w-auto sm:text-sm">
+                    Enregistrer
+                </button>
+                <button type="button" id="cancel-modal"
+                    class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+                    Annuler
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- Sidebar Logic ---
+        const sidebar = document.getElementById('sidebar');
+        const sidebarToggle = document.getElementById('sidebar-toggle');
+        const sidebarTexts = document.querySelectorAll('.sidebar-text');
+        const sidebarTitle = document.getElementById('sidebar-title');
+
+        if (sidebarToggle) {
+            let isCollapsed = false;
+            sidebarToggle.addEventListener('click', () => {
+                isCollapsed = !isCollapsed;
+                if (window.innerWidth >= 768) {
+                    if (isCollapsed) {
+                        sidebar.classList.remove('w-64');
+                        sidebar.classList.add('w-20');
+                        sidebarTitle.classList.add('opacity-0', 'w-0');
+                        sidebarTexts.forEach(el => el.classList.add('opacity-0', 'w-0', 'hidden'));
+                    } else {
+                        sidebar.classList.remove('w-20');
+                        sidebar.classList.add('w-64');
+                        sidebarTitle.classList.remove('opacity-0', 'w-0');
+                        sidebarTexts.forEach(el => {
+                            el.classList.remove('opacity-0', 'w-0', 'hidden');
+                            setTimeout(() => el.classList.remove('hidden'), 50);
+                        });
+                    }
+                } else {
+                    sidebar.classList.toggle('-translate-x-full');
+                }
+            });
+        }
+
+        // --- AJAX Upload & Tabulator ---
+        const fileInput = document.getElementById('file-input');
+        const uploadUI = document.getElementById('upload-ui');
+        const uploadLoading = document.getElementById('upload-loading');
+        const dataPreviewContainer = document.getElementById('data-preview-container');
+        const tableSkeleton = document.getElementById('table-skeleton');
+        const rowCount = document.getElementById('row-count');
+
+        if (fileInput) {
+            fileInput.addEventListener('change', async (e) => {
+                if (fileInput.files.length > 0) {
+                    // 1. Show Loading State in Upload Box
+                    uploadUI.classList.add('hidden');
+                    uploadLoading.classList.remove('hidden');
+
+                    // 2. Show Skeleton for Table (Prepare the area)
+                    dataPreviewContainer.classList.remove('hidden');
+                    tableSkeleton.classList.remove('hidden');
+                    document.getElementById('grid-table').innerHTML = ''; // Clear previous
+
+                    const formData = new FormData();
+                    formData.append('file', fileInput.files[0]);
+
+                    try {
+                        const response = await fetch("{{ url_for('upload_file') }}", {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        const result = await response.json();
+
+                        if (response.ok && result.status === 'success') {
+                            // 3. Hide Skeletons, Show Table
+                            uploadLoading.classList.add('hidden');
+                            uploadUI.classList.remove('hidden'); // Reset upload box
+
+                            initGrid(result.payload);
+
+                            // Show success notification (Manually create since no flash)
+                            showNotification(result.message, 'success');
+
+                        } else {
+                            throw new Error(result.message || 'Erreur inconnue');
+                        }
+                    } catch (error) {
+                        console.error('Upload Error:', error);
+                        uploadLoading.classList.add('hidden');
+                        uploadUI.classList.remove('hidden');
+                        tableSkeleton.classList.add('hidden');
+                        dataPreviewContainer.classList.add('hidden');
+                        showNotification(error.message, 'error');
+                    }
+                }
+            });
+        }
+
+        function initGrid(data) {
+            tableSkeleton.classList.add('hidden');
+            rowCount.textContent = `Total: ${data.total_rows} lignes`;
+
+            // Map Tabulator column format ({title, field}) to Grid.js object format ({name, id})
+            // This ensures Grid.js maps the data objects correctly to the columns
+            const columns = data.columns.map(col => ({
+                name: col.title,
+                id: col.field
+            }));
+
+            // Clear previous grid if any (by clearing container)
+            const container = document.getElementById("grid-table");
+            container.innerHTML = '';
+
+            new gridjs.Grid({
+                columns: columns,
+                data: data.data,
+                pagination: {
+                    enabled: true,
+                    limit: 10,
+                    summary: true
+                },
+                search: true,
+                sort: true,
+                resizable: true,
+                style: {
+                    table: {
+                        'white-space': 'nowrap'
+                    },
+                    th: {
+                        'background-color': '#f9fafb',
+                        'color': '#374151',
+                        'font-weight': '600'
+                    },
+                    td: {
+                        'color': '#1f2937'
+                    }
+                },
+                language: {
+                    'search': {
+                        'placeholder': 'Rechercher...'
+                    },
+                    'pagination': {
+                        'previous': 'Précédent',
+                        'next': 'Suivant',
+                        'showing': 'Affichage de',
+                        'results': () => 'résultats'
+                    },
+                    loading: 'Chargement...',
+                    noRecordsFound: 'Aucun enregistrement trouvé'
+                }
+            }).render(container);
+        }
+
+        function showNotification(message, type) {
+            const container = document.querySelector('.fixed.z-50') || createNotificationContainer();
+            const div = document.createElement('div');
+            div.className = `notification p-4 rounded shadow-lg text-white pointer-events-auto transform transition-all duration-500 ease-in-out fade-in mb-2 ${type === 'error' ? 'bg-red-500' : 'bg-green-500'}`;
+            div.textContent = message;
+            container.appendChild(div);
+
+            setTimeout(() => {
+                div.classList.add('opacity-0', 'translate-x-full');
+                setTimeout(() => div.remove(), 500);
+            }, 4000);
+        }
+
+        function createNotificationContainer() {
+            const div = document.createElement('div');
+            div.className = "fixed top-4 right-4 z-50 space-y-2 pointer-events-none";
+            document.body.appendChild(div);
+            return div;
+        }
+
+        // --- Settings Modal & Theme Switcher ---
+        const settingsLink = document.querySelector('nav a[href="#"]:last-child');
+        const modal = document.getElementById('settings-modal');
+        const saveBtn = document.getElementById('save-modal');
+        const cancelBtn = document.getElementById('cancel-modal');
+        const backdrop = document.getElementById('modal-backdrop');
+        const themeBtns = document.querySelectorAll('.theme-btn');
+        const root = document.documentElement;
+
+        let initialTheme = localStorage.getItem('bank-theme') || 'default';
+        let currentTempTheme = initialTheme;
+
+        applyTheme(initialTheme);
+
+        function applyTheme(theme) {
+            if (theme === 'default') {
+                root.removeAttribute('data-theme');
+            } else {
+                root.setAttribute('data-theme', theme);
+            }
+            updateActiveButton(theme);
+        }
+
+        function updateActiveButton(theme) {
+            themeBtns.forEach(btn => {
+                const btnTheme = btn.getAttribute('data-theme');
+                if ((theme === 'default' && btnTheme === 'default') || theme === btnTheme) {
+                    btn.classList.add('border-bank-500');
+                    btn.classList.remove('border-transparent', 'hover:border-gray-200');
+                } else {
+                    btn.classList.remove('border-bank-500');
+                    btn.classList.add('border-transparent', 'hover:border-gray-200');
+                }
+            });
+        }
+
+        function openModal() {
+            initialTheme = localStorage.getItem('bank-theme') || 'default';
+            currentTempTheme = initialTheme;
+            applyTheme(initialTheme);
+            modal.classList.remove('hidden');
+        }
+
+        function closeModal(save) {
+            if (save) {
+                localStorage.setItem('bank-theme', currentTempTheme);
+                applyTheme(currentTempTheme);
+            } else {
+                applyTheme(initialTheme);
+            }
+            modal.classList.add('hidden');
+        }
+
+        if (settingsLink) {
+            settingsLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                openModal();
+            });
+        }
+
+        saveBtn.addEventListener('click', () => closeModal(true));
+        cancelBtn.addEventListener('click', () => closeModal(false));
+        backdrop.addEventListener('click', () => closeModal(false));
+
+        themeBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const theme = btn.getAttribute('data-theme');
+                currentTempTheme = theme;
+                applyTheme(theme);
+            });
+        });
+    });
+</script>
+{% endblock %}

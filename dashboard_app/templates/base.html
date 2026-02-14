@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Banque Dashboard{% endblock %}</title>
+    <!-- Font: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Grid.js Styles -->
+    <link href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
+    <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Modern Skeleton Loading Animation */
+        @keyframes shimmer {
+            0% {
+                background-position: -1000px 0;
+            }
+
+            100% {
+                background-position: 1000px 0;
+            }
+        }
+
+        .skeleton {
+            animation: shimmer 2s infinite linear;
+            background: linear-gradient(to right, #f3f4f6 4%, #e5e7eb 25%, #f3f4f6 36%);
+            background-size: 1000px 100%;
+        }
+
+        /* Customize Tabulator to match Tailwind */
+        .tabulator {
+            border: none !important;
+            background-color: white !important;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .tabulator-header {
+            background-color: #f9fafb !important;
+            /* bg-gray-50 */
+            border-bottom: 2px solid #e5e7eb !important;
+            color: #374151 !important;
+            /* text-gray-700 */
+            font-weight: 600 !important;
+        }
+
+        .tabulator-row {
+            background-color: white !important;
+            border-bottom: 1px solid #f3f4f6 !important;
+            color: #1f2937 !important;
+            /* text-gray-800 */
+        }
+
+        .tabulator-row:hover {
+            background-color: #f0f9ff !important;
+            /* hover:bg-bank-50 */
+        }
+
+        .tabulator-cell {
+            padding: 12px 16px !important;
+        }
+
+        /* Mobile responsive fix for Tabulator */
+        @media (max-width: 640px) {
+            .tabulator-cell {
+                padding: 8px 10px !important;
+                font-size: 0.875rem;
+            }
+        }
+
+        :root {
+            /* Default Theme (Blue/Bank) */
+            --bank-50: #f0f9ff;
+            --bank-100: #e0f2fe;
+            --bank-200: #bae6fd;
+            --bank-300: #7dd3fc;
+            --bank-400: #38bdf8;
+            --bank-500: #0ea5e9;
+            --bank-600: #0284c7;
+            --bank-700: #0369a1;
+            --bank-800: #075985;
+            --bank-900: #0c4a6e;
+        }
+
+        [data-theme="red"] {
+            /* Societe Generale Style */
+            --bank-50: #fff1f2;
+            --bank-100: #ffe4e6;
+            --bank-200: #fecdd3;
+            --bank-300: #fda4af;
+            --bank-400: #fb7185;
+            --bank-500: #f43f5e;
+            --bank-600: #e11d48;
+            --bank-700: #be123c;
+            --bank-800: #9f1239;
+            --bank-900: #881337;
+        }
+
+        [data-theme="violet"] {
+            /* Violet Theme */
+            --bank-50: #f5f3ff;
+            --bank-100: #ede9fe;
+            --bank-200: #ddd6fe;
+            --bank-300: #c4b5fd;
+            --bank-400: #a78bfa;
+            --bank-500: #8b5cf6;
+            --bank-600: #7c3aed;
+            --bank-700: #6d28d9;
+            --bank-800: #5b21b6;
+            --bank-900: #4c1d95;
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        bank: {
+                            50: 'var(--bank-50)',
+                            100: 'var(--bank-100)',
+                            200: 'var(--bank-200)',
+                            300: 'var(--bank-300)',
+                            400: 'var(--bank-400)',
+                            500: 'var(--bank-500)',
+                            600: 'var(--bank-600)',
+                            700: 'var(--bank-700)',
+                            800: 'var(--bank-800)',
+                            900: 'var(--bank-900)',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+
+<body class="bg-gray-50 font-sans antialiased text-gray-900">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="fixed top-4 right-4 z-50 space-y-2 pointer-events-none">
+        {% for category, message in messages %}
+        <div
+            class="notification p-4 rounded shadow-lg text-white pointer-events-auto transform transition-all duration-500 ease-in-out {{ 'bg-red-500' if category == 'error' else 'bg-green-500' }} fade-in">
+            {{ message }}
+        </div>
+        {% endfor %}
+        <script>
+            // Auto-dismiss notifications
+            document.addEventListener('DOMContentLoaded', () => {
+                const notifications = document.querySelectorAll('.notification');
+                notifications.forEach(note => {
+                    setTimeout(() => {
+                        note.classList.add('opacity-0', 'translate-x-full');
+                        setTimeout(() => note.remove(), 500);
+                    }, 4000); // Dissmiss after 4 seconds
+                });
+            });
+        </script>
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+</body>
+
+</html>
