@@ -5,13 +5,14 @@ from werkzeug.utils import secure_filename
 import uuid
 from datetime import datetime
 import logging
+import secrets
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = 'super_secret_key_change_this_later'
+app.secret_key = secrets.token_hex(32)
 
 # --- In-Memory Cache (Replaces large Session Cookies) ---
 # Format: { 'session_id': { 'filepath': '...', 'preview': {...} } }

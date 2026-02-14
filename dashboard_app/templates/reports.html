@@ -1,6 +1,28 @@
 {% extends "base.html" %}
 {% block title %}Rapports — Banque Pro{% endblock %}
 
+{% block extra_css %}
+<!-- Basic styles for the manual pivot table -->
+<style>
+    .pivot-table-container {
+        max-height: 600px;
+        overflow: auto;
+    }
+
+    .pivot-table-container table {
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+    .pivot-table-container th {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: #f9fafb;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="flex h-screen overflow-hidden">
     {% include 'includes/sidebar.html' %}
@@ -64,11 +86,12 @@
         </header>
 
         <!-- Page Content -->
-        <div class="p-6">
+        <div class="p-6 animate-fade-in-up">
             {% if columns_info %}
 
             <!-- ===== Tab Navigation ===== -->
-            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 mb-6 overflow-hidden">
+            <div
+                class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 mb-6 overflow-hidden animate-fade-in-up delay-100">
                 <div class="flex" id="report-tabs">
                     <button data-tab="charts"
                         class="tab-btn flex-1 px-6 py-3.5 text-sm font-medium text-center transition-all duration-200 border-b-2 border-bank-600 text-bank-700 bg-bank-50/50">
@@ -96,7 +119,8 @@
             <!-- ========== TAB: CHARTS ========== -->
             <div id="tab-charts">
                 <!-- Control Panel -->
-                <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+                <div
+                    class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 mb-6 animate-fade-in-up delay-200">
                     <h2 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                         <svg class="w-5 h-5 mr-2 text-bank-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -164,7 +188,8 @@
                 </div>
 
                 <!-- Chart Container -->
-                <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div
+                    class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-fade-in-up delay-300">
                     <div id="chart-header"
                         class="hidden px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                         <h3 id="chart-title" class="text-lg font-semibold text-gray-900"></h3>
@@ -211,7 +236,8 @@
             <!-- ========== TAB: PIVOT TABLE ========== -->
             <div id="tab-pivot" class="hidden">
                 <!-- TCD Control Panel -->
-                <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+                <div
+                    class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 mb-6 animate-fade-in-up delay-100">
                     <h2 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                         <svg class="w-5 h-5 mr-2 text-bank-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -295,7 +321,8 @@
                 </div>
 
                 <!-- Pivot Table Result -->
-                <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div
+                    class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-fade-in-up delay-200">
                     <div id="pivot-header"
                         class="hidden px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                         <h3 id="pivot-title" class="text-lg font-semibold text-gray-900"></h3>
@@ -316,8 +343,8 @@
                         <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-bank-600 mb-4"></div>
                         <p class="text-sm text-gray-500">Calcul du tableau croisé dynamique...</p>
                     </div>
-                    <div id="pivot-container" class="hidden overflow-x-auto">
-                        <table id="pivot-table" class="w-full text-sm text-left"></table>
+                    <div id="pivot-container" class="hidden p-4 pivot-table-container">
+                        <!-- Table will be injected here -->
                     </div>
                     <div id="pivot-error" class="hidden flex flex-col items-center justify-center py-20 text-center">
                         <div class="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mb-4">
@@ -467,20 +494,28 @@
             chartHint.textContent = hint;
         }
 
-        xCol.addEventListener('change', updateChartTypeAvailability);
-        yCol.addEventListener('change', updateChartTypeAvailability);
+        if (xCol) xCol.addEventListener('change', updateChartTypeAvailability);
+        if (yCol) yCol.addEventListener('change', updateChartTypeAvailability);
         updateChartTypeAvailability();
 
         function showState(state) {
-            [emptyState, loadingState, chartContainer, errorState].forEach(el => el.classList.add('hidden'));
-            chartHeader.classList.add('hidden');
+            if (!state) return;
+            [emptyState, loadingState, chartContainer, errorState].forEach(el => {
+                if (el) el.classList.add('hidden');
+            });
+            if (chartHeader) chartHeader.classList.add('hidden');
             state.classList.remove('hidden');
         }
 
         function initChart() {
-            const dom = document.getElementById('echarts-main');
-            if (chartInstance) chartInstance.dispose();
-            chartInstance = echarts.init(dom, null, { renderer: 'canvas' });
+            try {
+                const dom = document.getElementById('echarts-main');
+                if (!dom) return;
+                if (chartInstance) chartInstance.dispose();
+                chartInstance = echarts.init(dom, null, { renderer: 'canvas' });
+            } catch (err) {
+                console.error("ECharts init error:", err);
+            }
         }
 
         // Chart options builder
@@ -650,7 +685,7 @@
             }
         }
 
-        generateBtn.addEventListener('click', generateChart);
+        if (generateBtn) generateBtn.addEventListener('click', generateChart);
 
         // Restore last chart
         const savedConfig = localStorage.getItem('chart-config');
@@ -667,13 +702,17 @@
             } catch (e) { console.warn('Could not restore chart config', e); }
         }
 
-        downloadBtn.addEventListener('click', () => {
+        if (downloadBtn) downloadBtn.addEventListener('click', () => {
             if (chartInstance) {
-                const url = chartInstance.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#fff' });
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `rapport_${Date.now()}.png`;
-                a.click();
+                try {
+                    const url = chartInstance.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#fff' });
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `rapport_${Date.now()}.png`;
+                    a.click();
+                } catch (err) {
+                    console.error("Download failed:", err);
+                }
             }
         });
 
@@ -696,49 +735,78 @@
         const pivotRowCount = document.getElementById('pivot-row-count');
         const pivotError = document.getElementById('pivot-error');
         const pivotErrorMsg = document.getElementById('pivot-error-message');
-        const pivotTable = document.getElementById('pivot-table');
+        const pivotGridDiv = document.getElementById('pivotGrid');
+        let pivotGridApi = null;
 
         function showPivotState(state) {
-            [pivotEmptyState, pivotLoading, pivotContainer, pivotError].forEach(el => el.classList.add('hidden'));
-            pivotHeader.classList.add('hidden');
+            if (!state) return;
+            [pivotEmptyState, pivotLoading, pivotContainer, pivotError].forEach(el => {
+                if (el) el.classList.add('hidden');
+            });
+            if (pivotHeader) pivotHeader.classList.add('hidden');
             state.classList.remove('hidden');
         }
 
         function renderPivotTable(data) {
             const { headers, rows, totals } = data;
+            pivotContainer.innerHTML = '';
 
-            let html = '<thead class="bg-gray-50 sticky top-0"><tr>';
+            const table = document.createElement('table');
+            table.className = "min-w-full divide-y divide-gray-200 border border-gray-100 rounded-lg overflow-hidden";
+
+            const thead = document.createElement('thead');
+            thead.className = "bg-gray-50";
+            const hRow = document.createElement('tr');
             headers.forEach(h => {
-                html += `<th class="px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider border-b border-gray-200 whitespace-nowrap">${h}</th>`;
+                const th = document.createElement('th');
+                th.className = "px-6 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest";
+                th.textContent = h;
+                hRow.appendChild(th);
             });
-            html += '</tr></thead>';
+            thead.appendChild(hRow);
+            table.appendChild(thead);
 
-            html += '<tbody class="divide-y divide-gray-100">';
-            rows.forEach((row, idx) => {
-                const bgClass = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50';
-                html += `<tr class="${bgClass} hover:bg-bank-50/30 transition-colors">`;
-                row.forEach((cell, ci) => {
-                    const isRowHeader = ci < (headers.length - (data.rows[0] ? data.rows[0].length - headers.length : 0));
-                    const val = cell === null ? '<span class="text-gray-300">—</span>' : cell;
-                    const numClass = typeof cell === 'number' ? 'text-right font-mono' : '';
-                    html += `<td class="px-4 py-2.5 text-sm text-gray-700 whitespace-nowrap ${numClass}">${val}</td>`;
+            const tbody = document.createElement('tbody');
+            tbody.className = "bg-white divide-y divide-gray-100";
+            rows.forEach(row => {
+                const r = document.createElement('tr');
+                r.className = "hover:bg-bank-50/30 transition-colors";
+                row.forEach((cell, i) => {
+                    const td = document.createElement('td');
+                    td.className = "px-6 py-4 whitespace-nowrap text-sm text-gray-600";
+                    if (typeof cell === 'number') {
+                        td.textContent = cell.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        td.classList.add('text-right', 'font-mono');
+                    } else {
+                        td.textContent = cell || '';
+                        td.classList.add('font-medium');
+                    }
+                    r.appendChild(td);
                 });
-                html += '</tr>';
+                tbody.appendChild(r);
             });
-            html += '</tbody>';
+            table.appendChild(tbody);
 
-            // Totals row
-            if (totals && totals.length > 0) {
-                html += '<tfoot><tr class="bg-bank-50 border-t-2 border-bank-200">';
-                totals.forEach((t, i) => {
-                    const numClass = typeof t === 'number' ? 'text-right font-mono' : '';
-                    const val = t === '' ? '' : `<strong>${t}</strong>`;
-                    html += `<td class="px-4 py-3 text-sm text-bank-800 font-semibold whitespace-nowrap ${numClass}">${val}</td>`;
+            if (totals) {
+                const tfoot = document.createElement('tfoot');
+                tfoot.className = "bg-gray-50/80 font-bold border-t-2 border-gray-100";
+                const fRow = document.createElement('tr');
+                totals.forEach((val, i) => {
+                    const td = document.createElement('td');
+                    td.className = "px-6 py-4 whitespace-nowrap text-sm text-bank-700";
+                    if (typeof val === 'number') {
+                        td.textContent = val.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        td.classList.add('text-right', 'font-mono');
+                    } else {
+                        td.textContent = val || '';
+                    }
+                    fRow.appendChild(td);
                 });
-                html += '</tr></tfoot>';
+                tfoot.appendChild(fRow);
+                table.appendChild(tfoot);
             }
 
-            pivotTable.innerHTML = html;
+            pivotContainer.appendChild(table);
         }
 
         async function generatePivot() {
@@ -749,7 +817,7 @@
 
             if (rowCols.length === 0 || !valueCol) {
                 showPivotState(pivotError);
-                pivotErrorMsg.textContent = 'Veuillez sélectionner au moins une ligne et une valeur.';
+                if (pivotErrorMsg) pivotErrorMsg.textContent = 'Veuillez sélectionner au moins une ligne et une valeur.';
                 return;
             }
 
@@ -771,11 +839,11 @@
 
                 if (result.status === 'success') {
                     showPivotState(pivotContainer);
-                    pivotHeader.classList.remove('hidden');
+                    if (pivotHeader) pivotHeader.classList.remove('hidden');
 
                     const aggLabels = { sum: 'Somme', mean: 'Moyenne', count: 'Nombre', min: 'Min', max: 'Max' };
-                    pivotTitle.textContent = `TCD — ${aggLabels[aggFunc]} de ${valueCol}${colCol ? ' par ' + colCol : ''}`;
-                    pivotRowCount.textContent = `${result.row_count} lignes`;
+                    if (pivotTitle) pivotTitle.textContent = `TCD — ${aggLabels[aggFunc]} de ${valueCol}${colCol ? ' par ' + colCol : ''}`;
+                    if (pivotRowCount) pivotRowCount.textContent = `${result.row_count} lignes`;
 
                     renderPivotTable(result);
 
@@ -783,16 +851,16 @@
                     localStorage.setItem('pivot-config', JSON.stringify({ rowCols, colCol, valueCol, aggFunc }));
                 } else {
                     showPivotState(pivotError);
-                    pivotErrorMsg.textContent = result.message || 'Une erreur est survenue.';
+                    if (pivotErrorMsg) pivotErrorMsg.textContent = result.message || 'Une erreur est survenue.';
                 }
             } catch (err) {
                 showPivotState(pivotError);
-                pivotErrorMsg.textContent = 'Erreur de connexion au serveur.';
+                if (pivotErrorMsg) pivotErrorMsg.textContent = 'Erreur de connexion au serveur.';
                 console.error(err);
             }
         }
 
-        generatePivotBtn.addEventListener('click', generatePivot);
+        if (generatePivotBtn) generatePivotBtn.addEventListener('click', generatePivot);
 
         // Restore last pivot
         const savedPivot = localStorage.getItem('pivot-config');
@@ -800,7 +868,6 @@
             try {
                 const { rowCols, colCol, valueCol, aggFunc } = JSON.parse(savedPivot);
                 if (rowCols && rowCols.length > 0 && valueCol) {
-                    // Set multi-select values
                     Array.from(pivotRowsEl.options).forEach(opt => {
                         opt.selected = rowCols.includes(opt.value);
                     });
