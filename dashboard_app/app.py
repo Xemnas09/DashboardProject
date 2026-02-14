@@ -4,6 +4,11 @@ import polars as pl
 from werkzeug.utils import secure_filename
 import uuid
 from datetime import datetime
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = 'super_secret_key_change_this_later'
@@ -127,7 +132,7 @@ def process_file_preview(filepath):
             raise ValueError("Format non supporté")
             
         limit = 2000 
-        safe_df = df.head(limit).select(pl.all().cast(pl.Utf8))
+        safe_df = df.head(limit).select(pl.all().cast(pl.String))
         
         return {
             'columns': [{'title': col, 'field': col} for col in df.columns],
@@ -135,7 +140,7 @@ def process_file_preview(filepath):
             'total_rows': df.height
         }
     except Exception as e:
-        print(f"Error processing preview: {e}")
+        logger.error(f"Error processing preview: {e}", exc_info=True)
         return None
 
 @app.route('/upload', methods=['POST'])
@@ -178,7 +183,7 @@ def upload_file():
         })
         
     except Exception as e:
-        print(f"Error processing file: {e}")
+        logger.error(f"Error processing file: {e}", exc_info=True)
         return jsonify({'status': 'error', 'message': f'Erreur: {str(e)}'}), 500
 
 @app.route('/database')
@@ -462,7 +467,7 @@ def pivot_data():
             # Pivot: rows = row_cols, columns = col_col, values = 'value'
             # Note: using 'columns' instead of 'on' for compatibility with Polars < 0.20.31
             pivot_df = grouped.pivot(
-                columns=col_col,
+                on=col_col,
                 index=row_cols,
                 values='value'
             )
