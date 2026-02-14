@@ -2,23 +2,51 @@
 {% block title %}Rapports — Banque Pro{% endblock %}
 
 {% block extra_css %}
-<!-- Basic styles for the manual pivot table -->
 <style>
-    .pivot-table-container {
-        max-height: 600px;
-        overflow: auto;
+    .btn-premium {
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    .pivot-table-container table {
-        border-collapse: separate;
-        border-spacing: 0;
+    .btn-premium:hover {
+        transform: translateY(-1px) scale(1.01);
+        box-shadow: 0 4px 12px -2px rgba(14, 165, 233, 0.2);
     }
 
-    .pivot-table-container th {
-        position: sticky;
-        top: 0;
-        z-index: 10;
-        background: #f9fafb;
+    .btn-premium:active {
+        transform: translateY(0) scale(0.98);
+    }
+
+    .tab-btn {
+        position: relative;
+        overflow: hidden;
+    }
+
+    .tab-btn::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 50%;
+        width: 0;
+        height: 2px;
+        background: var(--bank-600);
+        transition: all 0.3s ease;
+        transform: translateX(-50%);
+    }
+
+    .tab-btn.active::after {
+        width: 100%;
+    }
+
+    .skeleton-chart {
+        height: 400px;
+        width: 100%;
+        border-radius: 12px;
+    }
+
+    .skeleton-text {
+        height: 12px;
+        border-radius: 4px;
+        margin-bottom: 8px;
     }
 </style>
 {% endblock %}
@@ -173,7 +201,7 @@
                         </div>
                         <div>
                             <button id="generate-chart-btn"
-                                class="w-full px-6 py-2.5 bg-bank-600 text-white font-medium rounded-lg shadow-sm hover:bg-bank-700 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-bank-500 focus:ring-offset-2 transition-all duration-200 text-sm flex items-center justify-center space-x-2">
+                                class="w-full px-6 py-2.5 bg-bank-600 text-white font-medium rounded-lg shadow-sm hover:bg-bank-700 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-bank-500 focus:ring-offset-2 transition-all duration-200 text-sm flex items-center justify-center space-x-2 btn-premium">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -213,9 +241,15 @@
                         <p class="text-sm text-gray-500 max-w-sm">Sélectionnez vos variables et le type de graphique,
                             puis cliquez sur <strong>Générer</strong>.</p>
                     </div>
-                    <div id="chart-loading" class="hidden flex flex-col items-center justify-center py-20">
-                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-bank-600 mb-4"></div>
-                        <p class="text-sm text-gray-500">Génération du graphique...</p>
+                    <div id="chart-loading" class="hidden p-8 space-y-6">
+                        <div class="flex items-center justify-between">
+                            <div class="h-6 w-48 skeleton rounded"></div>
+                            <div class="h-4 w-24 skeleton rounded"></div>
+                        </div>
+                        <div class="w-full h-[400px] skeleton rounded-xl"></div>
+                        <div class="flex justify-center">
+                            <p class="text-sm text-gray-400 animate-pulse">Génération du graphique premium...</p>
+                        </div>
                     </div>
                     <div id="chart-container" class="hidden">
                         <div id="echarts-main" style="width: 100%; height: 500px;"></div>
@@ -309,7 +343,7 @@
                         <!-- Generate Button -->
                         <div>
                             <button id="generate-pivot-btn"
-                                class="w-full px-6 py-2.5 bg-bank-600 text-white font-medium rounded-lg shadow-sm hover:bg-bank-700 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-bank-500 focus:ring-offset-2 transition-all duration-200 text-sm flex items-center justify-center space-x-2">
+                                class="w-full px-6 py-2.5 bg-bank-600 text-white font-medium rounded-lg shadow-sm hover:bg-bank-700 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-bank-500 focus:ring-offset-2 transition-all duration-200 text-sm flex items-center justify-center space-x-2 btn-premium">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -339,12 +373,18 @@
                         <p class="text-sm text-gray-500 max-w-sm">Sélectionnez les lignes, la valeur et l'agrégation,
                             puis cliquez sur <strong>Générer le TCD</strong>.</p>
                     </div>
-                    <div id="pivot-loading" class="hidden flex flex-col items-center justify-center py-20">
-                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-bank-600 mb-4"></div>
-                        <p class="text-sm text-gray-500">Calcul du tableau croisé dynamique...</p>
+                    <div id="pivot-loading" class="hidden p-6 space-y-4">
+                        <div class="h-10 w-full skeleton rounded-t-lg"></div>
+                        <div class="space-y-2">
+                            <div class="h-12 w-full skeleton opacity-80"></div>
+                            <div class="h-12 w-full skeleton opacity-60"></div>
+                            <div class="h-12 w-full skeleton opacity-40"></div>
+                            <div class="h-12 w-full skeleton opacity-20"></div>
+                        </div>
+                        <p class="text-sm text-center text-gray-400 animate-pulse">Calcul de la matrice...</p>
                     </div>
-                    <div id="pivot-container" class="hidden p-4 pivot-table-container">
-                        <!-- Table will be injected here -->
+                    <div id="pivot-container" class="hidden p-4 h-[550px] flex flex-col">
+                        <div id="pivotGrid" class="ag-theme-quartz w-full h-full"></div>
                     </div>
                     <div id="pivot-error" class="hidden flex flex-col items-center justify-center py-20 text-center">
                         <div class="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mb-4">
@@ -749,65 +789,72 @@
 
         function renderPivotTable(data) {
             const { headers, rows, totals } = data;
-            pivotContainer.innerHTML = '';
+            const gridDiv = document.getElementById('pivotGrid');
+            if (!gridDiv) return;
 
-            const table = document.createElement('table');
-            table.className = "min-w-full divide-y divide-gray-200 border border-gray-100 rounded-lg overflow-hidden";
+            showPivotState(pivotContainer);
+            pivotHeader.classList.remove('hidden');
+            pivotTitle.textContent = `TCD : ${headers.slice(0, -1).join(', ')} vs ${headers[headers.length - 1]}`;
+            pivotRowCount.textContent = `${rows.length} lignes`;
 
-            const thead = document.createElement('thead');
-            thead.className = "bg-gray-50";
-            const hRow = document.createElement('tr');
-            headers.forEach(h => {
-                const th = document.createElement('th');
-                th.className = "px-6 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest";
-                th.textContent = h;
-                hRow.appendChild(th);
+            // Prepare Column Definitions
+            const columnDefs = headers.map((header, index) => {
+                const isValueColumn = index === headers.length - 1;
+                return {
+                    headerName: header,
+                    field: `col${index}`,
+                    sortable: true,
+                    filter: isValueColumn ? 'agNumberColumnFilter' : 'agTextColumnFilter',
+                    flex: 1,
+                    minWidth: 120,
+                    valueFormatter: isValueColumn ? (params) => {
+                        if (params.value === null || params.value === undefined) return '';
+                        return params.value.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    } : null,
+                    cellClass: isValueColumn ? 'font-mono text-right' : 'font-medium'
+                };
             });
-            thead.appendChild(hRow);
-            table.appendChild(thead);
 
-            const tbody = document.createElement('tbody');
-            tbody.className = "bg-white divide-y divide-gray-100";
-            rows.forEach(row => {
-                const r = document.createElement('tr');
-                r.className = "hover:bg-bank-50/30 transition-colors";
+            // Prepare Row Data
+            const rowData = rows.map(row => {
+                const rowObj = {};
                 row.forEach((cell, i) => {
-                    const td = document.createElement('td');
-                    td.className = "px-6 py-4 whitespace-nowrap text-sm text-gray-600";
-                    if (typeof cell === 'number') {
-                        td.textContent = cell.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                        td.classList.add('text-right', 'font-mono');
-                    } else {
-                        td.textContent = cell || '';
-                        td.classList.add('font-medium');
-                    }
-                    r.appendChild(td);
+                    rowObj[`col${i}`] = cell;
                 });
-                tbody.appendChild(r);
+                return rowObj;
             });
-            table.appendChild(tbody);
 
+            // Prepare Pinned Bottom Data (Totals)
+            let pinnedBottomRowData = [];
             if (totals) {
-                const tfoot = document.createElement('tfoot');
-                tfoot.className = "bg-gray-50/80 font-bold border-t-2 border-gray-100";
-                const fRow = document.createElement('tr');
+                const totalObj = {};
                 totals.forEach((val, i) => {
-                    const td = document.createElement('td');
-                    td.className = "px-6 py-4 whitespace-nowrap text-sm text-bank-700";
-                    if (typeof val === 'number') {
-                        td.textContent = val.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                        td.classList.add('text-right', 'font-mono');
-                    } else {
-                        td.textContent = val || '';
-                    }
-                    fRow.appendChild(td);
+                    totalObj[`col${i}`] = val;
                 });
-                tfoot.appendChild(fRow);
-                table.appendChild(tfoot);
+                pinnedBottomRowData = [totalObj];
             }
 
-            pivotContainer.appendChild(table);
+            const gridOptions = {
+                columnDefs: columnDefs,
+                rowData: rowData,
+                pinnedBottomRowData: pinnedBottomRowData,
+                pagination: true,
+                paginationPageSize: 20,
+                paginationPageSizeSelector: [10, 20, 50, 100],
+                animateRows: true,
+                defaultColDef: {
+                    resizable: true,
+                },
+                getRowStyle: params => {
+                    if (params.node.rowPinned) return { fontWeight: 'bold', backgroundColor: '#f9fafb' };
+                }
+            };
+
+            // Clear previous grid if it exists
+            gridDiv.innerHTML = '';
+            agGrid.createGrid(gridDiv, gridOptions);
         }
+
 
         async function generatePivot() {
             const rowCols = Array.from(pivotRowsEl.selectedOptions).map(o => o.value);
