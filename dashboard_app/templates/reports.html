@@ -48,6 +48,121 @@
         border-radius: 4px;
         margin-bottom: 8px;
     }
+
+    /* Premium AG-Grid Customization */
+    .ag-theme-quartz {
+        --ag-header-background-color: #f8fafc;
+        --ag-header-foreground-color: #1e293b;
+        --ag-row-hover-color: rgba(14, 165, 233, 0.04);
+        --ag-selected-row-color: rgba(14, 165, 233, 0.08);
+        --ag-odd-row-background-color: #ffffff;
+        --ag-font-family: 'Inter', sans-serif;
+        --ag-font-size: 13px;
+        border-radius: 12px !important;
+        overflow: hidden !important;
+        border: none !important;
+    }
+
+    .ag-header-cell-label {
+        font-weight: 700 !important;
+        text-transform: uppercase;
+        letter-spacing: 0.025em;
+        font-size: 11px;
+        color: #64748b;
+    }
+
+    .cell-value-premium {
+        background-color: rgba(14, 165, 233, 0.03);
+        font-weight: 600 !important;
+        color: #0369a1 !important;
+        border-left: 1px solid rgba(14, 165, 233, 0.1) !important;
+    }
+
+    .row-total-premium {
+        background-color: #f0f9ff !important;
+        font-weight: 800 !important;
+        color: #0c4a6e !important;
+        border-top: 2px solid #bae6fd !important;
+    }
+
+    .row-total-premium .ag-cell {
+        font-size: 14px !important;
+    }
+
+    /* Vibrant Column Schemes */
+    .mod-col-0 {
+        --mod-primary: #10b981;
+        --mod-bg: rgba(16, 185, 129, 0.04);
+        --mod-border: rgba(16, 185, 129, 0.2);
+    }
+
+    /* Emerald */
+    .mod-col-1 {
+        --mod-primary: #f59e0b;
+        --mod-bg: rgba(245, 158, 11, 0.04);
+        --mod-border: rgba(245, 158, 11, 0.2);
+    }
+
+    /* Amber */
+    .mod-col-2 {
+        --mod-primary: #f43f5e;
+        --mod-bg: rgba(244, 63, 94, 0.04);
+        --mod-border: rgba(244, 63, 94, 0.2);
+    }
+
+    /* Rose */
+    .mod-col-3 {
+        --mod-primary: #6366f1;
+        --mod-bg: rgba(99, 102, 241, 0.04);
+        --mod-border: rgba(99, 102, 241, 0.2);
+    }
+
+    /* Indigo */
+    .mod-col-4 {
+        --mod-primary: #06b6d4;
+        --mod-bg: rgba(6, 182, 212, 0.04);
+        --mod-border: rgba(6, 182, 212, 0.2);
+    }
+
+    /* Cyan */
+    .mod-col-5 {
+        --mod-primary: #8b5cf6;
+        --mod-bg: rgba(139, 92, 246, 0.04);
+        --mod-border: rgba(139, 92, 246, 0.2);
+    }
+
+    /* Violet */
+    .mod-col-6 {
+        --mod-primary: #d946ef;
+        --mod-bg: rgba(217, 70, 239, 0.04);
+        --mod-border: rgba(217, 70, 239, 0.2);
+    }
+
+    /* Fuchsia */
+    .mod-col-7 {
+        --mod-primary: #0ea5e9;
+        --mod-bg: rgba(14, 165, 233, 0.04);
+        --mod-border: rgba(14, 165, 233, 0.2);
+    }
+
+    /* Sky */
+
+    .modality-cell-premium {
+        background-color: var(--mod-bg) !important;
+        color: var(--mod-primary) !important;
+        font-weight: 600 !important;
+        border-right: 1px solid var(--mod-border) !important;
+    }
+
+    .modality-header-premium {
+        background: linear-gradient(to bottom, #ffffff, var(--mod-bg)) !important;
+        border-bottom: 2px solid var(--mod-primary) !important;
+    }
+
+    .modality-header-premium .ag-header-cell-label {
+        color: var(--mod-primary) !important;
+        font-weight: 800 !important;
+    }
 </style>
 {% endblock %}
 
@@ -787,7 +902,7 @@
             state.classList.remove('hidden');
         }
 
-        function renderPivotTable(data) {
+        function renderPivotTable(data, rowColsCount = 1) {
             const { headers, rows, totals } = data;
             const gridDiv = document.getElementById('pivotGrid');
             if (!gridDiv) return;
@@ -797,21 +912,33 @@
             pivotTitle.textContent = `TCD : ${headers.slice(0, -1).join(', ')} vs ${headers[headers.length - 1]}`;
             pivotRowCount.textContent = `${rows.length} lignes`;
 
+            // Palette Rotation logic
+            const paletteSize = 8;
+
             // Prepare Column Definitions
             const columnDefs = headers.map((header, index) => {
-                const isValueColumn = index === headers.length - 1;
+                const isValueColumn = index >= rowColsCount;
+                const modIndex = isValueColumn ? (index - rowColsCount) % paletteSize : -1;
+
                 return {
                     headerName: header,
                     field: `col${index}`,
                     sortable: true,
                     filter: isValueColumn ? 'agNumberColumnFilter' : 'agTextColumnFilter',
                     flex: 1,
-                    minWidth: 120,
+                    minWidth: 150,
                     valueFormatter: isValueColumn ? (params) => {
                         if (params.value === null || params.value === undefined) return '';
                         return params.value.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                     } : null,
-                    cellClass: isValueColumn ? 'font-mono text-right' : 'font-medium'
+                    headerClass: isValueColumn ? `modality-header-premium mod-col-${modIndex}` : 'bg-slate-50',
+                    cellClass: (params) => {
+                        let classes = isValueColumn ? `font-mono text-right modality-cell-premium mod-col-${modIndex}` : 'font-medium text-slate-700 bg-white';
+                        if (params.node.rowPinned === 'bottom') {
+                            classes += ' border-t-0';
+                        }
+                        return classes;
+                    }
                 };
             });
 
@@ -844,9 +971,20 @@
                 animateRows: true,
                 defaultColDef: {
                     resizable: true,
+                    flex: 1,
+                    minWidth: 100
                 },
-                getRowStyle: params => {
-                    if (params.node.rowPinned) return { fontWeight: 'bold', backgroundColor: '#f9fafb' };
+                getRowClass: (params) => {
+                    if (params.node.rowPinned === 'bottom') {
+                        return 'row-total-premium';
+                    }
+                    return null;
+                },
+                enableCellChangeFlash: true,
+                onGridReady: (params) => {
+                    pivotGridApi = params.api;
+                    // Auto-size columns to be nice and colorful
+                    setTimeout(() => params.api.sizeColumnsToFit(), 500);
                 }
             };
 
@@ -892,7 +1030,7 @@
                     if (pivotTitle) pivotTitle.textContent = `TCD — ${aggLabels[aggFunc]} de ${valueCol}${colCol ? ' par ' + colCol : ''}`;
                     if (pivotRowCount) pivotRowCount.textContent = `${result.row_count} lignes`;
 
-                    renderPivotTable(result);
+                    renderPivotTable(result, rowCols.length);
 
                     // Save config
                     localStorage.setItem('pivot-config', JSON.stringify({ rowCols, colCol, valueCol, aggFunc }));
