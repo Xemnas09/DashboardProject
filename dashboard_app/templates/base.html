@@ -404,6 +404,87 @@
                         applyTheme(theme);
                     });
                 });
+
+                // --- Global Notification Logic ---
+                const notifBtn = document.getElementById('notification-btn');
+                const notifDropdown = document.getElementById('notification-dropdown');
+                const notifContainer = document.getElementById('notification-container');
+                const notifList = notifDropdown ? notifDropdown.querySelector('.max-h-64') : null;
+                const notifCount = notifDropdown ? notifDropdown.querySelector('span.text-gray-500') : null;
+
+                // Function to add notification dynamically
+                window.addGlobalNotification = (notif) => {
+                    if (!notifList || !notifBtn) return;
+
+                    // Remove "No notifications" if present
+                    const emptyState = notifList.querySelector('.text-center');
+                    if (emptyState) emptyState.remove();
+
+                    // Create HTML
+                    const div = document.createElement('div');
+                    div.className = "px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors animate-fade-in-down";
+                    div.innerHTML = `
+                        <div class="flex justify-between items-start">
+                            <p class="text-sm font-medium text-gray-800">${notif.message}</p>
+                            <span class="text-xs text-gray-400 whitespace-nowrap ml-2">${notif.time}</span>
+                        </div>
+                        <p class="text-xs text-${notif.category === 'success' ? 'green' : notif.category === 'info' ? 'bank' : 'yellow'}-600 mt-1 capitalize">${notif.category}</p>
+                    `;
+
+                    // Prepend
+                    notifList.insertBefore(div, notifList.firstChild);
+
+                    // Update count
+                    if (notifCount) {
+                        const current = parseInt(notifCount.textContent) || 0;
+                        notifCount.textContent = `${current + 1} récentes`;
+                    }
+
+                    // Show Red Dot
+                    let dot = notifBtn.querySelector('.bg-red-500');
+                    if (!dot) {
+                        dot = document.createElement('span');
+                        dot.className = "absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full animate-pulse";
+                        notifBtn.appendChild(dot);
+                    }
+                };
+
+                if (notifBtn && notifDropdown) {
+                    notifBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        notifDropdown.classList.toggle('hidden');
+
+                        // Mark as read if opening
+                        if (!notifDropdown.classList.contains('hidden')) {
+                            // Hide red dot visually
+                            const dot = notifBtn.querySelector('.bg-red-500');
+                            if (dot) dot.remove();
+
+                            // Tell backend
+                            fetch("{{ url_for('mark_notifications_read') }}", { method: 'POST' });
+                        }
+                    });
+
+                    // Close when clicking outside
+                    document.addEventListener('click', (e) => {
+                        if (notifContainer && !notifContainer.contains(e.target)) {
+                            notifDropdown.classList.add('hidden');
+                        }
+                    });
+                }
+
+                // --- Global Date Logic (Dynamic) ---
+                const dateEl = document.getElementById('current-date');
+                if (dateEl) {
+                    const updateDate = () => {
+                        const now = new Date();
+                        const dateStr = now.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+                        const timeStr = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+                        dateEl.textContent = `${dateStr} • ${timeStr}`;
+                    };
+                    updateDate(); // Initial call
+                    setInterval(updateDate, 1000); // 60s update is enough usually, but user asked for dynamic
+                }
             });
         </script>
 </body>

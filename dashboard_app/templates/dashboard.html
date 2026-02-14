@@ -110,13 +110,48 @@
 
             <div class="flex items-center space-x-4">
                 <span class="text-sm text-gray-500 hidden sm:block" id="current-date"></span>
-                <button class="p-2 text-gray-400 hover:text-bank-600 transition-colors relative">
-                    <span class="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
-                    <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                    </svg>
-                </button>
+                <div class="relative" id="notification-container">
+                    <button id="notification-btn"
+                        class="p-2 text-gray-400 hover:text-bank-600 transition-colors relative focus:outline-none">
+                        {% if session.get('has_unread') %}
+                        <span class="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full animate-pulse"></span>
+                        {% endif %}
+                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                        </svg>
+                    </button>
+
+                    <!-- Dropdown -->
+                    <div id="notification-dropdown"
+                        class="hidden absolute right-0 mt-2 w-80 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-gray-100 py-1 z-50 origin-top-right transform transition-all">
+                        <div class="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
+                            <h3 class="text-sm font-semibold text-gray-900">Notifications</h3>
+                            <span class="text-xs text-gray-500">{{ session.get('notifications', [])|length }}
+                                récentes</span>
+                        </div>
+                        <div class="max-h-64 overflow-y-auto">
+                            {% if session.get('notifications') %}
+                            {% for notif in session.get('notifications') %}
+                            <div
+                                class="px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors">
+                                <div class="flex justify-between items-start">
+                                    <p class="text-sm font-medium text-gray-800">{{ notif.message }}</p>
+                                    <span class="text-xs text-gray-400 whitespace-nowrap ml-2">{{ notif.time }}</span>
+                                </div>
+                                <p
+                                    class="text-xs text-{{ 'green' if notif.category == 'success' else 'bank' if notif.category == 'info' else 'yellow' }}-600 mt-1 capitalize">
+                                    {{ notif.category }}</p>
+                            </div>
+                            {% endfor %}
+                            {% else %}
+                            <div class="px-4 py-6 text-center text-gray-500 text-sm">
+                                Aucune nouvelle notification
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
             </div>
         </header>
 
@@ -355,6 +390,11 @@
                             // Show Success Container
                             if (uploadSuccessContainer) uploadSuccessContainer.classList.remove('hidden');
                             showNotification(result.message, 'success');
+
+                            // Add Global Notification
+                            if (window.addGlobalNotification && result.notification) {
+                                window.addGlobalNotification(result.notification);
+                            }
                         } else {
                             throw new Error(result.message || 'Erreur inconnue');
                         }
