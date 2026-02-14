@@ -1,0 +1,312 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="min-h-screen bg-transparent flex" id="app-container">
+    <!-- Reuse Sidebar (Ideally this should be a component/include, but for now copying structure or determining if we can include it) -->
+    <!-- For this environment, I will duplicate the sidebar structure to ensure it works immediately without refactoring base.html too much -->
+
+    <aside id="sidebar"
+        class="bg-bank-900 text-white transition-all duration-300 ease-in-out w-64 flex flex-col fixed h-full z-20 md:relative">
+        <div class="h-16 flex items-center justify-between px-4 bg-bank-800 border-b border-bank-700">
+            <div class="flex items-center space-x-2 overflow-hidden whitespace-nowrap">
+                <svg class="w-8 h-8 text-bank-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z" />
+                    <path fill-rule="evenodd"
+                        d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z"
+                        clip-rule="evenodd" />
+                </svg>
+                <span id="sidebar-title" class="text-xl font-bold tracking-tight transition-opacity duration-300">Banque
+                    Pro</span>
+            </div>
+            <!-- Mobile Close Button -->
+            <button id="mobile-close-sidebar" class="md:hidden text-gray-300 hover:text-white">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                    </path>
+                </svg>
+            </button>
+        </div>
+
+        <nav class="flex-1 py-6 space-y-1 px-3 overflow-y-auto">
+            <a href="{{ url_for('dashboard') }}"
+                class="group flex items-center px-2 py-2 text-sm font-medium rounded-md text-bank-100 hover:bg-bank-700 hover:text-white transition-colors">
+                <svg class="mr-3 h-6 w-6 text-bank-300 group-hover:text-white" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                </svg>
+                <span class="sidebar-text transition-opacity duration-300">Vue d'ensemble</span>
+            </a>
+
+            <!-- Active State via CSS classes manually for now -->
+            <a href="{{ url_for('database_view') }}"
+                class="group flex items-center px-2 py-2 text-sm font-medium rounded-md bg-bank-800 text-white transition-colors">
+                <svg class="mr-3 h-6 w-6 text-bank-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                </svg>
+                <span class="sidebar-text transition-opacity duration-300">Base de données</span>
+            </a>
+
+            <a href="#"
+                class="group flex items-center px-2 py-2 text-sm font-medium rounded-md text-bank-100 hover:bg-bank-700 hover:text-white transition-colors">
+                <svg class="mr-3 h-6 w-6 text-bank-300 group-hover:text-white" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span class="sidebar-text transition-opacity duration-300">Rapports</span>
+            </a>
+
+            <div class="border-t border-bank-700 my-4 mx-2"></div>
+
+            <a href="#"
+                class="group flex items-center px-2 py-2 text-sm font-medium rounded-md text-bank-100 hover:bg-bank-700 hover:text-white transition-colors">
+                <svg class="mr-3 h-6 w-6 text-bank-300 group-hover:text-white" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span class="sidebar-text transition-opacity duration-300">Paramètres</span>
+            </a>
+        </nav>
+
+        <div class="p-4 border-t border-bank-700 bg-bank-900">
+            <div class="flex items-center w-full">
+                <div class="flex-shrink-0">
+                    <div class="h-8 w-8 rounded-full bg-bank-500 flex items-center justify-center text-white font-bold">
+                        {{ session.get('user', 'U')[0] | upper }}
+                    </div>
+                </div>
+                <div class="ml-3 sidebar-text overflow-hidden">
+                    <p class="text-sm font-medium text-white group-hover:text-gray-900">{{ session.get('user',
+                        'Utilisateur') }}</p>
+                    <p class="text-xs font-medium text-bank-300 group-hover:text-gray-700">Connecté</p>
+                </div>
+                <a href="{{ url_for('logout') }}" class="logout-trigger ml-auto text-bank-300 hover:text-white"
+                    title="Déconnexion">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col min-w-0 bg-gray-50 overflow-hidden">
+        <!-- Header -->
+        <header class="bg-white shadow-sm h-16 flex items-center justify-between px-6 z-10">
+            <div class="flex items-center">
+                <button id="sidebar-toggle"
+                    class="text-gray-500 hover:text-bank-600 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-bank-500 p-2 rounded-md">
+                    <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 6h16M4 12h16M4 18h7" />
+                    </svg>
+                </button>
+                <h1 class="ml-4 text-xl font-semibold text-gray-800 hidden md:block">Base de données</h1>
+            </div>
+        </header>
+
+        <!-- Content -->
+        <div class="flex-1 overflow-auto p-8">
+            <div class="max-w-7xl mx-auto h-full flex flex-col">
+
+                {% if data_preview %}
+                <!-- Data Display -->
+                <div id="data-preview-container"
+                    class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full">
+                    <div
+                        class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center flex-shrink-0">
+                        <div class="flex items-center gap-4">
+                            <h2 class="text-lg font-semibold text-gray-800">Données Importées</h2>
+                            <span id="row-count" class="text-sm text-gray-500">Total: {{ data_preview.total_rows }}
+                                lignes</span>
+                        </div>
+                        <form id="delete-data-form" action="{{ url_for('clear_data') }}" method="POST">
+                            <button type="button" id="delete-data-btn"
+                                class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                                <svg class="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                                Supprimer les données
+                            </button>
+                        </form>
+                    </div>
+
+                    <div id="grid-wrapper" class="p-4 flex-1 flex flex-col min-h-0">
+                        <!-- AG-Grid Container -->
+                        <div id="myGrid" class="ag-theme-quartz w-full h-full"></div>
+                    </div>
+                </div>
+
+                <!-- Delete Confirmation Modal -->
+                <div id="delete-modal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title"
+                    role="dialog" aria-modal="true">
+                    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"
+                            id="delete-backdrop"></div>
+                        <span class="hidden sm:inline-block sm:align-middle sm:h-screen"
+                            aria-hidden="true">&#8203;</span>
+                        <div
+                            class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                            <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                                <div class="sm:flex sm:items-start">
+                                    <div
+                                        class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+                                        <svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24"
+                                            stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                        </svg>
+                                    </div>
+                                    <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                                        <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">
+                                            Supprimer les données ?</h3>
+                                        <div class="mt-2">
+                                            <p class="text-sm text-gray-500">Cette action est irréversible. Voulez-vous
+                                                vraiment supprimer les données importées ?</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                                <button type="button" id="confirm-delete"
+                                    class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm">Supprimer</button>
+                                <button type="button" id="cancel-delete"
+                                    class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-bank-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">Annuler</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <script>
+                    document.addEventListener('DOMContentLoaded', () => {
+                        // Delete Modal Logic
+                        const deleteBtn = document.getElementById('delete-data-btn');
+                        const deleteForm = document.getElementById('delete-data-form');
+                        const deleteModal = document.getElementById('delete-modal');
+                        const confirmDeleteBtn = document.getElementById('confirm-delete');
+                        const cancelDeleteBtn = document.getElementById('cancel-delete');
+                        const deleteBackdrop = document.getElementById('delete-backdrop');
+
+                        function openDeleteModal() {
+                            deleteModal.classList.remove('hidden');
+                        }
+
+                        function closeDeleteModal() {
+                            deleteModal.classList.add('hidden');
+                        }
+
+                        if (deleteBtn) {
+                            deleteBtn.addEventListener('click', (e) => {
+                                e.preventDefault();
+                                openDeleteModal();
+                            });
+                        }
+
+                        if (confirmDeleteBtn) {
+                            confirmDeleteBtn.addEventListener('click', () => {
+                                deleteForm.submit();
+                            });
+                        }
+
+                        if (cancelDeleteBtn) cancelDeleteBtn.addEventListener('click', closeDeleteModal);
+                        if (deleteBackdrop) deleteBackdrop.addEventListener('click', closeDeleteModal);
+                    });
+                </script>
+                {% else %}
+                <!-- Empty State -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+                    <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-medium text-gray-900">Aucune donnée chargée</h3>
+                    <p class="mt-2 text-gray-500">Veuillez importer un fichier depuis le tableau de bord pour visualiser
+                        les données.</p>
+                    <a href="{{ url_for('dashboard') }}"
+                        class="mt-6 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-bank-600 hover:bg-bank-700">
+                        Aller au Tableau de Bord
+                    </a>
+                </div>
+                {% endif %}
+
+            </div>
+        </div>
+    </main>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // Basic sidebar toggle logic (minimal version)
+        const sidebar = document.getElementById('sidebar');
+        const sidebarToggle = document.getElementById('sidebar-toggle');
+        const sidebarTexts = document.querySelectorAll('.sidebar-text');
+        const sidebarTitle = document.getElementById('sidebar-title');
+
+        if (sidebarToggle) {
+            let isCollapsed = false;
+            sidebarToggle.addEventListener('click', () => {
+                isCollapsed = !isCollapsed;
+                if (window.innerWidth >= 768) {
+                    if (isCollapsed) {
+                        sidebar.classList.remove('w-64');
+                        sidebar.classList.add('w-20');
+                        sidebarTitle.classList.add('opacity-0', 'w-0');
+                        sidebarTexts.forEach(el => el.classList.add('opacity-0', 'w-0', 'hidden'));
+                    } else {
+                        sidebar.classList.remove('w-20');
+                        sidebar.classList.add('w-64');
+                        sidebarTitle.classList.remove('opacity-0', 'w-0');
+                        sidebarTexts.forEach(el => {
+                            el.classList.remove('opacity-0', 'w-0', 'hidden');
+                            setTimeout(() => el.classList.remove('hidden'), 50);
+                        });
+                    }
+                } else {
+                    sidebar.classList.toggle('-translate-x-full');
+                }
+            });
+        }
+
+        // AG-Grid Logic
+        {% if data_preview %}
+        try {
+            const initialData = {{ data_preview | tojson
+        }};
+    const gridDiv = document.getElementById('myGrid');
+
+    const columnDefs = initialData.columns.map(col => ({
+        field: col.field,
+        headerName: col.title,
+        sortable: true,
+        filter: true,
+        resizable: true
+    }));
+
+    const gridOptions = {
+        columnDefs: columnDefs,
+        rowData: initialData.data,
+        pagination: true,
+        paginationPageSize: 20,
+        defaultColDef: {
+            flex: 1,
+            minWidth: 100,
+        },
+        animateRows: true,
+    };
+
+    agGrid.createGrid(gridDiv, gridOptions);
+
+        } catch (e) { console.error("Error initializing Grid", e); }
+    {% endif %}
+    });
+</script>
+{% endblock %}
