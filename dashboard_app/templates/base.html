@@ -184,7 +184,7 @@
     <div class="relative z-10">
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-        <div class="fixed top-4 right-4 z-50 space-y-2 pointer-events-none">
+        <div class="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 space-y-2 pointer-events-none">
             {% for category, message in messages %}
             <div
                 class="notification p-4 rounded shadow-lg text-white pointer-events-auto transform transition-all duration-500 ease-in-out {{ 'bg-red-500' if category == 'error' else 'bg-green-500' }} fade-in">
@@ -474,20 +474,45 @@
                     });
                 }
 
-                // --- Global Date Logic (Dynamic) ---
-                const dateEl = document.getElementById('current-date');
-                if (dateEl) {
-                    const updateDate = () => {
-                        const now = new Date();
-                        const dateStr = now.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
-                        const timeStr = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-                        dateEl.textContent = `${dateStr} • ${timeStr}`;
-                    };
-                    updateDate(); // Initial call
-                    setInterval(updateDate, 1000); // 60s update is enough usually, but user asked for dynamic
+                // --- Sidebar Logic (Global & Persistent) ---
+                const sidebar = document.getElementById('sidebar');
+                const sidebarToggle = document.getElementById('sidebar-toggle');
+                const sidebarTexts = document.querySelectorAll('.sidebar-text');
+                const sidebarTitle = document.getElementById('sidebar-title');
+
+                if (sidebarToggle && sidebar) {
+                    // Default state is expanded (HTML default), so no initial setup needed.
+                    // We removed localStorage persistence as per user request.
+
+                    sidebarToggle.addEventListener('click', () => {
+                        const isCollapsed = sidebar.classList.contains('w-20');
+                        const newState = !isCollapsed;
+                        setSidebarState(newState);
+                    });
+
+                    function setSidebarState(collapsed) {
+                        if (window.innerWidth >= 768) {
+                            if (collapsed) {
+                                sidebar.classList.remove('w-64');
+                                sidebar.classList.add('w-20');
+                                if (sidebarTitle) sidebarTitle.classList.add('opacity-0', 'w-0');
+                                sidebarTexts.forEach(el => el.classList.add('opacity-0', 'w-0', 'hidden'));
+                            } else {
+                                sidebar.classList.remove('w-20');
+                                sidebar.classList.add('w-64');
+                                if (sidebarTitle) sidebarTitle.classList.remove('opacity-0', 'w-0');
+                                sidebarTexts.forEach(el => {
+                                    el.classList.remove('opacity-0', 'w-0', 'hidden');
+                                });
+                            }
+                        } else {
+                            sidebar.classList.toggle('-translate-x-full');
+                        }
+                    }
                 }
             });
         </script>
+
 </body>
 
 </html>
