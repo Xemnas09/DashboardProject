@@ -173,8 +173,9 @@
     <!-- Global Background Image (Subtle) -->
     <div class="fixed inset-0 z-0 pointer-events-none">
         <div
-            class="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=2000&q=80')] bg-cover bg-center opacity-5 mix-blend-multiply filter grayscale">
+            class="absolute inset-0 bg-[url('{{ url_for('static', filename='images/background.jpg') }}')] bg-cover bg-center opacity-5 mix-blend-multiply filter grayscale">
         </div>
+
         <div class="absolute inset-0 bg-gradient-to-br from-gray-50/80 to-gray-100/80 backdrop-blur-[1px]"></div>
     </div>
     {% endblock %}
