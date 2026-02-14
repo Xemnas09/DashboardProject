@@ -1,3 +1,5 @@
+{% extends "base.html" %}
+
 {% block extra_css %}
 <style>
     .btn-premium {
@@ -26,10 +28,6 @@
 
 {% block content %}
 <div class="min-h-screen bg-transparent flex" id="app-container">
-    <!-- Reuse Sidebar (Ideally this should be a component/include, but for now copying structure or determining if we can include it) -->
-    <!-- For this environment, I will duplicate the sidebar structure to ensure it works immediately without refactoring base.html too much -->
-
-    <!-- Sidebar -->
     {% include 'includes/sidebar.html' %}
 
     <main class="flex-1 flex flex-col min-w-0 bg-gray-50 overflow-hidden">
@@ -37,86 +35,51 @@
         <header class="bg-white shadow-sm h-16 flex items-center justify-between px-6 z-10">
             <div class="flex items-center">
                 <button id="sidebar-toggle"
-                    class="text-gray-500 hover:text-bank-600 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-bank-500 p-2 rounded-md">
+                    class="p-2 rounded-md text-gray-500 hover:text-bank-600 focus:outline-none focus:ring-2 focus:ring-bank-500">
                     <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M4 6h16M4 12h16M4 18h7" />
                     </svg>
                 </button>
-                <div class="ml-4 hidden md:block">
+                <div class="ml-4">
                     <h1 class="text-xl font-bold text-gray-900" style="font-family: 'Playfair Display', serif;">Base de
                         données</h1>
-                    <p class="text-xs text-gray-500">Consultez et gérez vos données importées avec précision</p>
+                    <p class="text-xs text-gray-500">Consultez et gérez vos données importées</p>
                 </div>
             </div>
 
-            <div class="flex items-center space-x-4">
+            <span class="text-sm text-gray-500 hidden sm:block" id="current-date-db"></span>
 
-                <span class="text-sm text-gray-500 hidden sm:block" id="current-date"></span>
-                <div class="relative" id="notification-container">
-                    <button id="notification-btn"
-                        class="p-2 text-gray-400 hover:text-bank-600 transition-colors relative focus:outline-none">
-                        {% if session.get('has_unread') %}
-                        <span class="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full animate-pulse"></span>
-                        {% endif %}
-                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                        </svg>
-                    </button>
-
-                    <!-- Dropdown -->
-                    <div id="notification-dropdown"
-                        class="hidden absolute right-0 mt-2 w-80 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-gray-100 py-1 z-50 origin-top-right transform transition-all">
-                        <div class="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
-                            <h3 class="text-sm font-semibold text-gray-900">Notifications</h3>
-                            <span class="text-xs text-gray-500">{{ session.get('notifications', [])|length }}
-                                récentes</span>
-                        </div>
-                        <div class="max-h-64 overflow-y-auto">
-                            {% if session.get('notifications') %}
-                            {% for notif in session.get('notifications') %}
-                            <div
-                                class="px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors">
-                                <div class="flex justify-between items-start">
-                                    <p class="text-sm font-medium text-gray-800">{{ notif.message }}</p>
-                                    <span class="text-xs text-gray-400 whitespace-nowrap ml-2">{{ notif.time
-                                        }}</span>
-                                </div>
-                                <p
-                                    class="text-xs text-{{ 'green' if notif.category == 'success' else 'bank' if notif.category == 'info' else 'yellow' }}-600 mt-1 capitalize">
-                                    {{ notif.category }}</p>
-                            </div>
-                            {% endfor %}
-                            {% else %}
-                            <div class="px-4 py-6 text-center text-gray-500 text-sm">
-                                Aucune nouvelle notification
-                            </div>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <script>
+                document.addEventListener('DOMContentLoaded', () => {
+                    const el = document.getElementById('current-date-db');
+                    if (el) {
+                        const now = new Date();
+                        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+                        el.textContent = now.toLocaleDateString('fr-FR', options);
+                    }
+                });
+            </script>
         </header>
 
-        <!-- Content -->
+        <!-- Content Area -->
         <div class="flex-1 overflow-auto p-8 animate-fade-in-up">
             <div class="max-w-7xl mx-auto h-full flex flex-col">
-
                 {% if data_preview %}
-                <!-- Data Display -->
+                <!-- Hidden Data for JS -->
+                <div id="data-preview-json" class="hidden">{{ data_preview | tojson | safe }}</div>
+
                 <div id="data-preview-container"
                     class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full">
                     <div
                         class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center flex-shrink-0">
                         <div class="flex items-center gap-4">
                             <h2 class="text-lg font-semibold text-gray-800">Données Importées</h2>
-                            <span id="row-count" class="text-sm text-gray-500">Total: {{ data_preview.total_rows }}
-                                lignes</span>
+                            <span class="text-sm text-gray-500">Total: {{ data_preview.total_rows }} lignes</span>
                         </div>
                         <form id="delete-data-form" action="{{ url_for('clear_data') }}" method="POST">
                             <button type="button" id="delete-data-btn"
-                                class="inline-flex items-center px-4 py-2 border border-transparent text-xs font-semibold rounded-lg text-red-700 bg-red-100/80 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all delete-btn-premium">
+                                class="inline-flex items-center px-4 py-2 text-xs font-semibold rounded-lg text-red-700 bg-red-100/80 hover:bg-red-200 transition-all delete-btn-premium">
                                 <svg class="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -127,59 +90,45 @@
                     </div>
 
                     <div id="grid-wrapper" class="p-4 flex-1 flex flex-col min-h-0 relative">
-                        <!-- AG-Grid Skeleton Loader -->
                         <div id="grid-skeleton" class="absolute inset-4 z-10 bg-white space-y-4">
                             <div class="h-10 w-full skeleton rounded-t-lg"></div>
                             <div class="flex-1 space-y-2">
                                 <div class="h-12 w-full skeleton opacity-80"></div>
                                 <div class="h-12 w-full skeleton opacity-60"></div>
                                 <div class="h-12 w-full skeleton opacity-40"></div>
-                                <div class="h-12 w-full skeleton opacity-20"></div>
                             </div>
                         </div>
-                        <!-- AG-Grid Container -->
                         <div id="myGrid"
                             class="ag-theme-quartz w-full h-full opacity-0 transition-opacity duration-500"></div>
                     </div>
                 </div>
 
-                <!-- Delete Confirmation Modal -->
-                <div id="delete-modal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title"
-                    role="dialog" aria-modal="true">
-                    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                        <div class="fixed inset-0 bg-gray-500/75 backdrop-blur-sm transition-opacity" aria-hidden="true"
-                            id="delete-backdrop"></div>
-                        <span class="hidden sm:inline-block sm:align-middle sm:h-screen"
-                            aria-hidden="true">&#8203;</span>
+                <!-- Modal Suppression -->
+                <div id="delete-modal" class="fixed inset-0 z-50 hidden overflow-y-auto">
+                    <div class="flex items-center justify-center min-h-screen px-4">
+                        <div class="fixed inset-0 bg-gray-500/75 backdrop-blur-sm" id="delete-backdrop"></div>
                         <div
-                            class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-                            <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                                <div class="sm:flex sm:items-start">
+                            class="bg-white rounded-xl overflow-hidden shadow-xl transform transition-all sm:max-w-lg sm:w-full relative z-10">
+                            <div class="p-6">
+                                <div class="flex items-center space-x-4">
                                     <div
-                                        class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
-                                        <svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24"
-                                            stroke="currentColor">
+                                        class="flex-shrink-0 w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-600">
+                                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                 d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                         </svg>
                                     </div>
-                                    <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
-                                        <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">
-                                            Supprimer les données ?</h3>
-                                        <div class="mt-2">
-                                            <p class="text-sm text-gray-500">Cette action est irréversible. Voulez-vous
-                                                vraiment supprimer les données importées ?</p>
-                                        </div>
+                                    <div>
+                                        <h3 class="text-lg font-bold text-gray-900">Supprimer les données ?</h3>
+                                        <p class="text-sm text-gray-500">Cette action est irréversible.</p>
                                     </div>
                                 </div>
                             </div>
-                            <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                            <div class="bg-gray-50 px-6 py-4 flex flex-row-reverse gap-3">
                                 <button type="button" id="confirm-delete"
-                                    class="w-full inline-flex justify-center items-center gap-2 rounded-lg border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-semibold text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm btn-premium">
-                                    <span>Supprimer</span>
-                                </button>
+                                    class="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-all btn-premium">Supprimer</button>
                                 <button type="button" id="cancel-delete"
-                                    class="mt-3 w-full inline-flex justify-center rounded-lg border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-bank-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm transition-all">Annuler</button>
+                                    class="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-all">Annuler</button>
                             </div>
                         </div>
                     </div>
@@ -187,77 +136,39 @@
 
                 <script>
                     document.addEventListener('DOMContentLoaded', () => {
-                        // Delete Modal Logic
-                        const deleteBtn = document.getElementById('delete-data-btn');
-                        const deleteForm = document.getElementById('delete-data-form');
-                        const deleteModal = document.getElementById('delete-modal');
-                        const confirmDeleteBtn = document.getElementById('confirm-delete');
-                        const cancelDeleteBtn = document.getElementById('cancel-delete');
-                        const deleteBackdrop = document.getElementById('delete-backdrop');
+                        const modal = document.getElementById('delete-modal');
+                        const btn = document.getElementById('delete-data-btn');
+                        const cancel = document.getElementById('cancel-delete');
+                        const backdrop = document.getElementById('delete-backdrop');
+                        const confirm = document.getElementById('confirm-delete');
+                        const form = document.getElementById('delete-data-form');
 
-                        function openDeleteModal() {
-                            deleteModal.classList.remove('hidden');
-                        }
-
-                        function closeDeleteModal() {
-                            deleteModal.classList.add('hidden');
-                        }
-
-                        if (deleteBtn) {
-                            deleteBtn.addEventListener('click', (e) => {
-                                e.preventDefault();
-                                openDeleteModal();
-                            });
-                        }
-
-                        if (confirmDeleteBtn) {
-                            confirmDeleteBtn.addEventListener('click', () => {
-                                setButtonLoading(confirmDeleteBtn, true, 'Suppression...');
-                                deleteForm.submit();
-                            });
-                        }
-
-                        function setButtonLoading(btn, isLoading, text) {
-                            if (!btn) return;
-                            if (isLoading) {
-                                btn.disabled = true;
-                                btn.dataset.originalHtml = btn.innerHTML;
-                                btn.innerHTML = `
-                                    <svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                    </svg>
-                                    <span>${text || 'Chargement...'}</span>
-                                `;
-                            } else {
-                                btn.disabled = false;
-                                btn.innerHTML = btn.dataset.originalHtml || btn.innerHTML;
-                            }
-                        }
-
-                        if (cancelDeleteBtn) cancelDeleteBtn.addEventListener('click', closeDeleteModal);
-                        if (deleteBackdrop) deleteBackdrop.addEventListener('click', closeDeleteModal);
+                        if (btn) btn.onclick = () => modal.classList.remove('hidden');
+                        if (cancel) cancel.onclick = () => modal.classList.add('hidden');
+                        if (backdrop) backdrop.onclick = () => modal.classList.add('hidden');
+                        if (confirm) confirm.onclick = () => {
+                            confirm.disabled = true;
+                            confirm.innerHTML = '<svg class="animate-spin h-4 w-4 text-white mx-auto" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+                            form.submit();
+                        };
                     });
                 </script>
                 {% else %}
-                <!-- Empty State -->
                 <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-                    <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div
+                        class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-400">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
                         </svg>
                     </div>
                     <h3 class="text-lg font-medium text-gray-900">Aucune donnée chargée</h3>
-                    <p class="mt-2 text-gray-500">Veuillez importer un fichier depuis le tableau de bord pour visualiser
-                        les données.</p>
+                    <p class="mt-2 text-gray-500">Importez un fichier depuis le tableau de bord.</p>
                     <a href="{{ url_for('dashboard') }}"
-                        class="mt-6 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-bank-600 hover:bg-bank-700">
-                        Aller au Tableau de Bord
-                    </a>
+                        class="mt-6 inline-flex items-center px-6 py-3 bg-bank-600 text-white font-semibold rounded-xl hover:bg-bank-700 transition-all btn-premium">Aller
+                        au Tableau de Bord</a>
                 </div>
                 {% endif %}
-
             </div>
         </div>
     </main>
@@ -265,45 +176,37 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
-
-
-        // AG-Grid Logic
-        {% if data_preview %}
-        try {
-            const initialData = {{ data_preview | tojson | safe
-        }};
-    const gridDiv = document.getElementById('myGrid');
-
-    const columnDefs = initialData.columns.map(col => ({
-        field: col.field,
-        headerName: col.title,
-        sortable: true,
-        filter: true,
-        resizable: true
-    }));
-
-    const gridOptions = {
-        columnDefs: columnDefs,
-        rowData: initialData.data,
-        pagination: true,
-        paginationPageSize: 20,
-        defaultColDef: {
-            flex: 1,
-            minWidth: 100,
-        },
-        animateRows: true,
-        onGridReady: () => {
-            setTimeout(() => {
+        const dataPreviewEl = document.getElementById('data-preview-json');
+        if (dataPreviewEl) {
+            try {
+                const initialData = JSON.parse(dataPreviewEl.textContent);
+                const gridDiv = document.getElementById('myGrid');
                 const skeleton = document.getElementById('grid-skeleton');
-                if (skeleton) skeleton.classList.add('hidden');
-                if (gridDiv) gridDiv.classList.remove('opacity-0');
-            }, 400);
-        }
-    };
 
-    agGrid.createGrid(gridDiv, gridOptions);
-        } catch (e) { console.error("Error initializing Grid", e); }
-    {% endif %}
+                const columnDefs = initialData.columns.map(col => ({
+                    field: col.field, headerName: col.title, sortable: true, filter: true, resizable: true
+                }));
+
+                const gridOptions = {
+                    columnDefs: columnDefs,
+                    rowData: initialData.data,
+                    pagination: true,
+                    paginationPageSize: 20,
+                    defaultColDef: { flex: 1, minWidth: 100 },
+                    onGridReady: () => {
+                        setTimeout(() => {
+                            if (skeleton) skeleton.classList.add('hidden');
+                            if (gridDiv) gridDiv.classList.remove('opacity-0');
+                        }, 400);
+                    }
+                };
+                agGrid.createGrid(gridDiv, gridOptions);
+            } catch (e) {
+                console.error("Error initializing Grid:", e);
+                const skeleton = document.getElementById('grid-skeleton');
+                if (skeleton) skeleton.innerHTML = '<div class="p-4 text-red-500 text-center font-medium">Erreur de chargement des données.</div>';
+            }
+        }
     });
 </script>
 {% endblock %}
