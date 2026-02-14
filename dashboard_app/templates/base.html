@@ -5,14 +5,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Banque Dashboard{% endblock %}</title>
-    <!-- Font: Inter -->
+    <!-- Fonts: Inter & Playfair Display -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;600;700&display=swap"
+        rel="stylesheet">
 
-    <!-- Grid.js Styles -->
-    <link href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
-    <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
+    <!-- AG-Grid Community -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.1/styles/ag-grid.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.1/styles/ag-theme-quartz.css" />
+    <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.1/dist/ag-grid-community.min.js"></script>
 
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -88,17 +91,19 @@
         }
 
         [data-theme="red"] {
-            /* Societe Generale Style */
+            /* Societe Generale Style (Official Red #E10028) */
             --bank-50: #fff1f2;
             --bank-100: #ffe4e6;
             --bank-200: #fecdd3;
             --bank-300: #fda4af;
             --bank-400: #fb7185;
             --bank-500: #f43f5e;
-            --bank-600: #e11d48;
+            --bank-600: #E10028;
+            /* Official SG Red */
             --bank-700: #be123c;
             --bank-800: #9f1239;
-            --bank-900: #881337;
+            --bank-900: #1f2937;
+            /* Dark Slate for contrast */
         }
 
         [data-theme="violet"] {
@@ -121,6 +126,7 @@
                 extend: {
                     fontFamily: {
                         sans: ['Inter', 'sans-serif'],
+                        serif: ['Playfair Display', 'serif'],
                     },
                     colors: {
                         bank: {
@@ -140,35 +146,266 @@
             }
         }
     </script>
+    <style>
+        /* Custom AG-Grid Theme Overrides to match Dashboard Theme */
+        .ag-theme-quartz {
+            --ag-active-color: var(--bank-600);
+            --ag-selected-row-background-color: var(--bank-50);
+            --ag-header-background-color: #f9fafb;
+            --ag-header-foreground-color: #374151;
+            --ag-font-family: 'Inter', sans-serif;
+        }
+    </style>
+    <script>
+            // Blocking script to avoid FOUC (Flash of Unstyled Content)
+            (function () {
+                const theme = localStorage.getItem('bank-theme') || 'default';
+                if (theme !== 'default') {
+                    document.documentElement.setAttribute('data-theme', theme);
+                }
+            })();
+    </script>
 </head>
 
-<body class="bg-gray-50 font-sans antialiased text-gray-900">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-    <div class="fixed top-4 right-4 z-50 space-y-2 pointer-events-none">
-        {% for category, message in messages %}
+<body class="bg-gray-50 font-sans antialiased text-gray-900 selection:bg-bank-200 selection:text-bank-900">
+
+    {% block app_background %}
+    <!-- Global Background Image (Subtle) -->
+    <div class="fixed inset-0 z-0 pointer-events-none">
         <div
-            class="notification p-4 rounded shadow-lg text-white pointer-events-auto transform transition-all duration-500 ease-in-out {{ 'bg-red-500' if category == 'error' else 'bg-green-500' }} fade-in">
-            {{ message }}
+            class="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=2000&q=80')] bg-cover bg-center opacity-5 mix-blend-multiply filter grayscale">
         </div>
-        {% endfor %}
+        <div class="absolute inset-0 bg-gradient-to-br from-gray-50/80 to-gray-100/80 backdrop-blur-[1px]"></div>
+    </div>
+    {% endblock %}
+
+    <!-- Wrapper to ensure content is above background -->
+    <div class="relative z-10">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="fixed top-4 right-4 z-50 space-y-2 pointer-events-none">
+            {% for category, message in messages %}
+            <div
+                class="notification p-4 rounded shadow-lg text-white pointer-events-auto transform transition-all duration-500 ease-in-out {{ 'bg-red-500' if category == 'error' else 'bg-green-500' }} fade-in">
+                {{ message }}
+            </div>
+            {% endfor %}
+            <script>
+                // Auto-dismiss notifications
+                document.addEventListener('DOMContentLoaded', () => {
+                    const notifications = document.querySelectorAll('.notification');
+                    notifications.forEach(note => {
+                        setTimeout(() => {
+                            note.classList.add('opacity-0', 'translate-x-full');
+                            setTimeout(() => note.remove(), 500);
+                        }, 4000); // Dissmiss after 4 seconds
+                    });
+                });
+            </script>
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+
+        <!-- Settings Modal (Global) -->
+        <div id="settings-modal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title"
+            role="dialog" aria-modal="true">
+            <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"
+                    id="modal-backdrop"></div>
+                <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+                <div
+                    class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                    <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                        <div class="sm:flex sm:items-start">
+                            <div
+                                class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-bank-100 sm:mx-0 sm:h-10 sm:w-10">
+                                <svg class="h-6 w-6 text-bank-600" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                                </svg>
+                            </div>
+                            <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                                <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">Paramètres</h3>
+                                <div class="mt-4">
+                                    <p class="text-sm text-gray-500 mb-4">Personnalisez l'apparence de votre espace de
+                                        travail.</p>
+                                    <h4 class="text-sm font-semibold text-gray-700 mb-3">Thème Chromatique</h4>
+                                    <div class="grid grid-cols-3 gap-3">
+                                        <button
+                                            class="theme-btn flex flex-col items-center justify-center p-3 border-2 border-transparent hover:border-gray-200 rounded-lg focus:outline-none transition-all"
+                                            data-theme="default">
+                                            <div class="w-8 h-8 rounded-full bg-[#0ea5e9] mb-2 shadow-sm"></div>
+                                            <span class="text-xs font-medium text-gray-700">Classique</span>
+                                        </button>
+                                        <button
+                                            class="theme-btn flex flex-col items-center justify-center p-3 border-2 border-transparent hover:border-gray-200 rounded-lg focus:outline-none transition-all"
+                                            data-theme="red">
+                                            <div class="w-8 h-8 rounded-full bg-[#f43f5e] mb-2 shadow-sm"></div>
+                                            <span class="text-xs font-medium text-gray-700">Société G.</span>
+                                        </button>
+                                        <button
+                                            class="theme-btn flex flex-col items-center justify-center p-3 border-2 border-transparent hover:border-gray-200 rounded-lg focus:outline-none transition-all"
+                                            data-theme="violet">
+                                            <div class="w-8 h-8 rounded-full bg-[#8b5cf6] mb-2 shadow-sm"></div>
+                                            <span class="text-xs font-medium text-gray-700">Moderne</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                        <button type="button" id="save-modal"
+                            class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-bank-600 text-base font-medium text-white hover:bg-bank-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-bank-500 sm:ml-3 sm:w-auto sm:text-sm">Enregistrer</button>
+                        <button type="button" id="cancel-modal"
+                            class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-bank-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">Annuler</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Logout Modal -->
+        <div id="logout-modal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title"
+            role="dialog" aria-modal="true">
+            <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"
+                    id="logout-backdrop"></div>
+                <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+                <div
+                    class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                    <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                        <div class="sm:flex sm:items-start">
+                            <div
+                                class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+                                <svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                            </div>
+                            <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                                <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">Confirmer la
+                                    déconnexion</h3>
+                                <div class="mt-2">
+                                    <p class="text-sm text-gray-500">Êtes-vous sûr de vouloir vous déconnecter ?</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                        <button type="button" id="confirm-logout"
+                            class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm">Déconnexion</button>
+                        <button type="button" id="cancel-logout"
+                            class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-bank-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">Annuler</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <script>
-            // Auto-dismiss notifications
             document.addEventListener('DOMContentLoaded', () => {
-                const notifications = document.querySelectorAll('.notification');
-                notifications.forEach(note => {
-                    setTimeout(() => {
-                        note.classList.add('opacity-0', 'translate-x-full');
-                        setTimeout(() => note.remove(), 500);
-                    }, 4000); // Dissmiss after 4 seconds
+                // --- Settings Modal & Theme Switcher ---
+                const modal = document.getElementById('settings-modal');
+                const saveBtn = document.getElementById('save-modal');
+                const cancelBtn = document.getElementById('cancel-modal');
+                const backdrop = document.getElementById('modal-backdrop');
+                const themeBtns = document.querySelectorAll('.theme-btn');
+                const root = document.documentElement;
+
+                // --- Logout Modal Logic ---
+                const logoutModal = document.getElementById('logout-modal');
+                const confirmLogoutBtn = document.getElementById('confirm-logout');
+                const cancelLogoutBtn = document.getElementById('cancel-logout');
+                const logoutBackdrop = document.getElementById('logout-backdrop');
+
+                // Event delegation for logout triggers (since they are in child templates)
+                document.body.addEventListener('click', (e) => {
+                    const trigger = e.target.closest('.logout-trigger');
+                    if (trigger) {
+                        e.preventDefault();
+                        logoutModal.classList.remove('hidden');
+                    }
+                });
+
+                function closeLogoutModal() {
+                    logoutModal.classList.add('hidden');
+                }
+
+                if (confirmLogoutBtn) {
+                    confirmLogoutBtn.addEventListener('click', () => {
+                        window.location.href = "{{ url_for('logout') }}";
+                    });
+                }
+
+                if (cancelLogoutBtn) cancelLogoutBtn.addEventListener('click', closeLogoutModal);
+                if (logoutBackdrop) logoutBackdrop.addEventListener('click', closeLogoutModal);
+
+                // Global settings link handler
+                document.body.addEventListener('click', (e) => {
+                    const link = e.target.closest('a[href="#"]');
+                    if (link && link.textContent.trim().includes('Paramètres')) {
+                        e.preventDefault();
+                        initialTheme = localStorage.getItem('bank-theme') || 'default';
+                        currentTempTheme = initialTheme;
+                        applyTheme(initialTheme); // Re-apply current to be safe
+                        modal.classList.remove('hidden');
+                    }
+                });
+
+                let initialTheme = localStorage.getItem('bank-theme') || 'default';
+                let currentTempTheme = initialTheme;
+
+                // Note: Initial theme application is handled by the head script to avoid FOUC.
+                // But we should still highlight the active button
+                updateActiveButton(initialTheme);
+
+                function applyTheme(theme) {
+                    if (theme === 'default') {
+                        root.removeAttribute('data-theme');
+                    } else {
+                        root.setAttribute('data-theme', theme);
+                    }
+                    updateActiveButton(theme);
+                }
+
+                function updateActiveButton(theme) {
+                    themeBtns.forEach(btn => {
+                        const btnTheme = btn.getAttribute('data-theme');
+                        if ((theme === 'default' && btnTheme === 'default') || theme === btnTheme) {
+                            btn.classList.add('border-bank-500');
+                            btn.classList.remove('border-transparent', 'hover:border-gray-200');
+                        } else {
+                            btn.classList.remove('border-bank-500');
+                            btn.classList.add('border-transparent', 'hover:border-gray-200');
+                        }
+                    });
+                }
+
+                function closeModal(save) {
+                    if (save) {
+                        localStorage.setItem('bank-theme', currentTempTheme);
+                        applyTheme(currentTempTheme);
+                    } else {
+                        applyTheme(initialTheme);
+                    }
+                    modal.classList.add('hidden');
+                }
+
+                if (saveBtn) saveBtn.addEventListener('click', () => closeModal(true));
+                if (cancelBtn) cancelBtn.addEventListener('click', () => closeModal(false));
+                if (backdrop) backdrop.addEventListener('click', () => closeModal(false));
+
+                themeBtns.forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const theme = btn.getAttribute('data-theme');
+                        currentTempTheme = theme;
+                        applyTheme(theme);
+                    });
                 });
             });
         </script>
-    </div>
-    {% endif %}
-    {% endwith %}
-
-    {% block content %}{% endblock %}
 </body>
 
 </html>
