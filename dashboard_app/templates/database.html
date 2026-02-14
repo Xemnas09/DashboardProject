@@ -19,7 +19,11 @@
                             d="M4 6h16M4 12h16M4 18h7" />
                     </svg>
                 </button>
-                <h1 class="ml-4 text-xl font-semibold text-gray-800 hidden md:block">Base de données</h1>
+                <div class="ml-4 hidden md:block">
+                    <h1 class="text-xl font-bold text-gray-900" style="font-family: 'Playfair Display', serif;">Base de
+                        données</h1>
+                    <p class="text-xs text-gray-500">Consultez et gérez vos données importées avec précision</p>
+                </div>
             </div>
 
             <div class="flex items-center space-x-4">
@@ -72,7 +76,7 @@
         </header>
 
         <!-- Content -->
-        <div class="flex-1 overflow-auto p-8">
+        <div class="flex-1 overflow-auto p-8 animate-fade-in-up">
             <div class="max-w-7xl mx-auto h-full flex flex-col">
 
                 {% if data_preview %}
@@ -210,7 +214,7 @@
         // AG-Grid Logic
         {% if data_preview %}
         try {
-            const initialData = {{ data_preview | tojson
+            const initialData = {{ data_preview | tojson | safe
         }};
     const gridDiv = document.getElementById('myGrid');
 

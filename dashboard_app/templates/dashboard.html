@@ -18,7 +18,11 @@
                             d="M4 6h16M4 12h16M4 18h7" />
                     </svg>
                 </button>
-                <h1 class="ml-4 text-xl font-semibold text-gray-800 hidden md:block">Tableau de Bord</h1>
+                <div class="ml-4 hidden md:block">
+                    <h1 class="text-xl font-bold text-gray-900" style="font-family: 'Playfair Display', serif;">Tableau
+                        de Bord</h1>
+                    <p class="text-xs text-gray-500">Vue d'ensemble de votre activité et importations de fichiers</p>
+                </div>
             </div>
 
             <div class="flex items-center space-x-4">
@@ -68,169 +72,178 @@
             </div>
         </header>
 
-        <!-- Content -->
-        <div class="flex-1 overflow-auto p-8">
-            <div class="max-w-7xl mx-auto space-y-8">
-                <!-- Welcome Section -->
+        <div class="max-w-7xl mx-auto space-y-8 animate-fade-in-up">
+            <!-- Welcome Section -->
+            <div
+                class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 flex justify-between items-center animate-fade-in-up delay-100">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-900">Bienvenue, {{ session.get('user', 'Utilisateur') |
+                        capitalize }}</h2>
+                    <p class="text-gray-500 mt-1">Voici un résumé de l'activité financière d'aujourd'hui.</p>
+                </div>
+                <div class="hidden md:block">
+                    <span
+                        class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-bank-100 text-bank-800">
+                        Dernière màj: <span class="ml-1" id="last-update">Aujourd'hui</span>
+                    </span>
+                </div>
+            </div>
+
+            <!-- KPI Cards (Static Demo) -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div
-                    class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 flex justify-between items-center">
-                    <div>
-                        <h2 class="text-2xl font-bold text-gray-900">Bienvenue, {{ session.get('user', 'Utilisateur') |
-                            capitalize }}</h2>
-                        <p class="text-gray-500 mt-1">Voici un résumé de l'activité financière d'aujourd'hui.</p>
-                    </div>
-                    <div class="hidden md:block">
-                        <span
-                            class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-bank-100 text-bank-800">
-                            Dernière màj: <span class="ml-1" id="last-update">Aujourd'hui</span>
-                        </span>
-                    </div>
-                </div>
-
-                <!-- KPI Cards (Static Demo) -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div
-                        class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-                        <div class="flex justify-between items-start">
-                            <div>
-                                <p class="text-sm font-medium text-gray-500 uppercase tracking-wider">Transactions</p>
-                                <h3 class="text-3xl font-bold text-gray-900 mt-2">2,450</h3>
-                                <div class="mt-2 flex items-center text-sm">
-                                    <span class="text-green-600 font-medium flex items-center">
-                                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
-                                        </svg>
-                                        +12.5%
-                                    </span>
-                                    <span class="text-gray-400 ml-2">vs hier</span>
-                                </div>
-                            </div>
-                            <div class="p-3 bg-bank-50 rounded-lg text-bank-600">
-                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
-                                </svg>
+                    class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow animate-fade-in-up delay-200">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500 uppercase tracking-wider">Transactions</p>
+                            <h3 class="text-3xl font-bold text-gray-900 mt-2">2,450</h3>
+                            <div class="mt-2 flex items-center text-sm">
+                                <span class="text-green-600 font-medium flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
+                                    </svg>
+                                    +12.5%
+                                </span>
+                                <span class="text-gray-400 ml-2">vs hier</span>
                             </div>
                         </div>
-                    </div>
-
-                    <div
-                        class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-                        <div class="flex justify-between items-start">
-                            <div>
-                                <p class="text-sm font-medium text-gray-500 uppercase tracking-wider">Volume Total</p>
-                                <h3 class="text-3xl font-bold text-gray-900 mt-2">45,230 €</h3>
-                                <div class="mt-2 flex items-center text-sm">
-                                    <span class="text-green-600 font-medium flex items-center">
-                                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
-                                        </svg>
-                                        +5.2%
-                                    </span>
-                                    <span class="text-gray-400 ml-2">vs hier</span>
-                                </div>
-                            </div>
-                            <div class="p-3 bg-green-50 rounded-lg text-green-600">
-                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z">
-                                    </path>
-                                </svg>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div
-                        class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-                        <div class="flex justify-between items-start">
-                            <div>
-                                <p class="text-sm font-medium text-gray-500 uppercase tracking-wider">Nouveaux Clients
-                                </p>
-                                <h3 class="text-3xl font-bold text-gray-900 mt-2">12</h3>
-                                <div class="mt-2 flex items-center text-sm">
-                                    <span class="text-gray-500 font-medium">Stable</span>
-                                </div>
-                            </div>
-                            <div class="p-3 bg-purple-50 rounded-lg text-purple-600">
-                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z">
-                                    </path>
-                                </svg>
-                            </div>
+                        <div class="p-3 bg-bank-50 rounded-lg text-bank-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                            </svg>
                         </div>
                     </div>
                 </div>
 
-                <!-- Upload Section -->
-                <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                    <div class="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
-                        <h2 class="text-lg font-semibold text-gray-800">Importation de Données</h2>
-                        <span class="text-xs text-gray-500 bg-white border border-gray-200 px-2 py-1 rounded">ZIP, CSV,
-                            XLSX</span>
-                    </div>
-                    <div class="p-8">
-                        <form id="upload-form"
-                            class="relative border-2 border-dashed border-gray-300 rounded-lg p-12 text-center hover:border-bank-500 hover:bg-bank-50 transition-all duration-300 cursor-pointer group">
-                            <input type="file" name="file" id="file-input"
-                                class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-
-                            <div id="upload-ui">
-                                <div class="group-hover:scale-110 transform transition-transform duration-300 mb-4">
-                                    <div
-                                        class="w-16 h-16 bg-bank-100 text-bank-600 rounded-full flex items-center justify-center mx-auto">
-                                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12">
-                                            </path>
-                                        </svg>
-                                    </div>
-                                </div>
-                                <h3 class="text-lg font-medium text-gray-900 group-hover:text-bank-700">Glissez-déposez
-                                    ou cliquez pour upload</h3>
-                                <p class="mt-2 text-sm text-gray-500 max-w-sm mx-auto">
-                                    Analyse automatique par Polars.
-                                </p>
+                <div
+                    class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow animate-fade-in-up delay-300">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500 uppercase tracking-wider">Volume Total</p>
+                            <h3 class="text-3xl font-bold text-gray-900 mt-2">45,230 €</h3>
+                            <div class="mt-2 flex items-center text-sm">
+                                <span class="text-green-600 font-medium flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
+                                    </svg>
+                                    +5.2%
+                                </span>
+                                <span class="text-gray-400 ml-2">vs hier</span>
                             </div>
+                        </div>
+                        <div class="p-3 bg-green-50 rounded-lg text-green-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z">
+                                </path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
 
-                            <!-- Upload Loading State (Hidden by default) -->
-                            <div id="upload-loading" class="hidden">
+                <div
+                    class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow animate-fade-in-up delay-400">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500 uppercase tracking-wider">Nouveaux Clients
+                            </p>
+                            <h3 class="text-3xl font-bold text-gray-900 mt-2">12</h3>
+                            <div class="mt-2 flex items-center text-sm">
+                                <span class="text-gray-500 font-medium">Stable</span>
+                            </div>
+                        </div>
+                        <div class="p-3 bg-purple-50 rounded-lg text-purple-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z">
+                                </path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload Section -->
+            <div
+                class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-fade-in-up delay-500">
+                <div class="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+                    <h2 class="text-lg font-semibold text-gray-800">Importation de Données</h2>
+                    <span class="text-xs text-gray-500 bg-white border border-gray-200 px-2 py-1 rounded">ZIP, CSV,
+                        XLSX</span>
+                </div>
+                <div class="p-8">
+                    <form id="upload-form"
+                        class="relative border-2 border-dashed border-gray-300 rounded-lg p-12 text-center hover:border-bank-500 hover:bg-bank-50 transition-all duration-300 cursor-pointer group">
+                        <input type="file" name="file" id="file-input"
+                            class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+
+                        <div id="upload-ui">
+                            <div class="group-hover:scale-110 transform transition-transform duration-300 mb-4">
                                 <div
-                                    class="animate-spin rounded-full h-12 w-12 border-b-2 border-bank-600 mx-auto mb-4">
+                                    class="w-16 h-16 bg-bank-100 text-bank-600 rounded-full flex items-center justify-center mx-auto">
+                                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12">
+                                        </path>
+                                    </svg>
                                 </div>
-                                <p class="text-bank-600 font-medium">Traitement en cours...</p>
                             </div>
-                        </form>
-                    </div>
+                            <h3 class="text-lg font-medium text-gray-900 group-hover:text-bank-700">Glissez-déposez
+                                ou cliquez pour upload</h3>
+                            <p class="mt-2 text-sm text-gray-500 max-w-sm mx-auto">
+                                Analyse automatique par Polars.
+                            </p>
+                        </div>
+
+                        <!-- Upload Loading State (Hidden by default) -->
+                        <div id="upload-loading" class="hidden">
+                            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-bank-600 mx-auto mb-4">
+                            </div>
+                            <p class="text-bank-600 font-medium">Traitement en cours...</p>
+                        </div>
+                    </form>
                 </div>
+            </div>
 
-                <!-- Success Action Container -->
-                <div id="upload-success-container"
-                    class="hidden bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-8 text-center transition-all duration-500 fade-in">
-                    <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7">
-                            </path>
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-bold text-gray-900 mb-2">Importation Réussie !</h3>
-                    <p class="text-gray-500 mb-6">Vos données ont été traitées et sont prêtes à être analysées.</p>
+            <!-- Success Action Container -->
+            <div id="upload-success-container"
+                class="hidden bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-8 text-center transition-all duration-500 fade-in">
+                <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7">
+                        </path>
+                    </svg>
+                </div>
+                <h3 class="text-xl font-bold text-gray-900 mb-2">Importation Réussie !</h3>
+                <p class="text-gray-500 mb-6">Vos données ont été traitées et sont prêtes à être analysées.</p>
 
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
                     <a href="{{ url_for('database_view') }}"
-                        class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-bank-600 hover:bg-bank-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-bank-500 transition-colors">
+                        class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-bank-600 hover:bg-bank-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-bank-500 transition-colors w-full sm:w-auto justify-center font-semibold">
                         <svg class="mr-2 -ml-1 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
                         </svg>
                         Voir la Base de Données
                     </a>
+                    <a href="{{ url_for('reports') }}"
+                        class="inline-flex items-center px-6 py-3 border-2 border-bank-600 text-base font-medium rounded-md shadow-sm text-bank-600 bg-white hover:bg-bank-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-bank-500 transition-all duration-200 w-full sm:w-auto justify-center font-semibold group">
+                        <svg class="mr-2 -ml-1 w-5 h-5 group-hover:scale-110 transition-transform" fill="none"
+                            stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        Générer des Rapports
+                    </a>
                 </div>
-
             </div>
+
         </div>
-    </main>
+</div>
+</main>
 </div>
 
 <script>
