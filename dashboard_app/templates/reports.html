@@ -1,0 +1,818 @@
+{% extends "base.html" %}
+{% block title %}Rapports — Banque Pro{% endblock %}
+
+{% block content %}
+<div class="flex h-screen overflow-hidden">
+    {% include 'includes/sidebar.html' %}
+
+    <main class="flex-1 overflow-y-auto">
+        <!-- Header -->
+        <header
+            class="h-16 bg-white/80 backdrop-blur-md border-b border-gray-200 flex items-center justify-between px-6 sticky top-0 z-10">
+            <div class="flex items-center space-x-4">
+                <button id="sidebar-toggle" class="text-gray-500 hover:text-gray-700 focus:outline-none">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                </button>
+                <div>
+                    <h1 class="text-xl font-bold text-gray-900" style="font-family: 'Playfair Display', serif;">
+                        Rapports & Visualisations</h1>
+                    <p class="text-xs text-gray-500">Analysez vos données avec des graphiques interactifs</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-4">
+                {% include 'includes/header_right.html' ignore missing %}
+                <div class="flex items-center space-x-3 text-sm text-gray-500">
+                    <span id="current-date"></span>
+                    <span id="current-time" class="font-mono text-bank-600"></span>
+                </div>
+                <!-- Notification Bell -->
+                <div id="notification-container" class="relative">
+                    <button id="notification-btn"
+                        class="relative text-gray-500 hover:text-bank-600 transition-colors p-2 rounded-lg hover:bg-gray-100">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                        </svg>
+                        {% if session.get('has_unread') %}
+                        <span class="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500"></span>
+                        {% endif %}
+                    </button>
+                    <div id="notification-dropdown"
+                        class="hidden absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden">
+                        <div class="px-4 py-3 border-b border-gray-100 bg-gray-50">
+                            <p class="text-sm font-semibold text-gray-900">Notifications</p>
+                        </div>
+                        <div class="max-h-64 overflow-y-auto divide-y divide-gray-50">
+                            {% for notif in session.get('notifications', []) %}
+                            <div class="px-4 py-3 hover:bg-gray-50 transition-colors">
+                                <p class="text-sm text-gray-800">{{ notif.message }}</p>
+                                <p class="text-xs text-gray-400 mt-1">{{ notif.time }}</p>
+                            </div>
+                            {% else %}
+                            <div class="px-4 py-6 text-center">
+                                <p class="text-sm text-gray-400">Aucune notification</p>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Page Content -->
+        <div class="p-6">
+            {% if columns_info %}
+
+            <!-- ===== Tab Navigation ===== -->
+            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 mb-6 overflow-hidden">
+                <div class="flex" id="report-tabs">
+                    <button data-tab="charts"
+                        class="tab-btn flex-1 px-6 py-3.5 text-sm font-medium text-center transition-all duration-200 border-b-2 border-bank-600 text-bank-700 bg-bank-50/50">
+                        <span class="flex items-center justify-center space-x-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <span>Graphiques</span>
+                        </span>
+                    </button>
+                    <button data-tab="pivot"
+                        class="tab-btn flex-1 px-6 py-3.5 text-sm font-medium text-center transition-all duration-200 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50">
+                        <span class="flex items-center justify-center space-x-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            <span>Tableau Croisé Dynamique</span>
+                        </span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ========== TAB: CHARTS ========== -->
+            <div id="tab-charts">
+                <!-- Control Panel -->
+                <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+                    <h2 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-bank-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                        </svg>
+                        Configuration du graphique
+                    </h2>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                        <div>
+                            <label for="x-column" class="block text-sm font-medium text-gray-700 mb-1">
+                                Variable X <span class="text-gray-400">(Axe horizontal)</span>
+                            </label>
+                            <select id="x-column"
+                                class="w-full px-3 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-bank-500 focus:border-bank-500 text-sm bg-white transition-shadow">
+                                <option value="">— Sélectionner —</option>
+                                {% for col in columns_info %}
+                                <option value="{{ col.name }}" data-numeric="{{ col.is_numeric }}">
+                                    {{ col.name }} ({{ 'Numérique' if col.is_numeric else 'Texte' }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label for="y-column" class="block text-sm font-medium text-gray-700 mb-1">
+                                Variable Y <span class="text-gray-400">(Valeur)</span>
+                            </label>
+                            <select id="y-column"
+                                class="w-full px-3 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-bank-500 focus:border-bank-500 text-sm bg-white transition-shadow">
+                                <option value="">— Aucune (comptage) —</option>
+                                {% for col in columns_info %}
+                                <option value="{{ col.name }}" data-numeric="{{ col.is_numeric }}">
+                                    {{ col.name }} ({{ 'Numérique' if col.is_numeric else 'Texte' }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label for="chart-type" class="block text-sm font-medium text-gray-700 mb-1">
+                                Type de graphique
+                            </label>
+                            <select id="chart-type"
+                                class="w-full px-3 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-bank-500 focus:border-bank-500 text-sm bg-white transition-shadow">
+                                <option value="bar" data-rule="all">📊 Histogramme</option>
+                                <option value="line" data-rule="two-cols">📈 Ligne</option>
+                                <option value="pie" data-rule="all">🥧 Diagramme circulaire</option>
+                                <option value="area" data-rule="two-cols">📉 Aire</option>
+                                <option value="scatter" data-rule="num-num">🔵 Nuage de points</option>
+                                <option value="boxplot" data-rule="cat-num">📦 Boxplot</option>
+                            </select>
+                        </div>
+                        <div>
+                            <button id="generate-chart-btn"
+                                class="w-full px-6 py-2.5 bg-bank-600 text-white font-medium rounded-lg shadow-sm hover:bg-bank-700 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-bank-500 focus:ring-offset-2 transition-all duration-200 text-sm flex items-center justify-center space-x-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                                <span>Générer</span>
+                            </button>
+                        </div>
+                        <div class="md:col-span-4">
+                            <p id="chart-hint" class="text-xs text-gray-400 italic"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chart Container -->
+                <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div id="chart-header"
+                        class="hidden px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                        <h3 id="chart-title" class="text-lg font-semibold text-gray-900"></h3>
+                        <button id="download-chart-btn"
+                            class="text-sm text-bank-600 hover:text-bank-700 font-medium flex items-center space-x-1 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            <span>Télécharger</span>
+                        </button>
+                    </div>
+                    <div id="chart-empty-state" class="flex flex-col items-center justify-center py-20 text-center">
+                        <div class="w-20 h-20 bg-bank-50 rounded-full flex items-center justify-center mb-4">
+                            <svg class="w-10 h-10 text-bank-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                    d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                        </div>
+                        <h3 class="text-lg font-medium text-gray-900 mb-1">Aucun graphique généré</h3>
+                        <p class="text-sm text-gray-500 max-w-sm">Sélectionnez vos variables et le type de graphique,
+                            puis cliquez sur <strong>Générer</strong>.</p>
+                    </div>
+                    <div id="chart-loading" class="hidden flex flex-col items-center justify-center py-20">
+                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-bank-600 mb-4"></div>
+                        <p class="text-sm text-gray-500">Génération du graphique...</p>
+                    </div>
+                    <div id="chart-container" class="hidden">
+                        <div id="echarts-main" style="width: 100%; height: 500px;"></div>
+                    </div>
+                    <div id="chart-error" class="hidden flex flex-col items-center justify-center py-20 text-center">
+                        <div class="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mb-4">
+                            <svg class="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                            </svg>
+                        </div>
+                        <h3 class="text-lg font-medium text-gray-900 mb-1">Erreur</h3>
+                        <p id="chart-error-message" class="text-sm text-gray-500"></p>
+                    </div>
+                </div>
+            </div><!-- /tab-charts -->
+
+            <!-- ========== TAB: PIVOT TABLE ========== -->
+            <div id="tab-pivot" class="hidden">
+                <!-- TCD Control Panel -->
+                <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+                    <h2 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-bank-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        Configuration du Tableau Croisé Dynamique
+                    </h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+                        <!-- Row Variables (multi-select) -->
+                        <div>
+                            <label for="pivot-rows" class="block text-sm font-medium text-gray-700 mb-1">
+                                Lignes <span class="text-gray-400">(regroupement)</span>
+                            </label>
+                            <select id="pivot-rows" multiple
+                                class="w-full px-3 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-bank-500 focus:border-bank-500 text-sm bg-white transition-shadow"
+                                style="min-height: 80px;">
+                                {% for col in columns_info %}
+                                <option value="{{ col.name }}">{{ col.name }} ({{ 'Num' if col.is_numeric else 'Texte'
+                                    }})</option>
+                                {% endfor %}
+                            </select>
+                            <p class="text-xs text-gray-400 mt-1">Ctrl+clic pour multi-sélection</p>
+                        </div>
+
+                        <!-- Column Variable -->
+                        <div>
+                            <label for="pivot-col" class="block text-sm font-medium text-gray-700 mb-1">
+                                Colonnes <span class="text-gray-400">(en-têtes)</span>
+                            </label>
+                            <select id="pivot-col"
+                                class="w-full px-3 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-bank-500 focus:border-bank-500 text-sm bg-white transition-shadow">
+                                <option value="">— Aucune —</option>
+                                {% for col in columns_info %}
+                                <option value="{{ col.name }}">{{ col.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Value Column -->
+                        <div>
+                            <label for="pivot-value" class="block text-sm font-medium text-gray-700 mb-1">
+                                Valeurs <span class="text-gray-400">(à agréger)</span>
+                            </label>
+                            <select id="pivot-value"
+                                class="w-full px-3 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-bank-500 focus:border-bank-500 text-sm bg-white transition-shadow">
+                                <option value="">— Sélectionner —</option>
+                                {% for col in columns_info %}
+                                <option value="{{ col.name }}">{{ col.name }} ({{ 'Num' if col.is_numeric else 'Texte'
+                                    }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Aggregation Function -->
+                        <div>
+                            <label for="pivot-agg" class="block text-sm font-medium text-gray-700 mb-1">
+                                Agrégation
+                            </label>
+                            <select id="pivot-agg"
+                                class="w-full px-3 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-bank-500 focus:border-bank-500 text-sm bg-white transition-shadow">
+                                <option value="sum">∑ Somme</option>
+                                <option value="mean">μ Moyenne</option>
+                                <option value="count"># Nombre</option>
+                                <option value="min">↓ Minimum</option>
+                                <option value="max">↑ Maximum</option>
+                            </select>
+                        </div>
+
+                        <!-- Generate Button -->
+                        <div>
+                            <button id="generate-pivot-btn"
+                                class="w-full px-6 py-2.5 bg-bank-600 text-white font-medium rounded-lg shadow-sm hover:bg-bank-700 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-bank-500 focus:ring-offset-2 transition-all duration-200 text-sm flex items-center justify-center space-x-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                                <span>Générer le TCD</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pivot Table Result -->
+                <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div id="pivot-header"
+                        class="hidden px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                        <h3 id="pivot-title" class="text-lg font-semibold text-gray-900"></h3>
+                        <span id="pivot-row-count" class="text-sm text-gray-400"></span>
+                    </div>
+                    <div id="pivot-empty-state" class="flex flex-col items-center justify-center py-20 text-center">
+                        <div class="w-20 h-20 bg-bank-50 rounded-full flex items-center justify-center mb-4">
+                            <svg class="w-10 h-10 text-bank-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                    d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                        </div>
+                        <h3 class="text-lg font-medium text-gray-900 mb-1">Aucun tableau généré</h3>
+                        <p class="text-sm text-gray-500 max-w-sm">Sélectionnez les lignes, la valeur et l'agrégation,
+                            puis cliquez sur <strong>Générer le TCD</strong>.</p>
+                    </div>
+                    <div id="pivot-loading" class="hidden flex flex-col items-center justify-center py-20">
+                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-bank-600 mb-4"></div>
+                        <p class="text-sm text-gray-500">Calcul du tableau croisé dynamique...</p>
+                    </div>
+                    <div id="pivot-container" class="hidden overflow-x-auto">
+                        <table id="pivot-table" class="w-full text-sm text-left"></table>
+                    </div>
+                    <div id="pivot-error" class="hidden flex flex-col items-center justify-center py-20 text-center">
+                        <div class="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mb-4">
+                            <svg class="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                            </svg>
+                        </div>
+                        <h3 class="text-lg font-medium text-gray-900 mb-1">Erreur</h3>
+                        <p id="pivot-error-message" class="text-sm text-gray-500"></p>
+                    </div>
+                </div>
+            </div><!-- /tab-pivot -->
+
+            {% else %}
+            <!-- Empty State: No Data Imported -->
+            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+                <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                </div>
+                <h3 class="text-lg font-medium text-gray-900">Aucune donnée disponible</h3>
+                <p class="mt-2 text-gray-500">Veuillez d'abord importer un fichier depuis le tableau de bord pour
+                    pouvoir générer des rapports.</p>
+                <a href="{{ url_for('dashboard') }}"
+                    class="mt-6 inline-flex items-center px-5 py-2.5 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-bank-600 hover:bg-bank-700 transition-colors">
+                    <svg class="mr-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    Importer un fichier
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </main>
+</div>
+
+{% if columns_info %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // ========================================
+        // TAB NAVIGATION
+        // ========================================
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        const tabCharts = document.getElementById('tab-charts');
+        const tabPivot = document.getElementById('tab-pivot');
+
+        function switchTab(tabName) {
+            tabBtns.forEach(btn => {
+                const isActive = btn.dataset.tab === tabName;
+                btn.classList.toggle('border-bank-600', isActive);
+                btn.classList.toggle('text-bank-700', isActive);
+                btn.classList.toggle('bg-bank-50/50', isActive);
+                btn.classList.toggle('border-transparent', !isActive);
+                btn.classList.toggle('text-gray-500', !isActive);
+            });
+            tabCharts.classList.toggle('hidden', tabName !== 'charts');
+            tabPivot.classList.toggle('hidden', tabName !== 'pivot');
+            localStorage.setItem('report-active-tab', tabName);
+
+            // Resize chart if switching back to charts
+            if (tabName === 'charts' && chartInstance) {
+                setTimeout(() => chartInstance.resize(), 100);
+            }
+        }
+
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+        });
+
+        // Restore saved tab
+        const savedTab = localStorage.getItem('report-active-tab');
+        if (savedTab && (savedTab === 'charts' || savedTab === 'pivot')) {
+            switchTab(savedTab);
+        }
+
+        // ========================================
+        // CHARTS SECTION
+        // ========================================
+        const generateBtn = document.getElementById('generate-chart-btn');
+        const xCol = document.getElementById('x-column');
+        const yCol = document.getElementById('y-column');
+        const chartType = document.getElementById('chart-type');
+        const downloadBtn = document.getElementById('download-chart-btn');
+        const chartHint = document.getElementById('chart-hint');
+
+        const emptyState = document.getElementById('chart-empty-state');
+        const loadingState = document.getElementById('chart-loading');
+        const chartContainer = document.getElementById('chart-container');
+        const chartHeader = document.getElementById('chart-header');
+        const chartTitle = document.getElementById('chart-title');
+        const errorState = document.getElementById('chart-error');
+        const errorMessage = document.getElementById('chart-error-message');
+
+        let chartInstance = null;
+
+        // Smart chart type filtering
+        function getSelectedType(selectEl) {
+            const opt = selectEl.options[selectEl.selectedIndex];
+            if (!opt || !opt.value) return null;
+            return opt.dataset.numeric === 'True' ? 'numeric' : 'categorical';
+        }
+
+        function updateChartTypeAvailability() {
+            const xType = getSelectedType(xCol);
+            const yType = getSelectedType(yCol);
+            const yEmpty = !yCol.value;
+            const options = chartType.querySelectorAll('option');
+            let hint = '';
+
+            options.forEach(opt => {
+                const rule = opt.dataset.rule;
+                let enabled = true;
+
+                if (yEmpty) {
+                    enabled = (rule === 'all');
+                    hint = '💡 Mode comptage : seuls Histogramme et Circulaire sont disponibles.';
+                } else if (xType === 'numeric' && yType === 'numeric') {
+                    enabled = ['all', 'two-cols', 'num-num'].includes(rule);
+                    hint = '💡 Deux variables numériques : Nuage de points, Ligne, Aire et Histogramme disponibles.';
+                } else if (xType === 'categorical' && yType === 'numeric') {
+                    enabled = true;
+                    hint = '💡 Catégorielle × Numérique : tous les types sont disponibles, y compris le Boxplot.';
+                } else if (xType === 'categorical' && yType === 'categorical') {
+                    enabled = (rule === 'all');
+                    hint = '💡 Deux variables catégorielles : seuls Histogramme et Circulaire sont disponibles.';
+                } else if (xType === 'numeric' && yType === 'categorical') {
+                    enabled = (rule === 'all');
+                    hint = '💡 Numérique × Catégorielle : Histogramme et Circulaire disponibles.';
+                } else {
+                    enabled = true;
+                    hint = '';
+                }
+
+                opt.disabled = !enabled;
+                opt.style.color = enabled ? '' : '#9ca3af';
+            });
+
+            if (chartType.options[chartType.selectedIndex]?.disabled) {
+                for (let opt of chartType.options) {
+                    if (!opt.disabled) { chartType.value = opt.value; break; }
+                }
+            }
+            chartHint.textContent = hint;
+        }
+
+        xCol.addEventListener('change', updateChartTypeAvailability);
+        yCol.addEventListener('change', updateChartTypeAvailability);
+        updateChartTypeAvailability();
+
+        function showState(state) {
+            [emptyState, loadingState, chartContainer, errorState].forEach(el => el.classList.add('hidden'));
+            chartHeader.classList.add('hidden');
+            state.classList.remove('hidden');
+        }
+
+        function initChart() {
+            const dom = document.getElementById('echarts-main');
+            if (chartInstance) chartInstance.dispose();
+            chartInstance = echarts.init(dom, null, { renderer: 'canvas' });
+        }
+
+        // Chart options builder
+        function buildChartOptions(data) {
+            const type = data.chart_type;
+            const colorPalette = [
+                '#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de',
+                '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc', '#48b8d0'
+            ];
+            const tooltipStyle = {
+                backgroundColor: 'rgba(255,255,255,0.95)',
+                borderColor: '#e5e7eb',
+                textStyle: { color: '#374151' }
+            };
+
+            if (type === 'pie') {
+                return {
+                    color: colorPalette,
+                    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)', ...tooltipStyle },
+                    legend: { type: 'scroll', bottom: 10, textStyle: { fontSize: 12 } },
+                    series: [{
+                        type: 'pie', radius: ['35%', '65%'], center: ['50%', '45%'],
+                        avoidLabelOverlap: true,
+                        itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
+                        label: { show: true, formatter: '{b}\n{d}%', fontSize: 11 },
+                        emphasis: {
+                            label: { show: true, fontSize: 14, fontWeight: 'bold' },
+                            itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(0,0,0,0.2)' }
+                        },
+                        data: data.data
+                    }]
+                };
+            }
+
+            if (type === 'scatter') {
+                return {
+                    color: colorPalette,
+                    tooltip: {
+                        trigger: 'item',
+                        formatter: (p) => `${data.x_name}: ${p.value[0]}<br/>${data.y_name}: ${p.value[1]}`,
+                        ...tooltipStyle
+                    },
+                    xAxis: { type: 'value', name: data.x_name, nameLocation: 'middle', nameGap: 30, nameTextStyle: { fontSize: 12, fontWeight: 'bold' }, splitLine: { lineStyle: { type: 'dashed', color: '#f0f0f0' } } },
+                    yAxis: { type: 'value', name: data.y_name, nameLocation: 'middle', nameGap: 50, nameTextStyle: { fontSize: 12, fontWeight: 'bold' }, splitLine: { lineStyle: { type: 'dashed', color: '#f0f0f0' } } },
+                    series: [{ type: 'scatter', symbolSize: 8, data: data.data, itemStyle: { opacity: 0.7 } }],
+                    grid: { left: 80, right: 30, bottom: 60, top: 30 }
+                };
+            }
+
+            if (type === 'boxplot') {
+                const series = [{
+                    name: 'Boxplot', type: 'boxplot',
+                    data: data.data.map((d, i) => ({
+                        value: d,
+                        itemStyle: { color: colorPalette[i % colorPalette.length] + '30', borderColor: colorPalette[i % colorPalette.length] }
+                    })),
+                    emphasis: { itemStyle: { borderColor: '#2f4b7c', borderWidth: 2 } },
+                    tooltip: {
+                        formatter: function (param) {
+                            const d = param.data;
+                            return [
+                                `<strong>${data.categories[param.dataIndex]}</strong>`,
+                                `Max : ${d[4].toFixed(2)}`, `Q3 : ${d[3].toFixed(2)}`,
+                                `Médiane : ${d[2].toFixed(2)}`, `Q1 : ${d[1].toFixed(2)}`,
+                                `Min : ${d[0].toFixed(2)}`
+                            ].join('<br/>');
+                        }
+                    }
+                }];
+                if (data.outliers && data.outliers.length > 0) {
+                    series.push({
+                        name: 'Outliers', type: 'scatter', data: data.outliers,
+                        itemStyle: { color: '#ee6666', opacity: 0.6 }, symbolSize: 6,
+                        tooltip: { formatter: (p) => `${data.categories[p.data[0]]}: ${p.data[1].toFixed(2)} (outlier)` }
+                    });
+                }
+                return {
+                    color: colorPalette, tooltip: { trigger: 'item', ...tooltipStyle },
+                    xAxis: { type: 'category', data: data.categories, axisLabel: { rotate: data.categories.length > 8 ? 45 : 0, fontSize: 11, interval: 0, overflow: 'truncate', width: 80 }, axisTick: { alignWithLabel: true } },
+                    yAxis: { type: 'value', name: data.y_name, nameTextStyle: { fontSize: 12, fontWeight: 'bold' }, splitLine: { lineStyle: { type: 'dashed', color: '#f0f0f0' } } },
+                    series: series,
+                    grid: { left: 70, right: 30, bottom: data.categories.length > 8 ? 100 : 60, top: 40 }
+                };
+            }
+
+            // Bar / Line / Area
+            const seriesType = type === 'area' ? 'line' : type;
+            const areaStyle = type === 'area' ? {
+                opacity: 0.15,
+                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                    { offset: 0, color: colorPalette[0] },
+                    { offset: 1, color: 'rgba(84, 112, 198, 0)' }
+                ])
+            } : undefined;
+
+            return {
+                color: colorPalette,
+                tooltip: { trigger: 'axis', ...tooltipStyle, axisPointer: { type: type === 'bar' ? 'shadow' : 'line' } },
+                xAxis: { type: 'category', data: data.labels, axisLabel: { rotate: data.labels.length > 10 ? 45 : 0, fontSize: 11, interval: 0, overflow: 'truncate', width: 80 }, axisTick: { alignWithLabel: true } },
+                yAxis: { type: 'value', name: data.y_name, nameTextStyle: { fontSize: 12, fontWeight: 'bold' }, splitLine: { lineStyle: { type: 'dashed', color: '#f0f0f0' } } },
+                series: [{
+                    type: seriesType,
+                    data: type === 'bar'
+                        ? data.values.map((v, i) => ({ value: v, itemStyle: { color: colorPalette[i % colorPalette.length] } }))
+                        : data.values,
+                    smooth: type === 'line' || type === 'area',
+                    areaStyle: areaStyle,
+                    itemStyle: { borderRadius: type === 'bar' ? [4, 4, 0, 0] : 0 },
+                    barMaxWidth: 50,
+                    emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.15)' } }
+                }],
+                grid: { left: 60, right: 30, bottom: data.labels.length > 10 ? 100 : 60, top: 40 },
+                dataZoom: data.labels.length > 20 ? [
+                    { type: 'inside', start: 0, end: 60 },
+                    { type: 'slider', start: 0, end: 60, bottom: 10 }
+                ] : undefined
+            };
+        }
+
+        // Generate chart
+        async function generateChart() {
+            const x = xCol.value;
+            const y = yCol.value;
+            const type = chartType.value;
+
+            if (!x) {
+                showState(errorState);
+                errorMessage.textContent = 'Veuillez sélectionner au moins la variable X.';
+                return;
+            }
+
+            showState(loadingState);
+
+            try {
+                const response = await fetch("{{ url_for('chart_data') }}", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ x_column: x, y_column: y || '', chart_type: type })
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    showState(chartContainer);
+                    chartHeader.classList.remove('hidden');
+
+                    const typeLabels = {
+                        bar: 'Histogramme', line: 'Graphique en ligne',
+                        pie: 'Diagramme circulaire', area: 'Graphique en aire',
+                        scatter: 'Nuage de points', boxplot: 'Boxplot'
+                    };
+                    chartTitle.textContent = `${typeLabels[type]} — ${x}${y ? ' vs ' + y : ' (comptage)'}`;
+
+                    initChart();
+                    const options = buildChartOptions(result);
+                    chartInstance.setOption(options, true);
+
+                    localStorage.setItem('chart-config', JSON.stringify({ x, y, type }));
+                } else {
+                    showState(errorState);
+                    errorMessage.textContent = result.message || 'Une erreur est survenue.';
+                }
+            } catch (err) {
+                showState(errorState);
+                errorMessage.textContent = 'Erreur de connexion au serveur.';
+                console.error(err);
+            }
+        }
+
+        generateBtn.addEventListener('click', generateChart);
+
+        // Restore last chart
+        const savedConfig = localStorage.getItem('chart-config');
+        if (savedConfig) {
+            try {
+                const { x, y, type } = JSON.parse(savedConfig);
+                if (x) {
+                    xCol.value = x;
+                    yCol.value = y || '';
+                    updateChartTypeAvailability();
+                    chartType.value = type || 'bar';
+                    generateChart();
+                }
+            } catch (e) { console.warn('Could not restore chart config', e); }
+        }
+
+        downloadBtn.addEventListener('click', () => {
+            if (chartInstance) {
+                const url = chartInstance.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#fff' });
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `rapport_${Date.now()}.png`;
+                a.click();
+            }
+        });
+
+        window.addEventListener('resize', () => { if (chartInstance) chartInstance.resize(); });
+
+        // ========================================
+        // PIVOT TABLE SECTION
+        // ========================================
+        const pivotRowsEl = document.getElementById('pivot-rows');
+        const pivotColEl = document.getElementById('pivot-col');
+        const pivotValueEl = document.getElementById('pivot-value');
+        const pivotAggEl = document.getElementById('pivot-agg');
+        const generatePivotBtn = document.getElementById('generate-pivot-btn');
+
+        const pivotEmptyState = document.getElementById('pivot-empty-state');
+        const pivotLoading = document.getElementById('pivot-loading');
+        const pivotContainer = document.getElementById('pivot-container');
+        const pivotHeader = document.getElementById('pivot-header');
+        const pivotTitle = document.getElementById('pivot-title');
+        const pivotRowCount = document.getElementById('pivot-row-count');
+        const pivotError = document.getElementById('pivot-error');
+        const pivotErrorMsg = document.getElementById('pivot-error-message');
+        const pivotTable = document.getElementById('pivot-table');
+
+        function showPivotState(state) {
+            [pivotEmptyState, pivotLoading, pivotContainer, pivotError].forEach(el => el.classList.add('hidden'));
+            pivotHeader.classList.add('hidden');
+            state.classList.remove('hidden');
+        }
+
+        function renderPivotTable(data) {
+            const { headers, rows, totals } = data;
+
+            let html = '<thead class="bg-gray-50 sticky top-0"><tr>';
+            headers.forEach(h => {
+                html += `<th class="px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider border-b border-gray-200 whitespace-nowrap">${h}</th>`;
+            });
+            html += '</tr></thead>';
+
+            html += '<tbody class="divide-y divide-gray-100">';
+            rows.forEach((row, idx) => {
+                const bgClass = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50';
+                html += `<tr class="${bgClass} hover:bg-bank-50/30 transition-colors">`;
+                row.forEach((cell, ci) => {
+                    const isRowHeader = ci < (headers.length - (data.rows[0] ? data.rows[0].length - headers.length : 0));
+                    const val = cell === null ? '<span class="text-gray-300">—</span>' : cell;
+                    const numClass = typeof cell === 'number' ? 'text-right font-mono' : '';
+                    html += `<td class="px-4 py-2.5 text-sm text-gray-700 whitespace-nowrap ${numClass}">${val}</td>`;
+                });
+                html += '</tr>';
+            });
+            html += '</tbody>';
+
+            // Totals row
+            if (totals && totals.length > 0) {
+                html += '<tfoot><tr class="bg-bank-50 border-t-2 border-bank-200">';
+                totals.forEach((t, i) => {
+                    const numClass = typeof t === 'number' ? 'text-right font-mono' : '';
+                    const val = t === '' ? '' : `<strong>${t}</strong>`;
+                    html += `<td class="px-4 py-3 text-sm text-bank-800 font-semibold whitespace-nowrap ${numClass}">${val}</td>`;
+                });
+                html += '</tr></tfoot>';
+            }
+
+            pivotTable.innerHTML = html;
+        }
+
+        async function generatePivot() {
+            const rowCols = Array.from(pivotRowsEl.selectedOptions).map(o => o.value);
+            const colCol = pivotColEl.value;
+            const valueCol = pivotValueEl.value;
+            const aggFunc = pivotAggEl.value;
+
+            if (rowCols.length === 0 || !valueCol) {
+                showPivotState(pivotError);
+                pivotErrorMsg.textContent = 'Veuillez sélectionner au moins une ligne et une valeur.';
+                return;
+            }
+
+            showPivotState(pivotLoading);
+
+            try {
+                const response = await fetch("{{ url_for('pivot_data') }}", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        row_cols: rowCols,
+                        col_col: colCol,
+                        value_col: valueCol,
+                        agg_func: aggFunc
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    showPivotState(pivotContainer);
+                    pivotHeader.classList.remove('hidden');
+
+                    const aggLabels = { sum: 'Somme', mean: 'Moyenne', count: 'Nombre', min: 'Min', max: 'Max' };
+                    pivotTitle.textContent = `TCD — ${aggLabels[aggFunc]} de ${valueCol}${colCol ? ' par ' + colCol : ''}`;
+                    pivotRowCount.textContent = `${result.row_count} lignes`;
+
+                    renderPivotTable(result);
+
+                    // Save config
+                    localStorage.setItem('pivot-config', JSON.stringify({ rowCols, colCol, valueCol, aggFunc }));
+                } else {
+                    showPivotState(pivotError);
+                    pivotErrorMsg.textContent = result.message || 'Une erreur est survenue.';
+                }
+            } catch (err) {
+                showPivotState(pivotError);
+                pivotErrorMsg.textContent = 'Erreur de connexion au serveur.';
+                console.error(err);
+            }
+        }
+
+        generatePivotBtn.addEventListener('click', generatePivot);
+
+        // Restore last pivot
+        const savedPivot = localStorage.getItem('pivot-config');
+        if (savedPivot) {
+            try {
+                const { rowCols, colCol, valueCol, aggFunc } = JSON.parse(savedPivot);
+                if (rowCols && rowCols.length > 0 && valueCol) {
+                    // Set multi-select values
+                    Array.from(pivotRowsEl.options).forEach(opt => {
+                        opt.selected = rowCols.includes(opt.value);
+                    });
+                    pivotColEl.value = colCol || '';
+                    pivotValueEl.value = valueCol;
+                    pivotAggEl.value = aggFunc || 'sum';
+                    generatePivot();
+                }
+            } catch (e) { console.warn('Could not restore pivot config', e); }
+        }
+    });
+</script>
+{% endif %}
+
+{% endblock %}
