@@ -194,37 +194,7 @@
                     <span id="current-date"></span>
                     <span id="current-time" class="font-mono text-bank-600"></span>
                 </div>
-                <!-- Notification Bell -->
-                <div id="notification-container" class="relative">
-                    <button id="notification-btn"
-                        class="relative text-gray-500 hover:text-bank-600 transition-colors p-2 rounded-lg hover:bg-gray-100">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                        </svg>
-                        {% if session.get('has_unread') %}
-                        <span class="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500"></span>
-                        {% endif %}
-                    </button>
-                    <div id="notification-dropdown"
-                        class="hidden absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden">
-                        <div class="px-4 py-3 border-b border-gray-100 bg-gray-50">
-                            <p class="text-sm font-semibold text-gray-900">Notifications</p>
-                        </div>
-                        <div class="max-h-64 overflow-y-auto divide-y divide-gray-50">
-                            {% for notif in session.get('notifications', []) %}
-                            <div class="px-4 py-3 hover:bg-gray-50 transition-colors">
-                                <p class="text-sm text-gray-800">{{ notif.message }}</p>
-                                <p class="text-xs text-gray-400 mt-1">{{ notif.time }}</p>
-                            </div>
-                            {% else %}
-                            <div class="px-4 py-6 text-center">
-                                <p class="text-sm text-gray-400">Aucune notification</p>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
+                {% include 'includes/header_notifications.html' %}
             </div>
         </header>
 
@@ -404,8 +374,8 @@
                                 class="w-full px-3 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-bank-500 focus:border-bank-500 text-sm bg-white transition-shadow"
                                 style="min-height: 80px;">
                                 {% for col in columns_info %}
-                                <option value="{{ col.name }}">{{ col.name }} ({{ 'Num' if col.is_numeric else 'Texte'
-                                    }})</option>
+                                <option value="{{ col.name }}" data-numeric="{{ col.is_numeric }}">{{ col.name }} ({{
+                                    'Num' if col.is_numeric else 'Texte' }})</option>
                                 {% endfor %}
                             </select>
                             <p class="text-xs text-gray-400 mt-1">Ctrl+clic pour multi-sélection</p>
@@ -420,7 +390,8 @@
                                 class="w-full px-3 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-bank-500 focus:border-bank-500 text-sm bg-white transition-shadow">
                                 <option value="">— Aucune —</option>
                                 {% for col in columns_info %}
-                                <option value="{{ col.name }}">{{ col.name }}</option>
+                                <option value="{{ col.name }}" data-numeric="{{ col.is_numeric }}">{{ col.name }}
+                                </option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -434,8 +405,8 @@
                                 class="w-full px-3 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-bank-500 focus:border-bank-500 text-sm bg-white transition-shadow">
                                 <option value="">— Sélectionner —</option>
                                 {% for col in columns_info %}
-                                <option value="{{ col.name }}">{{ col.name }} ({{ 'Num' if col.is_numeric else 'Texte'
-                                    }})</option>
+                                <option value="{{ col.name }}" data-numeric="{{ col.is_numeric }}">{{ col.name }} ({{
+                                    'Num' if col.is_numeric else 'Texte' }})</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -1000,10 +971,27 @@
             const valueCol = pivotValueEl.value;
             const aggFunc = pivotAggEl.value;
 
+            // --- Front-end Robustness Check ---
             if (rowCols.length === 0 || !valueCol) {
                 showPivotState(pivotError);
-                if (pivotErrorMsg) pivotErrorMsg.textContent = 'Veuillez sélectionner au moins une ligne et une valeur.';
+                if (pivotErrorMsg) pivotErrorMsg.textContent = 'Erreur : Veuillez sélectionner au moins une ligne et une valeur.';
                 return;
+            }
+
+            // Check if value column is numeric for Sum/Mean/Min/Max (Scientific consistency)
+            const selectedValueOption = pivotValueEl.selectedOptions[0];
+            const isNumericValue = selectedValueOption ? String(selectedValueOption.dataset.numeric).toLowerCase() === 'true' : false;
+
+            if (['sum', 'mean', 'min', 'max'].includes(aggFunc) && !isNumericValue) {
+                showPivotState(pivotError);
+                if (pivotErrorMsg) pivotErrorMsg.textContent = `Erreur : L'opération '${aggFunc}' nécessite une variable numérique. La colonne '${valueCol}' est textuelle.`;
+                return;
+            }
+
+            // Limit row cardinality check (Soft limit warning)
+            if (rowCols.length > 5) {
+                // Not a hard error but maybe show a subtle warning if we had a toast system
+                console.warn('Haute cardinalité détectée dans le pivot');
             }
 
             showPivotState(pivotLoading);

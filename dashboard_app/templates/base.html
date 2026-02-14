@@ -261,22 +261,49 @@
     <div class="relative z-10">
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-        <div class="fixed top-4 inset-x-0 flex flex-col items-center z-50 space-y-2 pointer-events-none">
+        <div class="fixed top-6 inset-x-0 flex flex-col items-center z-[100] space-y-3 pointer-events-none">
             {% for category, message in messages %}
             <div
-                class="notification p-4 rounded shadow-lg text-white pointer-events-auto transform transition-all duration-500 ease-in-out {{ 'bg-red-500' if category == 'error' else 'bg-green-500' }} fade-in">
-                {{ message }}
+                class="notification group pointer-events-auto flex items-center gap-4 px-5 py-4 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.2)] bg-white border-l-4 {{ 'border-red-500' if category == 'error' else 'border-green-500' }} transform transition-all duration-500 ease-out translate-y-0 opacity-100 min-w-[320px] max-w-md animate-fade-in-up">
+                <div class="flex-shrink-0">
+                    {% if category == 'error' %}
+                    <div class="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center text-red-500">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                    {% else %}
+                    <div class="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center text-green-500">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="flex-1">
+                    <p class="text-sm font-bold text-gray-900 leading-tight">{{ 'Erreur' if category == 'error' else
+                        'Succès' }}</p>
+                    <p class="text-xs text-gray-500 mt-1">{{ message }}</p>
+                </div>
+                <button class="text-gray-300 hover:text-gray-500 transition-colors"
+                    onclick="this.parentElement.remove()">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
             </div>
             {% endfor %}
             <script>
-                // Auto-dismiss notifications
                 document.addEventListener('DOMContentLoaded', () => {
-                    const notifications = document.querySelectorAll('.notification');
-                    notifications.forEach(note => {
+                    const notes = document.querySelectorAll('.notification');
+                    notes.forEach(note => {
                         setTimeout(() => {
-                            note.classList.add('opacity-0', 'translate-x-full');
+                            note.style.transform = 'translateY(-20px) scale(0.95)';
+                            note.style.opacity = '0';
                             setTimeout(() => note.remove(), 500);
-                        }, 4000); // Dissmiss after 4 seconds
+                        }, 5000);
                     });
                 });
             </script>
@@ -487,42 +514,48 @@
                 const notifBtn = document.getElementById('notification-btn');
                 const notifDropdown = document.getElementById('notification-dropdown');
                 const notifContainer = document.getElementById('notification-container');
-                const notifList = notifDropdown ? notifDropdown.querySelector('.max-h-64') : null;
-                const notifCount = notifDropdown ? notifDropdown.querySelector('span.text-gray-500') : null;
+                const notifList = notifDropdown ? notifDropdown.querySelector('.max-h-80, .max-h-64') : null;
 
                 // Function to add notification dynamically
                 window.addGlobalNotification = (notif) => {
                     if (!notifList || !notifBtn) return;
 
-                    // Remove "No notifications" if present
+                    // Remove empty state if present
                     const emptyState = notifList.querySelector('.text-center');
                     if (emptyState) emptyState.remove();
 
-                    // Create HTML
+                    // Create HTML (Modern structure)
                     const div = document.createElement('div');
-                    div.className = "px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors animate-fade-in-down";
+                    div.className = "px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors animate-fade-in-down group cursor-default";
+
+                    const catColor = notif.category === 'success' ? 'green' : (notif.category === 'error' ? 'red' : (notif.category === 'warning' ? 'amber' : 'blue'));
+
                     div.innerHTML = `
-                        <div class="flex justify-between items-start">
-                            <p class="text-sm font-medium text-gray-800">${notif.message}</p>
-                            <span class="text-xs text-gray-400 whitespace-nowrap ml-2">${notif.time}</span>
+                        <div class="flex items-start gap-3">
+                            <div class="mt-1 flex-shrink-0">
+                                <div class="w-2 h-2 rounded-full bg-${catColor}-500"></div>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-800 leading-snug group-hover:text-gray-900">${notif.message}</p>
+                                <p class="text-[10px] text-gray-400 mt-1 flex items-center">
+                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    ${notif.time || 'À l\'instant'}
+                                </p>
+                            </div>
                         </div>
-                        <p class="text-xs text-${notif.category === 'success' ? 'green' : notif.category === 'info' ? 'bank' : 'yellow'}-600 mt-1 capitalize">${notif.category}</p>
                     `;
 
                     // Prepend
                     notifList.insertBefore(div, notifList.firstChild);
 
-                    // Update count
-                    if (notifCount) {
-                        const current = parseInt(notifCount.textContent) || 0;
-                        notifCount.textContent = `${current + 1} récentes`;
-                    }
-
-                    // Show Red Dot
+                    // Show Red Dot / Badge
                     let dot = notifBtn.querySelector('.bg-red-500');
                     if (!dot) {
                         dot = document.createElement('span');
-                        dot.className = "absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full animate-pulse";
+                        dot.id = "notification-badge";
+                        dot.className = "absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white animate-pulse";
                         notifBtn.appendChild(dot);
                     }
                 };
@@ -532,18 +565,15 @@
                         e.stopPropagation();
                         notifDropdown.classList.toggle('hidden');
 
-                        // Mark as read if opening
                         if (!notifDropdown.classList.contains('hidden')) {
-                            // Hide red dot visually
-                            const dot = notifBtn.querySelector('.bg-red-500');
+                            // Mark as read
+                            const dot = document.getElementById('notification-badge');
                             if (dot) dot.remove();
 
-                            // Tell backend
                             fetch("{{ url_for('mark_notifications_read') }}", { method: 'POST' });
                         }
                     });
 
-                    // Close when clicking outside
                     document.addEventListener('click', (e) => {
                         if (notifContainer && !notifContainer.contains(e.target)) {
                             notifDropdown.classList.add('hidden');

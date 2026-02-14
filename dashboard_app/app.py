@@ -460,7 +460,18 @@ def pivot_data():
         # Drop nulls in relevant columns
         df = df.drop_nulls(subset=all_cols)
         
+        # --- Backend Robustness & Scientific Validation ---
+        is_numeric = df[value_col].dtype.is_numeric()
+        
+        if agg_func in ['sum', 'mean'] and not is_numeric:
+            return jsonify({'status': 'error', 'message': f'La colonne "{value_col}" doit être numérique pour une agrégation de type {agg_func}'}), 400
+
         if col_col:
+            # Check cardinality of the pivot column to prevent browser crash (Limit to 60)
+            cardinality = df[col_col].n_unique()
+            if cardinality > 60:
+                 return jsonify({'status': 'error', 'message': f'Cardinalité trop élevée ({cardinality}). Le champ "{col_col}" contient trop de modalités différentes pour un pivot lisible.'}), 400
+            
             # Pivot table with column header
             # First group by row_cols + col_col, aggregate
             grouped = df.group_by(row_cols + [col_col]).agg(agg_expr.alias('value'))
