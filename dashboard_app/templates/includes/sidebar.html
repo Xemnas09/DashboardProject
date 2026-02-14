@@ -1,0 +1,97 @@
+<aside id="sidebar"
+    class="bg-bank-900 text-white transition-all duration-300 ease-in-out w-64 flex flex-col fixed h-full z-20 md:relative md:h-auto flex-shrink-0">
+    <!-- Header -->
+    <div class="h-16 flex items-center justify-between px-4 bg-bank-800 border-b border-bank-700 flex-shrink-0">
+        <div class="flex items-center space-x-2 overflow-hidden whitespace-nowrap">
+            <svg class="w-8 h-8 text-bank-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z" />
+                <path fill-rule="evenodd"
+                    d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z"
+                    clip-rule="evenodd" />
+            </svg>
+            <span id="sidebar-title" class="text-xl font-bold tracking-tight transition-opacity duration-300">Banque
+                Pro</span>
+        </div>
+        <!-- Mobile Close Button -->
+        <button id="mobile-close-sidebar" class="md:hidden text-gray-300 hover:text-white">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                </path>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="flex-1 py-6 space-y-1 px-3 overflow-y-auto">
+        <a href="{{ url_for('dashboard') }}"
+            class="group flex items-center px-2 py-2 text-sm font-medium rounded-md {{ 'bg-bank-800 text-white' if request.endpoint == 'dashboard' else 'text-bank-100 hover:bg-bank-700 hover:text-white' }} transition-colors">
+            <svg class="mr-3 h-6 w-6 {{ 'text-bank-400' if request.endpoint == 'dashboard' else 'text-bank-300 group-hover:text-white' }}"
+                fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+            </svg>
+            <span class="sidebar-text transition-opacity duration-300">Vue d'ensemble</span>
+        </a>
+
+        <a href="{{ url_for('database_view') }}"
+            class="group flex items-center px-2 py-2 text-sm font-medium rounded-md {{ 'bg-bank-800 text-white' if request.endpoint == 'database_view' else 'text-bank-100 hover:bg-bank-700 hover:text-white' }} transition-colors">
+            <svg class="mr-3 h-6 w-6 {{ 'text-bank-400' if request.endpoint == 'database_view' else 'text-bank-300 group-hover:text-white' }}"
+                fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+            </svg>
+            <span class="sidebar-text transition-opacity duration-300">Base de données</span>
+        </a>
+
+        <a href="#"
+            class="group flex items-center px-2 py-2 text-sm font-medium rounded-md text-bank-100 hover:bg-bank-700 hover:text-white transition-colors">
+            <svg class="mr-3 h-6 w-6 text-bank-300 group-hover:text-white" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span class="sidebar-text transition-opacity duration-300">Rapports</span>
+        </a>
+
+        <div class="border-t border-bank-700 my-4 mx-2"></div>
+
+        <a href="#"
+            class="group flex items-center px-2 py-2 text-sm font-medium rounded-md text-bank-100 hover:bg-bank-700 hover:text-white transition-colors">
+            <svg class="mr-3 h-6 w-6 text-bank-300 group-hover:text-white" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <span class="sidebar-text transition-opacity duration-300">Paramètres</span>
+        </a>
+    </nav>
+
+    <!-- User & Logout Section -->
+    <div class="p-4 border-t border-bank-700 bg-bank-900 flex-shrink-0">
+        <div class="flex items-center mb-4">
+            <div class="flex-shrink-0">
+                <div
+                    class="h-10 w-10 rounded-full bg-bank-500 flex items-center justify-center text-white font-bold text-lg shadow-md">
+                    {{ session.get('user', 'U')[0] | upper }}
+                </div>
+            </div>
+            <div class="ml-3 sidebar-text overflow-hidden">
+                <p class="text-sm font-semibold text-white truncate">{{ session.get('user', 'Utilisateur') }}</p>
+                <p class="text-xs font-medium text-bank-300">En ligne</p>
+            </div>
+        </div>
+
+        <a href="{{ url_for('logout') }}"
+            class="logout-trigger w-full flex items-center justify-center px-4 py-2 rounded-md text-sm font-medium text-red-400 bg-red-500/10 hover:bg-red-500 hover:text-white transition-all duration-200 group">
+            <svg class="h-4 w-4 group-hover:scale-110 transition-transform duration-200" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            <span class="sidebar-text ml-2">Déconnexion</span>
+        </a>
+
+    </div>
+</aside>
