@@ -1,4 +1,5 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from flask import Flask, request, session, jsonify
+from flask_cors import CORS
 import os
 import polars as pl
 from werkzeug.utils import secure_filename
@@ -12,6 +13,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+# Allow CORS for development with Vite on default port
+CORS(app, supports_credentials=True, origins=["http://localhost:5173", "http://127.0.0.1:5173"])
 app.secret_key = secrets.token_hex(32)
 
 # --- In-Memory Cache (Replaces large Session Cookies) ---
@@ -58,48 +61,35 @@ USERS = {
     "user": "bank2024"
 }
 
-@app.route('/')
-def index():
+@app.route('/api/status', methods=['GET'])
+def status():
     if 'user' in session:
-        return redirect(url_for('dashboard'))
-    return redirect(url_for('login'))
+        return jsonify({'status': 'success', 'user': session['user'], 'has_unread': session.get('has_unread', False), 'notifications': session.get('notifications', [])})
+    return jsonify({'status': 'error', 'message': 'Non autorisé'}), 401
 
-@app.route('/login', methods=['GET', 'POST'])
+@app.route('/login', methods=['POST'])
 def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+    data = request.get_json()
+    if not data:
+        return jsonify({'status': 'error', 'message': 'No data provided'}), 400
         
-        if username in USERS and USERS[username] == password:
-            session['user'] = username
-            session['notifications'] = [] # Reset notifications on new login
+    username = data.get('username')
+    password = data.get('password')
+    
+    if username in USERS and USERS[username] == password:
+        session['user'] = username
+        session['notifications'] = [] # Reset notifications on new login
+        
+        # Create a unique cache ID for this user session if not exists
+        if 'cache_id' not in session:
+            session['cache_id'] = str(uuid.uuid4())
             
-            # Create a unique cache ID for this user session if not exists
-            if 'cache_id' not in session:
-                session['cache_id'] = str(uuid.uuid4())
-                
-            add_notification("Connexion réussie", "success")
-            return redirect(url_for('dashboard'))
-        else:
-            flash('Identifiants incorrects', 'error')
-            
-    return render_template('login.html')
+        add_notification("Connexion réussie", "success")
+        return jsonify({'status': 'success'})
+    else:
+        return jsonify({'status': 'error', 'message': 'Identifiants incorrects'}), 401
 
-@app.route('/dashboard')
-def dashboard():
-    if 'user' not in session:
-        return redirect(url_for('login'))
-    
-    # Check cache instead of session
-    cache_id = session.get('cache_id')
-    data_preview = None
-    
-    if cache_id and cache_id in DATA_CACHE:
-        data_preview = DATA_CACHE[cache_id].get('preview')
-    
-    return render_template('dashboard.html', data_preview=data_preview)
-
-@app.route('/logout')
+@app.route('/logout', methods=['POST'])
 def logout():
     # Clear server cache
     cache_id = session.get('cache_id')
@@ -108,27 +98,40 @@ def logout():
         
     session.pop('user', None)
     session.pop('cache_id', None)
-    return redirect(url_for('login'))
+    return jsonify({'status': 'success'})
 
 @app.route('/clear_data', methods=['POST'])
 def clear_data():
     if 'user' not in session:
-        return redirect(url_for('login'))
+        return jsonify({'status': 'error'}), 401
         
     cache_id = session.get('cache_id')
     if cache_id and cache_id in DATA_CACHE:
         del DATA_CACHE[cache_id]
         
-    add_notification("Données supprimées", "warning")
-    flash("Données supprimées avec succès.", "success")
-    return redirect(url_for('database_view'))
+    return jsonify({'status': 'success'})
 
-def process_file_preview(filepath):
+def process_file_preview(filepath, sheet_name=None):
     try:
+        # Check for multiple sheets in Excel
+        if filepath.endswith(('.xls', '.xlsx')) and sheet_name is None:
+            import pandas as pd
+            xl = pd.ExcelFile(filepath)
+            if len(xl.sheet_names) > 1:
+                return {
+                    'requires_sheet_selection': True,
+                    'sheets': xl.sheet_names
+                }
+            sheet_name = xl.sheet_names[0]
+            
         if filepath.endswith('.csv'):
             df = pl.read_csv(filepath, ignore_errors=True)
         elif filepath.endswith(('.xls', '.xlsx')):
-            df = pl.read_excel(filepath)
+            if sheet_name:
+                # Polars can read specific sheets
+                df = pl.read_excel(filepath, sheet_name=sheet_name)
+            else:
+                df = pl.read_excel(filepath)
         else:
             raise ValueError("Format non supporté")
             
@@ -136,9 +139,11 @@ def process_file_preview(filepath):
         safe_df = df.head(limit).select(pl.all().cast(pl.String))
         
         return {
+            'requires_sheet_selection': False,
             'columns': [{'title': col, 'field': col} for col in df.columns],
             'data': safe_df.to_dicts(), 
-            'total_rows': df.height
+            'total_rows': df.height,
+            'selected_sheet': sheet_name
         }
     except Exception as e:
         logger.error(f"Error processing preview: {e}", exc_info=True)
@@ -147,7 +152,7 @@ def process_file_preview(filepath):
 @app.route('/upload', methods=['POST'])
 def upload_file():
     if 'user' not in session:
-        return redirect(url_for('login'))
+        return jsonify({'status': 'error', 'message': 'Non autorisé'}), 401
         
     if 'file' not in request.files:
         return jsonify({'status': 'error', 'message': 'Aucun fichier'}), 400
@@ -170,9 +175,23 @@ def upload_file():
         # Process and Cache
         preview_data = process_file_preview(filepath)
         
+        if preview_data and preview_data.get('requires_sheet_selection'):
+            # Cache the filepath temporarily to allow sheet selection
+            DATA_CACHE[cache_id] = {
+                'filepath': filepath,
+                'preview': None,
+                'pending_sheets': preview_data['sheets']
+            }
+            return jsonify({
+                'status': 'requires_sheet',
+                'sheets': preview_data['sheets'],
+                'message': 'Plusieurs feuilles détectées.'
+            })
+        
         DATA_CACHE[cache_id] = {
             'filepath': filepath,
-            'preview': preview_data
+            'preview': preview_data,
+            'selected_sheet': preview_data.get('selected_sheet') if preview_data else None
         }
         
         new_notif = add_notification(f"Fichier {file.filename} importé", "info")
@@ -187,10 +206,122 @@ def upload_file():
         logger.error(f"Error processing file: {e}", exc_info=True)
         return jsonify({'status': 'error', 'message': f'Erreur: {str(e)}'}), 500
 
-@app.route('/database')
+@app.route('/api/select-sheet', methods=['POST'])
+def select_sheet():
+    if 'user' not in session:
+        return jsonify({'status': 'error', 'message': 'Non autorisé'}), 401
+        
+    data = request.get_json()
+    sheet_name = data.get('sheet_name')
+    
+    if not sheet_name:
+        return jsonify({'status': 'error', 'message': 'Nom de feuille manquant'}), 400
+        
+    cache_id = session.get('cache_id')
+    if not cache_id or cache_id not in DATA_CACHE:
+         return jsonify({'status': 'error', 'message': 'Aucun fichier en attente'}), 404
+         
+    filepath = DATA_CACHE[cache_id].get('filepath')
+    if not filepath:
+         return jsonify({'status': 'error', 'message': 'Chemin du fichier introuvable'}), 404
+         
+    try:
+        preview_data = process_file_preview(filepath, sheet_name=sheet_name)
+        
+        DATA_CACHE[cache_id] = {
+            'filepath': filepath,
+            'preview': preview_data,
+            'selected_sheet': sheet_name
+        }
+        
+        new_notif = add_notification(f"Feuille '{sheet_name}' chargée", "info")
+        
+        return jsonify({
+            'status': 'success', 
+            'message': 'Feuille chargée avec succès !',
+            'notification': new_notif
+        })
+    except Exception as e:
+        logger.error(f"Error loading sheet: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': f'Erreur: {str(e)}'}), 500
+
+@app.route('/api/database/recast', methods=['POST'])
+def database_recast():
+    if 'user' not in session:
+        return jsonify({'status': 'error', 'message': 'Non autorisé'}), 401
+    
+    cache_id = session.get('cache_id')
+    if not cache_id or cache_id not in DATA_CACHE:
+         return jsonify({'status': 'error', 'message': 'Aucun fichier en attente'}), 404
+         
+    filepath = DATA_CACHE[cache_id].get('filepath')
+    selected_sheet = DATA_CACHE[cache_id].get('selected_sheet')
+    if not filepath or not os.path.exists(filepath):
+         return jsonify({'status': 'error', 'message': 'Fichier introuvable'}), 404
+         
+    data = request.get_json()
+    modifications = data.get('modifications', [])
+    if not modifications:
+        return jsonify({'status': 'success', 'message': 'Aucune modification'})
+        
+    try:
+        # 1. Load the dataframe
+        if filepath.endswith('.csv'):
+            df = pl.read_csv(filepath, ignore_errors=True)
+        elif filepath.endswith(('.xls', '.xlsx')):
+            if selected_sheet:
+                df = pl.read_excel(filepath, sheet_name=selected_sheet)
+            else:
+                df = pl.read_excel(filepath)
+        else:
+            return jsonify({'status': 'error', 'message': 'Format non supporté'}), 400
+            
+        # 2. Apply modifications
+        expressions = []
+        for mod in modifications:
+            col_name = mod['column']
+            target_type = mod['type']
+            if col_name in df.columns:
+                if target_type == 'String':
+                    expressions.append(pl.col(col_name).cast(pl.String))
+                elif target_type == 'Int64':
+                    # Parse numerical strings accurately if needed, then cast to int
+                    expressions.append(pl.col(col_name).cast(pl.String).str.replace(r",", ".").cast(pl.Float64, strict=False).cast(pl.Int64, strict=False))
+                elif target_type == 'Float64':
+                    expressions.append(pl.col(col_name).cast(pl.String).str.replace(r",", ".").cast(pl.Float64, strict=False))
+                    
+        if not expressions:
+            return jsonify({'status': 'error', 'message': 'Types non supportés'}), 400
+            
+        # Execute the transformations
+        df = df.with_columns(expressions)
+        
+        # 3. Save back to the file
+        if filepath.endswith('.csv'):
+            df.write_csv(filepath)
+        elif filepath.endswith('.xlsx'):
+            df.write_excel(filepath, worksheet=selected_sheet or 'Sheet1')
+        elif filepath.endswith('.xls'):
+            # Can't directly write .xls with polars easily, write as xlsx and update filepath
+            new_filepath = filepath + 'x'
+            df.write_excel(new_filepath, worksheet=selected_sheet or 'Sheet1')
+            os.remove(filepath)
+            DATA_CACHE[cache_id]['filepath'] = new_filepath
+            filepath = new_filepath
+            
+        # 4. Update the preview cache
+        DATA_CACHE[cache_id]['preview'] = process_file_preview(filepath, sheet_name=selected_sheet)
+        
+        return jsonify({'status': 'success', 'message': f'{len(modifications)} variables re-typées avec succès'})
+        
+    except Exception as e:
+        logger.error(f"Error recasting columns: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': f'Impossible de convertir: {str(e)}'}), 500
+
+@app.route('/api/database', methods=['GET'])
 def database_view():
     if 'user' not in session:
-        return redirect(url_for('login'))
+        return jsonify({'status': 'error', 'message': 'Non autorisé'}), 401
         
     data_preview = None
     cache_id = session.get('cache_id')
@@ -198,30 +329,33 @@ def database_view():
     if cache_id and cache_id in DATA_CACHE:
          data_preview = DATA_CACHE[cache_id].get('preview')
             
-    return render_template('database.html', data_preview=data_preview)
+    return jsonify({'status': 'success', 'data_preview': data_preview})
 
 
-@app.route('/reports')
-def reports():
+@app.route('/api/reports/columns', methods=['GET'])
+def reports_columns():
     if 'user' not in session:
-        return redirect(url_for('login'))
+        return jsonify({'status': 'error', 'message': 'Non autorisé'}), 401
     
     cache_id = session.get('cache_id')
-    columns_info = None
+    columns_info = []
     
     if cache_id and cache_id in DATA_CACHE:
         filepath = DATA_CACHE[cache_id].get('filepath')
         if filepath and os.path.exists(filepath):
             try:
+                selected_sheet = DATA_CACHE[cache_id].get('selected_sheet')
                 if filepath.endswith('.csv'):
                     df = pl.read_csv(filepath, ignore_errors=True)
                 elif filepath.endswith(('.xls', '.xlsx')):
-                    df = pl.read_excel(filepath)
+                    if selected_sheet:
+                        df = pl.read_excel(filepath, sheet_name=selected_sheet)
+                    else:
+                        df = pl.read_excel(filepath)
                 else:
                     df = None
                 
                 if df is not None:
-                    columns_info = []
                     for col in df.columns:
                         dtype = str(df[col].dtype)
                         is_numeric = df[col].dtype.is_numeric()
@@ -233,7 +367,7 @@ def reports():
             except Exception as e:
                 print(f"Error reading file for reports: {e}")
     
-    return render_template('reports.html', columns_info=columns_info)
+    return jsonify({'status': 'success', 'columns_info': columns_info})
 
 
 @app.route('/api/chart-data', methods=['POST'])
