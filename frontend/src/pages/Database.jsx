@@ -5,7 +5,7 @@ import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-quartz.css';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
-import { Trash2, AlertCircle, Settings2, FileType2 } from 'lucide-react';
+import { Trash2, AlertCircle, Settings2, FileType2, Database as DatabaseIcon, Maximize2, Minimize2, Info } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Database({ addNotification }) {
@@ -18,6 +18,7 @@ export default function Database({ addNotification }) {
     const [showTypeModal, setShowTypeModal] = useState(false);
     const [columnsInfo, setColumnsInfo] = useState([]);
     const [isSavingTypes, setIsSavingTypes] = useState(false);
+    const [isExpanded, setIsExpanded] = useState(false);
 
     // Human-friendly mapping for Polars/Technical types (Excel-like)
     const TYPE_LABELS = {
@@ -40,13 +41,17 @@ export default function Database({ addNotification }) {
         fetchDataPreview();
     }, []);
 
-    const fetchDataPreview = async () => {
+    const [isFullData, setIsFullData] = useState(false);
+
+    const fetchDataPreview = async (forceFull = null) => {
         setLoading(true);
+        const useFull = forceFull !== null ? forceFull : isFullData;
         try {
-            const res = await fetch('/api/database');
+            const res = await fetch(`/api/database?full_data=${useFull}`);
             if (res.ok) {
                 const data = await res.json();
                 setDataPreview(data.data_preview);
+                if (forceFull !== null) setIsFullData(forceFull);
             }
         } catch (e) {
             console.error(e);
@@ -54,6 +59,10 @@ export default function Database({ addNotification }) {
         } finally {
             setLoading(false);
         }
+    };
+
+    const toggleFullData = () => {
+        fetchDataPreview(!isFullData);
     };
 
     const fetchColumnsInfo = async () => {
@@ -239,6 +248,26 @@ export default function Database({ addNotification }) {
                                 <Settings2 className="mr-2 h-4 w-4 transition-transform group-hover:rotate-90" />
                                 Configurer les types
                             </button>
+                            <div className="flex bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                                <button
+                                    onClick={() => setIsExpanded(!isExpanded)}
+                                    className="flex items-center px-6 py-3 text-sm font-black text-bank-700 hover:bg-bank-50 transition-all border-r border-gray-50"
+                                >
+                                    <Maximize2 className="mr-2 h-4 w-4" />
+                                    Plein Écran
+                                </button>
+                                <button
+                                    onClick={toggleFullData}
+                                    className={`flex items-center px-4 py-3 transition-all ${isFullData ? 'bg-amber-50 text-amber-600' : 'text-gray-400 hover:bg-gray-50'
+                                        }`}
+                                    title={isFullData ? "Analyse complète (Toutes les lignes)" : "Aperçu limité (2000 lignes)"}
+                                >
+                                    <DatabaseIcon className="h-4 w-4" />
+                                    <span className="ml-2 text-[10px] font-black uppercase tracking-tighter">
+                                        {isFullData ? "100%" : "2K"}
+                                    </span>
+                                </button>
+                            </div>
                             <button
                                 onClick={() => setShowDeleteModal(true)}
                                 className="inline-flex items-center px-6 py-3 text-sm font-black rounded-2xl text-red-600 bg-white hover:bg-red-50 transition-all border border-red-100/50 hover:shadow-lg hover:-translate-y-0.5"
@@ -248,6 +277,37 @@ export default function Database({ addNotification }) {
                             </button>
                         </div>
                     </div>
+
+                    {/* Expanded Modal Overlay */}
+                    {isExpanded && (
+                        <div className="fixed inset-0 z-[100] bg-white p-6 flex flex-col animate-in fade-in zoom-in duration-200">
+                            <div className="flex justify-between items-center mb-6">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-bank-600 flex items-center justify-center text-white shadow-lg">
+                                        <DatabaseIcon className="w-6 h-6" />
+                                    </div>
+                                    <h2 className="text-xl font-black text-gray-900">Vue Étendue - Explorateur</h2>
+                                </div>
+                                <button
+                                    onClick={() => setIsExpanded(false)}
+                                    className="flex items-center px-4 py-2 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 transition-all shadow-lg"
+                                >
+                                    <Minimize2 className="mr-2 h-4 w-4" />
+                                    Quitter le Plein Écran
+                                </button>
+                            </div>
+                            <div className="flex-1 min-h-0 ag-theme-quartz rounded-2xl border border-gray-100 shadow-2xl overflow-hidden">
+                                <AgGridReact
+                                    rowData={dataPreview.data}
+                                    columnDefs={colDefs}
+                                    pagination={true}
+                                    paginationPageSize={25}
+                                    animateRows={true}
+                                    onGridReady={(params) => params.api.sizeColumnsToFit()}
+                                />
+                            </div>
+                        </div>
+                    )}
 
                     <div className="flex-1 min-h-0 bg-transparent p-6">
                         <div className="h-full ag-theme-quartz overflow-hidden">
