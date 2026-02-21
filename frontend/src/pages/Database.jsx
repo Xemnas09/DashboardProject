@@ -19,6 +19,23 @@ export default function Database({ addNotification }) {
     const [columnsInfo, setColumnsInfo] = useState([]);
     const [isSavingTypes, setIsSavingTypes] = useState(false);
 
+    // Human-friendly mapping for Polars/Technical types (Excel-like)
+    const TYPE_LABELS = {
+        'Int64': 'Nombre Entier',
+        'Int32': 'Nombre Entier',
+        'Float64': 'Nombre Décimal (Réel)',
+        'Float32': 'Nombre Décimal (Réel)',
+        'String': 'Texte / Catégorie',
+        'Utf8': 'Texte / Catégorie',
+        'Date': 'Date',
+        'Datetime': 'Date et Heure',
+        'Boolean': 'Vrai/Faux (Logique)',
+        'Bool': 'Vrai/Faux (Logique)',
+        'Null': 'Inconnu'
+    };
+
+    const getFriendlyType = (dtype) => TYPE_LABELS[dtype] || dtype;
+
     useEffect(() => {
         fetchDataPreview();
     }, []);
@@ -80,7 +97,14 @@ export default function Database({ addNotification }) {
             const result = await res.json();
 
             if (res.ok && result.status === 'success') {
-                addNotification(result.message, 'success');
+                const hasWarnings = result.warnings && result.warnings.length > 0;
+                addNotification(result.message, hasWarnings ? 'warning' : 'success');
+
+                // Display each specific warning
+                if (hasWarnings) {
+                    result.warnings.forEach(w => addNotification(w, 'warning'));
+                }
+
                 setShowTypeModal(false);
                 fetchDataPreview(); // Refresh grid
             } else {
@@ -137,37 +161,50 @@ export default function Database({ addNotification }) {
                 </div>
             ) : dataPreview && dataPreview.data ? (
                 <div className="flex-1 bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
-                    <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center flex-shrink-0">
-                        <div className="flex items-center gap-4">
-                            <h2 className="text-lg font-semibold text-gray-800">Données Importées</h2>
-                            <span className="text-sm text-gray-500">Total: {dataPreview.total_rows} lignes</span>
+                    <div className="px-6 py-5 border-b border-gray-100 bg-white/50 flex justify-between items-center flex-shrink-0">
+                        <div className="flex items-center gap-5">
+                            <div className="p-3 bg-bank-50 rounded-xl text-bank-600 shadow-sm border border-bank-100">
+                                <FileType2 className="w-6 h-6" />
+                            </div>
+                            <div className="flex flex-col">
+                                <h2 className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">Base de Données</h2>
+                                <span className="text-sm font-medium text-gray-400 flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                                    {dataPreview.total_rows.toLocaleString()} lignes importées
+                                </span>
+                            </div>
                         </div>
                         <div className="flex items-center gap-3">
                             <button
                                 onClick={fetchColumnsInfo}
-                                className="inline-flex items-center px-4 py-2 text-xs font-semibold rounded-lg text-bank-700 bg-bank-100 hover:bg-bank-200 transition-all hover:scale-105"
+                                className="inline-flex items-center px-5 py-2.5 text-sm font-bold rounded-xl text-bank-700 bg-bank-100/80 hover:bg-bank-200 transition-all hover:scale-105 active:scale-95 shadow-sm border border-bank-200/50"
                             >
                                 <Settings2 className="mr-2 h-4 w-4" />
-                                Gérer les types
+                                Configurer les types
                             </button>
                             <button
                                 onClick={() => setShowDeleteModal(true)}
-                                className="inline-flex items-center px-4 py-2 text-xs font-semibold rounded-lg text-red-700 bg-red-100/80 hover:bg-red-200 transition-all hover:scale-105"
+                                className="inline-flex items-center px-5 py-2.5 text-sm font-bold rounded-xl text-red-700 bg-red-100/50 hover:bg-red-200 transition-all hover:scale-105 active:scale-95 shadow-sm border border-red-200/50"
                             >
                                 <Trash2 className="mr-2 h-4 w-4" />
-                                Supprimer les données
+                                Nettoyer la base
                             </button>
                         </div>
                     </div>
 
-                    <div className="p-4 w-full">
-                        <div className="ag-theme-quartz" style={{ height: 600, width: '100%' }}>
+                    <div className="flex-1 min-h-0 bg-white p-4">
+                        <div className="h-full ag-theme-quartz shadow-inner rounded-xl overflow-hidden border border-gray-100">
                             <AgGridReact
                                 rowData={dataPreview.data}
                                 columnDefs={colDefs}
                                 pagination={true}
-                                paginationPageSize={20}
+                                paginationPageSize={15}
                                 animateRows={true}
+                                onGridReady={(params) => params.api.sizeColumnsToFit()}
+                                defaultColDef={{
+                                    minWidth: 100,
+                                    cellStyle: { display: 'flex', alignItems: 'center' }
+                                }}
                             />
                         </div>
                     </div>
@@ -236,21 +273,32 @@ export default function Database({ addNotification }) {
                         <div className="p-6 overflow-y-auto flex-1">
                             <div className="space-y-3">
                                 {columnsInfo.map(col => (
-                                    <div key={col.name} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-bank-200 hover:bg-bank-50/30 transition-colors">
-                                        <div className="flex flex-col">
-                                            <span className="font-semibold text-gray-800 text-sm">{col.name}</span>
-                                            <span className="text-xs text-gray-400">Type détecté: <code className="bg-gray-100 px-1 rounded">{col.dtype}</code></span>
+                                    <div key={col.name} className="flex items-center justify-between p-4 rounded-xl border border-gray-100 bg-white shadow-sm hover:border-bank-300 hover:shadow-md transition-all group">
+                                        <div className="flex flex-col gap-1">
+                                            <span className="font-bold text-gray-900 group-hover:text-bank-600 transition-colors uppercase tracking-wider text-xs">{col.name}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[10px] font-medium text-gray-400">TYPE ACTUEL:</span>
+                                                <code className={`px-2 py-0.5 rounded text-[10px] font-bold ${col.dtype.includes('Int') || col.dtype.includes('Float')
+                                                    ? 'bg-blue-50 text-blue-600 border border-blue-100'
+                                                    : 'bg-amber-50 text-amber-600 border border-amber-100'
+                                                    }`}>
+                                                    {getFriendlyType(col.dtype)}
+                                                </code>
+                                            </div>
                                         </div>
-                                        <select
-                                            value={col.target_type || col.dtype}
-                                            onChange={(e) => handleTypeChange(col.name, e.target.value)}
-                                            className="px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-bank-500 w-48 bg-white"
-                                        >
-                                            <option value={col.dtype}>Conserver détecté</option>
-                                            <option value="String">Texte / Catégoriel (String)</option>
-                                            <option value="Float64">Numérique (Décimal)</option>
-                                            <option value="Int64">Numérique (Entier)</option>
-                                        </select>
+                                        <div className="flex flex-col gap-1">
+                                            <span className="text-[10px] font-medium text-gray-400 text-right mr-1">CONVERTIR EN :</span>
+                                            <select
+                                                value={col.target_type || col.dtype}
+                                                onChange={(e) => handleTypeChange(col.name, e.target.value)}
+                                                className="px-3 py-2 text-xs font-semibold border border-gray-200 rounded-lg focus:ring-2 focus:ring-bank-500 w-48 bg-gray-50 hover:bg-white transition-colors cursor-pointer outline-none"
+                                            >
+                                                <option value={col.dtype}>✓ {getFriendlyType(col.dtype)}</option>
+                                                <option value="String">Texte / Catégorie</option>
+                                                <option value="Float64">Nombre Décimal</option>
+                                                <option value="Int64">Nombre Entier</option>
+                                            </select>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
