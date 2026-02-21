@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { UploadCloud, CheckCircle2, TrendingUp, Users, Database as DatabaseIcon } from 'lucide-react';
+import { UploadCloud, CheckCircle2, TrendingUp, Users, Database as DatabaseIcon, BarChart3, FileSpreadsheet, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Dashboard({ addNotification }) {
@@ -13,8 +13,7 @@ export default function Dashboard({ addNotification }) {
     const [username, setUsername] = useState('Utilisateur');
 
     useEffect(() => {
-        // In a real app we might fetch user info here from /api/status.
-        setUsername('Admin'); // Placeholder
+        setUsername('Admin');
     }, []);
 
     const handleDrag = (e) => {
@@ -109,80 +108,93 @@ export default function Dashboard({ addNotification }) {
         }
     };
 
+    const kpiCards = [
+        { label: 'Transactions', value: '2,450', change: '+12.5%', positive: true, icon: DatabaseIcon, color: 'bank' },
+        { label: 'Volume Total', value: '45,230 €', change: '+5.2%', positive: true, icon: TrendingUp, color: 'emerald' },
+        { label: 'Nouveaux Clients', value: '12', change: 'Stable', positive: null, icon: Users, color: 'violet' }
+    ];
+
+    const colorMap = {
+        bank: { bg: 'bg-bank-50', text: 'text-bank-600', border: 'border-bank-100', gradient: 'from-bank-500 to-bank-600' },
+        emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-100', gradient: 'from-emerald-500 to-emerald-600' },
+        violet: { bg: 'bg-violet-50', text: 'text-violet-600', border: 'border-violet-100', gradient: 'from-violet-500 to-violet-600' }
+    };
+
     return (
         <div className="max-w-7xl mx-auto space-y-8 animate-fade-in-up">
             {/* Welcome Section */}
-            <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 flex justify-between items-center animate-fade-in-up delay-100">
-                <div>
-                    <h2 className="text-2xl font-bold text-gray-900">Bienvenue, {username}</h2>
-                    <p className="text-gray-500 mt-1">Voici un résumé de l'activité financière d'aujourd'hui.</p>
+            <div className="relative bg-gradient-to-r from-gray-950 via-gray-900 to-gray-950 rounded-2xl shadow-2xl p-8 overflow-hidden">
+                {/* Background effects */}
+                <div className="absolute inset-0 overflow-hidden">
+                    <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-bank-500/10 blur-[100px] rounded-full"></div>
+                    <div className="absolute bottom-0 left-[20%] w-[200px] h-[200px] bg-bank-400/5 blur-[80px] rounded-full"></div>
+                    <div className="absolute inset-0 opacity-[0.03]" style={{
+                        backgroundImage: 'linear-gradient(rgba(255,255,255,.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.1) 1px, transparent 1px)',
+                        backgroundSize: '40px 40px'
+                    }}></div>
                 </div>
-                <div className="hidden md:block">
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-bank-100 text-bank-800">
-                        Dernière màj: <span className="ml-1">Aujourd'hui</span>
-                    </span>
+
+                <div className="relative z-10 flex justify-between items-center">
+                    <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-bank-400 mb-2">Tableau de Bord</p>
+                        <h2 className="text-3xl font-black text-white tracking-tight">Bienvenue, {username}</h2>
+                        <p className="text-white/40 mt-2 text-sm font-medium">Voici un résumé de l'activité d'aujourd'hui.</p>
+                    </div>
+                    <div className="hidden md:flex items-center gap-2 px-4 py-2 rounded-xl bg-white/[0.06] border border-white/[0.08] backdrop-blur-sm">
+                        <span className="flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"></span>
+                        <span className="text-[10px] font-black text-white/50 uppercase tracking-[0.15em]">Système Actif</span>
+                    </div>
                 </div>
             </div>
 
-            {/* KPI Cards (Static Demo) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow animate-fade-in-up delay-200">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">Transactions</p>
-                            <h3 className="text-3xl font-bold text-gray-900 mt-2">2,450</h3>
-                            <div className="mt-2 flex items-center text-sm">
-                                <span className="text-green-600 font-medium flex items-center">
-                                    <TrendingUp className="w-4 h-4 mr-1" /> +12.5%
-                                </span>
-                                <span className="text-gray-400 ml-2">vs hier</span>
+            {/* KPI Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                {kpiCards.map((kpi, i) => {
+                    const colors = colorMap[kpi.color];
+                    return (
+                        <div key={i} className="group bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden">
+                            {/* Accent bar */}
+                            <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${colors.gradient} opacity-0 group-hover:opacity-100 transition-opacity`}></div>
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{kpi.label}</p>
+                                    <h3 className="text-3xl font-black text-gray-900 mt-2 tracking-tight">{kpi.value}</h3>
+                                    <div className="mt-3 flex items-center text-xs">
+                                        {kpi.positive !== null ? (
+                                            <span className={`font-black flex items-center ${kpi.positive ? 'text-emerald-600' : 'text-red-500'}`}>
+                                                <TrendingUp className="w-3 h-3 mr-1" /> {kpi.change}
+                                            </span>
+                                        ) : (
+                                            <span className="text-gray-400 font-bold">{kpi.change}</span>
+                                        )}
+                                        <span className="text-gray-300 ml-2 font-medium">vs hier</span>
+                                    </div>
+                                </div>
+                                <div className={`w-12 h-12 rounded-2xl ${colors.bg} ${colors.text} flex items-center justify-center border ${colors.border} group-hover:scale-110 transition-transform`}>
+                                    <kpi.icon className="w-5 h-5" />
+                                </div>
                             </div>
                         </div>
-                        <div className="p-3 bg-bank-50 rounded-lg text-bank-600">
-                            <DatabaseIcon className="w-6 h-6" />
-                        </div>
-                    </div>
-                </div>
-
-                <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow animate-fade-in-up delay-300">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">Volume Total</p>
-                            <h3 className="text-3xl font-bold text-gray-900 mt-2">45,230 €</h3>
-                            <div className="mt-2 flex items-center text-sm">
-                                <span className="text-green-600 font-medium flex items-center">
-                                    <TrendingUp className="w-4 h-4 mr-1" /> +5.2%
-                                </span>
-                                <span className="text-gray-400 ml-2">vs hier</span>
-                            </div>
-                        </div>
-                        <div className="p-3 bg-green-50 rounded-lg text-green-600">
-                            <DatabaseIcon className="w-6 h-6" />
-                        </div>
-                    </div>
-                </div>
-
-                <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow animate-fade-in-up delay-400">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">Nouveaux Clients</p>
-                            <h3 className="text-3xl font-bold text-gray-900 mt-2">12</h3>
-                            <div className="mt-2 flex items-center text-sm">
-                                <span className="text-gray-500 font-medium">Stable</span>
-                            </div>
-                        </div>
-                        <div className="p-3 bg-purple-50 rounded-lg text-purple-600">
-                            <Users className="w-6 h-6" />
-                        </div>
-                    </div>
-                </div>
+                    );
+                })}
             </div>
 
             {/* Upload Section */}
-            <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-fade-in-up delay-500">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
-                    <h2 className="text-lg font-semibold text-gray-800">Importation de Données</h2>
-                    <span className="text-xs text-gray-500 bg-white border border-gray-200 px-2 py-1 rounded">ZIP, CSV, XLSX</span>
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-bank-50 flex items-center justify-center text-bank-600">
+                            <UploadCloud className="w-4 h-4" />
+                        </div>
+                        <div>
+                            <h2 className="text-sm font-black text-gray-900 uppercase tracking-wider">Importation de Données</h2>
+                        </div>
+                    </div>
+                    <div className="flex gap-2">
+                        {['CSV', 'XLSX', 'XLS'].map(fmt => (
+                            <span key={fmt} className="px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-[10px] font-black text-gray-400 uppercase tracking-wider">{fmt}</span>
+                        ))}
+                    </div>
                 </div>
 
                 {!uploadSuccess ? (
@@ -193,7 +205,7 @@ export default function Dashboard({ addNotification }) {
                             onDragOver={handleDrag}
                             onDrop={handleDrop}
                             onClick={() => fileInputRef.current.click()}
-                            className={`relative border-2 border-dashed rounded-lg p-12 text-center transition-all duration-300 cursor-pointer group ${dragActive ? 'border-bank-500 bg-bank-50' : 'border-gray-300 hover:border-bank-500 hover:bg-bank-50'}`}
+                            className={`relative border-2 border-dashed rounded-2xl p-16 text-center transition-all duration-300 cursor-pointer group ${dragActive ? 'border-bank-500 bg-bank-50/50' : 'border-gray-200 hover:border-bank-400 hover:bg-bank-50/30'}`}
                         >
                             <input
                                 ref={fileInputRef}
@@ -205,38 +217,41 @@ export default function Dashboard({ addNotification }) {
 
                             {!isUploading ? (
                                 <div>
-                                    <div className="group-hover:scale-110 transform transition-transform duration-300 mb-4">
-                                        <div className="w-16 h-16 bg-bank-100 text-bank-600 rounded-full flex items-center justify-center mx-auto">
-                                            <UploadCloud className="w-8 h-8" />
+                                    <div className="group-hover:scale-110 transform transition-transform duration-300 mb-6">
+                                        <div className="w-20 h-20 bg-gradient-to-br from-bank-100 to-bank-50 text-bank-600 rounded-3xl flex items-center justify-center mx-auto shadow-lg shadow-bank-100 border border-bank-200/50">
+                                            <UploadCloud className="w-9 h-9" />
                                         </div>
                                     </div>
-                                    <h3 className="text-lg font-medium text-gray-900 group-hover:text-bank-700">Glissez-déposez ou cliquez pour upload</h3>
-                                    <p className="mt-2 text-sm text-gray-500 max-w-sm mx-auto">Analyse automatique par Polars.</p>
+                                    <h3 className="text-lg font-black text-gray-900 group-hover:text-bank-700 transition-colors">Glissez-déposez ou cliquez pour importer</h3>
+                                    <p className="mt-2 text-sm text-gray-400 font-medium max-w-sm mx-auto">Analyse automatique par le moteur Polars haute performance</p>
                                 </div>
                             ) : (
                                 <div>
-                                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-bank-600 mx-auto mb-4"></div>
-                                    <p className="text-bank-600 font-medium">Traitement en cours...</p>
+                                    <div className="w-14 h-14 rounded-full border-[3px] border-bank-200 border-t-bank-600 animate-spin mx-auto mb-5"></div>
+                                    <p className="text-bank-600 font-black text-sm uppercase tracking-wider">Traitement en cours...</p>
                                 </div>
                             )}
                         </form>
                     </div>
                 ) : (
-                    <div className="bg-white/90 backdrop-blur-sm rounded-xl p-8 text-center transition-all duration-500 animate-fade-in-up">
-                        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <CheckCircle2 className="w-8 h-8 text-green-600" />
+                    <div className="p-10 text-center animate-fade-in-up">
+                        <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-5 border border-emerald-100 shadow-lg shadow-emerald-100">
+                            <CheckCircle2 className="w-8 h-8 text-emerald-600" />
                         </div>
-                        <h3 className="text-xl font-bold text-gray-900 mb-2">Importation Réussie !</h3>
-                        <p className="text-gray-500 mb-6">Vos données ont été traitées et sont prêtes à être analysées.</p>
+                        <h3 className="text-xl font-black text-gray-900 mb-2">Importation Réussie !</h3>
+                        <p className="text-gray-400 mb-8 text-sm font-medium">Vos données sont prêtes à être analysées.</p>
 
-                        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                            <Link to="/database" className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-bank-600 hover:bg-bank-700 transition-colors w-full sm:w-auto justify-center">
-                                Voir la Base de Données
+                        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                            <Link to="/database" className="group inline-flex items-center px-6 py-3.5 bg-gradient-to-r from-gray-900 to-gray-800 text-white font-black text-sm rounded-xl shadow-xl hover:-translate-y-0.5 transition-all">
+                                <DatabaseIcon className="w-4 h-4 mr-2" />
+                                Base de Données
+                                <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
                             </Link>
-                            <Link to="/reports" className="inline-flex items-center px-6 py-3 border-2 border-bank-600 text-base font-medium rounded-md shadow-sm text-bank-600 bg-white hover:bg-bank-50 transition-all duration-200 w-full sm:w-auto justify-center group">
-                                Générer des Rapports
+                            <Link to="/reports" className="group inline-flex items-center px-6 py-3.5 border-2 border-bank-500 text-bank-600 font-black text-sm rounded-xl hover:bg-bank-50 transition-all">
+                                <BarChart3 className="w-4 h-4 mr-2" />
+                                Rapports
                             </Link>
-                            <button onClick={() => setUploadSuccess(false)} className="inline-flex items-center px-6 py-3 border border-gray-300 text-base font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 transition-all duration-200 w-full sm:w-auto justify-center group">
+                            <button onClick={() => setUploadSuccess(false)} className="inline-flex items-center px-6 py-3.5 border border-gray-200 text-gray-600 font-bold text-sm rounded-xl hover:bg-gray-50 transition-all">
                                 Importer un autre fichier
                             </button>
                         </div>
@@ -246,33 +261,40 @@ export default function Dashboard({ addNotification }) {
 
             {/* Sheet Selection Modal */}
             {pendingSheets.length > 0 && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-500/75 backdrop-blur-sm px-4">
-                    <div className="bg-white rounded-xl overflow-hidden shadow-xl transform transition-all sm:max-w-lg sm:w-full">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm px-4">
+                    <div className="bg-white rounded-2xl overflow-hidden shadow-2xl sm:max-w-lg sm:w-full border border-gray-100">
+                        <div className="px-6 py-4 bg-gray-950 text-white flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-bank-600/20 flex items-center justify-center">
+                                <FileSpreadsheet className="h-5 w-5 text-bank-400" />
+                            </div>
+                            <div>
+                                <h3 className="text-base font-black">Feuilles Multiples</h3>
+                                <p className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Sélectionnez la feuille à analyser</p>
+                            </div>
+                        </div>
                         <div className="p-6">
-                            <h3 className="text-lg font-bold text-gray-900 mb-4">Plusieurs feuilles détectées</h3>
-                            <p className="text-sm text-gray-500 mb-4">Veuillez sélectionner la feuille Excel que vous souhaitez analyser.</p>
                             <select
                                 value={selectedSheet}
                                 onChange={(e) => setSelectedSheet(e.target.value)}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-bank-500"
+                                className="w-full px-4 py-3.5 border-2 border-gray-100 rounded-xl focus:ring-0 focus:border-bank-500 font-bold text-gray-800 bg-gray-50 transition-all cursor-pointer outline-none"
                             >
                                 {pendingSheets.map(sheet => (
                                     <option key={sheet} value={sheet}>{sheet}</option>
                                 ))}
                             </select>
                         </div>
-                        <div className="bg-gray-50 px-6 py-4 flex flex-row-reverse gap-3">
+                        <div className="bg-gray-50 px-6 py-4 flex flex-row-reverse gap-3 border-t border-gray-100">
                             <button
                                 onClick={handleSheetSelection}
                                 disabled={isUploading}
-                                className="px-4 py-2 bg-bank-600 text-white rounded-lg font-semibold hover:bg-bank-700 transition-all flex items-center justify-center min-w-[120px]"
+                                className="px-5 py-2.5 bg-gradient-to-r from-gray-900 to-gray-800 text-white rounded-xl font-black text-sm shadow-lg hover:-translate-y-0.5 transition-all min-w-[120px] flex items-center justify-center"
                             >
                                 {isUploading ? <span className="block w-4 h-4 rounded-full border-2 border-t-white border-r-transparent animate-spin"></span> : 'Confirmer'}
                             </button>
                             <button
                                 onClick={() => setPendingSheets([])}
                                 disabled={isUploading}
-                                className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-all"
+                                className="px-5 py-2.5 bg-white text-gray-700 border border-gray-200 rounded-xl hover:bg-gray-50 transition-all font-bold text-sm"
                             >
                                 Annuler
                             </button>

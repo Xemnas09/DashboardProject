@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime
 import logging
 import secrets
+import math
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -48,6 +49,40 @@ def add_notification(message, category='info'):
     session['has_unread'] = True
     session.modified = True
     return new_notif
+
+def apply_filters(df, filters):
+    """
+    Applies a dictionary of filters to a Polars DataFrame.
+    filters: { 'col_name': value or [values] }
+    """
+    if not filters:
+        return df
+    
+    for col, value in filters.items():
+        if col not in df.columns:
+            continue
+            
+        # Attempt type discovery/casting for the filter value
+        dtype = df[col].dtype
+        try:
+            if isinstance(value, list):
+                if dtype.is_numeric():
+                    value = [float(v) for v in value]
+                df = df.filter(pl.col(col).is_in(value))
+            elif value is not None:
+                if dtype.is_numeric():
+                    target_val = float(value)
+                    df = df.filter(pl.col(col) == target_val)
+                elif dtype == pl.Boolean:
+                    target_val = str(value).lower() == 'true'
+                    df = df.filter(pl.col(col) == target_val)
+                else:
+                    df = df.filter(pl.col(col) == value)
+        except:
+            # If casting fails, skip filtering for this column rather than crashing
+            continue
+            
+    return df
 
 # --- Routes ---
 
@@ -493,21 +528,41 @@ def database_view():
     if 'user' not in session:
         return jsonify({'status': 'error', 'message': 'Non autorisé'}), 401
         
-    full_data = request.args.get('full_data') == 'true'
+    full_data = True # Always use full data now
     cache_id = session.get('cache_id')
     
-    if not cache_id or cache_id not in DATA_CACHE:
-         return jsonify({'status': 'success', 'data_preview': None})
+    data = request.args # For GET, we might use query params, but better to support JSON too if needed
+    filters = session.get('active_filters', {}) # Default to session filters if any
     
-    # If full data is requested, we might need to re-process if the current cache is limited
-    if full_data:
+    if not cache_id or cache_id not in DATA_CACHE:
+        return jsonify({'status': 'success', 'data_preview': None})
+    
+    # Always return full data for database view now
+    if True:
         filepath = DATA_CACHE[cache_id].get('filepath')
         selected_sheet = DATA_CACHE[cache_id].get('selected_sheet')
         overrides = DATA_CACHE[cache_id].get('schema_overrides')
         
         # We don't overwrite the standard 'preview' cache to keep it fast for normal navigation
-        full_preview = process_file_preview(filepath, sheet_name=selected_sheet, schema_overrides=overrides, row_limit=None)
-        return jsonify({'status': 'success', 'data_preview': full_preview})
+        full_df = read_cached_df(cache_id)
+        if full_df is None: return jsonify({'status': 'error', 'message': 'Erreur de lecture'}), 500
+        
+        # Apply filters if provided in header or session (for cross-filtering consistency)
+        # Note: Database explorer usually shows raw data, but for consistency we can apply global filters
+        # full_df = apply_filters(full_df, filters) 
+        
+        # For database view, let's keep it raw but allow previewing the filtered set if requested
+        header_filters = request.headers.get('X-Apply-Filters') == 'true'
+        if header_filters:
+            full_df = apply_filters(full_df, filters)
+
+        data_preview = {
+            'columns': [{'field': c, 'title': c} for c in full_df.columns],
+            'columns_info': [{'name': c, 'dtype': str(full_df[c].dtype), 'is_numeric': full_df[c].dtype.is_numeric()} for c in full_df.columns],
+            'data': full_df.head(2000).to_dicts(), # Limit frontend display rows for perf
+            'total_rows': len(full_df)
+        }
+        return jsonify({'status': 'success', 'data_preview': data_preview})
     
     data_preview = DATA_CACHE[cache_id].get('preview')
     return jsonify({'status': 'success', 'data_preview': data_preview})
@@ -549,8 +604,9 @@ def chart_data():
     
     data = request.get_json()
     x_col = data.get('x_column')
-    y_col = data.get('y_column')  # Can be empty for frequency mode
+    y_col = data.get('y_column')
     chart_type = data.get('chart_type', 'bar')
+    filters = data.get('filters', {}) # NEW: accept filters from frontend
     
     if not x_col:
         return jsonify({'status': 'error', 'message': 'Veuillez sélectionner au moins la variable X'}), 400
@@ -560,6 +616,12 @@ def chart_data():
         if df is None:
             return jsonify({'status': 'error', 'message': 'Impossible de lire les données'}), 500
         
+        # NEW: Apply Filters
+        df = apply_filters(df, filters)
+        
+        if len(df) == 0:
+            return jsonify({'status': 'success', 'data': [], 'message': 'Aucune donnée pour ces filtres', 'labels': [], 'values': []})
+
         if x_col not in df.columns:
             return jsonify({'status': 'error', 'message': f'Colonne "{x_col}" introuvable'}), 400
         if y_col and y_col not in df.columns:
@@ -568,8 +630,8 @@ def chart_data():
         x_is_numeric = df[x_col].dtype.is_numeric()
         y_is_numeric = df[y_col].dtype.is_numeric() if y_col else False
         
-        full_data = data.get('full_data') == True
-        limit = 30 if not full_data else 200
+        # No more arbitrary small limits
+        limit = 5000 # Reasonable upper bound for ECharts performance
 
         # === FREQUENCY MODE (no Y column) ===
         if not y_col:
@@ -724,122 +786,112 @@ def pivot_data():
     
     data = request.get_json()
     row_cols = data.get('row_cols', [])
-    col_col = data.get('col_col', '')
-    value_col = data.get('value_col', '')
-    agg_func = data.get('agg_func', 'sum')
+    col_cols = data.get('col_cols', [])
+    # Support for multi-value (Excel style)
+    value_cols = data.get('value_cols', []) 
+    full_data = True # Always True now
+    filters = data.get('filters', {}) # NEW: accept filters
     
-    if not row_cols or not value_col:
-        return jsonify({'status': 'error', 'message': 'Veuillez sélectionner au moins une ligne et une valeur'}), 400
+    # Backwards compatibility and single-value simplicity
+    if not value_cols and data.get('value_col'):
+        value_cols = [{'col': data.get('value_col'), 'agg': data.get('agg_func', 'sum')}]
+    
+    if not row_cols or not value_cols:
+        return jsonify({'status': 'error', 'message': 'Sélectionnez au moins une ligne et une valeur'}), 400
     
     try:
         df = read_cached_df(cache_id)
-        if df is None:
-            return jsonify({'status': 'error', 'message': 'Impossible de lire les données'}), 500
+        if df is None: return jsonify({'status': 'error', 'message': 'Erreur de lecture'}), 500
             
-        # Validate columns
-        all_cols = row_cols + ([col_col] if col_col else []) + [value_col]
-        for c in all_cols:
-            if c not in df.columns:
-                return jsonify({'status': 'error', 'message': f'Colonne "{c}" introuvable'}), 400
+        # NEW: Apply Filters
+        df = apply_filters(df, filters)
+        print(f"Pivot DF after filters: {df.shape}")
         
-        # Map aggregation function
-        agg_map = {
-            'sum': pl.col(value_col).sum(),
-            'mean': pl.col(value_col).mean(),
-            'count': pl.col(value_col).count(),
-            'min': pl.col(value_col).min(),
-            'max': pl.col(value_col).max(),
-        }
-        agg_expr = agg_map.get(agg_func, pl.col(value_col).sum())
-        
-        # Drop nulls in relevant columns
-        df = df.drop_nulls(subset=all_cols)
-        
-        # --- Backend Robustness & Scientific Validation ---
-        is_numeric = df[value_col].dtype.is_numeric()
-        
-        if agg_func in ['sum', 'mean'] and not is_numeric:
-            return jsonify({'status': 'error', 'message': f'La colonne "{value_col}" doit être numérique pour une agrégation de type {agg_func}'}), 400
+        if len(df) == 0:
+            print("Pivot error: Filtered DF is empty")
+            return jsonify({'status': 'success', 'headers': [], 'rows': [], 'totals': [], 'row_count': 0, 'message': 'Filtres trop restrictifs'})
 
-        full_data = data.get('full_data') == True
-        max_cardinality = 60 if not full_data else 200
+        # Prep aggregations
+        agg_exprs = []
+        for v in value_cols:
+            c, a = v['col'], v['agg']
+            # Ensure numeric operations only on numeric-castable columns
+            curr = pl.col(c)
+            # Try to cast to Float64 for safety if we suspect it's dirty but should be numeric
+            if a in ['sum', 'mean', 'max', 'min']:
+                curr = curr.cast(pl.Float64, strict=False)
 
-        if col_col:
-            # Check cardinality of the pivot column to prevent browser crash (Limit to 60/200)
-            cardinality = df[col_col].n_unique()
-            if cardinality > max_cardinality:
-                 return jsonify({'status': 'error', 'message': f'Cardinalité trop élevée ({cardinality}). Le champ "{col_col}" contient trop de modalités différentes pour un pivot lisible.'}), 400
+            if a == 'sum': e = curr.sum()
+            elif a == 'mean': e = curr.mean()
+            elif a == 'count': e = pl.col(c).count()
+            elif a == 'min': e = curr.min()
+            elif a == 'max': e = curr.max()
+            else: e = curr.sum()
+            # Alias includes agg type if multi-val
+            alias = f"{a}({c})" if len(value_cols) > 1 or col_cols else c
+            agg_exprs.append(e.alias(alias))
+
+        def sanitize(v):
+            if isinstance(v, float):
+                if math.isnan(v) or math.isinf(v): return None
+                return round(v, 2)
+            return v
+
+        if col_cols:
+            # Handle multi-column pivot by combining columns if necessary
+            if len(col_cols) > 1:
+                col_key = "_pivot_col_key_"
+                # Create a combined column for the 'on' parameter
+                df = df.with_columns(
+                    pl.concat_str([pl.col(c).cast(pl.String) for c in col_cols], separator=" | ").alias(col_key)
+                )
+                pivot_on = col_key
+            else:
+                pivot_on = col_cols[0]
+
+            card = df[pivot_on].n_unique()
+            if card > (200 if full_data else 60):
+                return jsonify({'status': 'error', 'message': f'Trop de colonnes ({card})'}), 400
             
-            # Pivot table with column header
-            # First group by row_cols + col_col, aggregate
-            grouped = df.group_by(row_cols + [col_col]).agg(agg_expr.alias('value'))
-            
-            # Pivot: rows = row_cols, columns = col_col, values = 'value'
-            # Note: using 'columns' instead of 'on' for compatibility with Polars < 0.20.31
-            pivot_df = grouped.pivot(
-                on=col_col,
+            # Pivot logic
+            print(f"Pivoting on: {pivot_on}, Grouping: {row_cols}")
+            grouped = df.group_by(row_cols + [pivot_on]).agg(agg_exprs)
+            pivoted = grouped.pivot(
+                on=pivot_on,
                 index=row_cols,
-                values='value'
+                values=[e.meta.output_name() for e in agg_exprs]
             )
+            print(f"Pivot success. Columns: {pivoted.columns}")
             
-            # Sort by first row col
-            pivot_df = pivot_df.sort(row_cols[0])
+            # Sort by first row col safely
+            if row_cols: pivoted = pivoted.sort(row_cols[0])
             
-            # Build headers
-            value_headers = [c for c in pivot_df.columns if c not in row_cols]
-            headers = row_cols + value_headers
-            
-            # Build rows with totals
+            headers = list(pivoted.columns)
             rows = []
-            for row in pivot_df.to_dicts():
-                r = []
-                for h in headers:
-                    val = row.get(h)
-                    if val is None:
-                        r.append(None)
-                    elif isinstance(val, float):
-                        r.append(round(val, 2))
-                    else:
-                        r.append(val)
-                rows.append(r)
-            
-            # Compute column totals
-            totals = []
-            for h in headers:
-                if h in row_cols:
-                    totals.append('Total' if h == row_cols[0] else '')
-                else:
-                    col_vals = [row[headers.index(h)] for row in rows if row[headers.index(h)] is not None]
-                    if col_vals and all(isinstance(v, (int, float)) for v in col_vals):
-                        totals.append(round(sum(col_vals), 2))
-                    else:
-                        totals.append('')
-        else:
-            # Simple aggregation without pivot column
-            grouped = df.group_by(row_cols).agg(agg_expr.alias(f'{agg_func}({value_col})'))
-            grouped = grouped.sort(row_cols[0]).head(200)
-            
-            headers = list(grouped.columns)
-            rows = []
-            for row in grouped.to_dicts():
-                r = []
-                for h in headers:
-                    val = row.get(h)
-                    if isinstance(val, float):
-                        r.append(round(val, 2))
-                    else:
-                        r.append(val)
-                rows.append(r)
-            
-            # Totals
+            for d in pivoted.to_dicts():
+                rows.append([sanitize(d.get(h)) for h in headers])
+                
             totals = []
             for i, h in enumerate(headers):
-                if h in row_cols:
-                    totals.append('Total' if h == row_cols[0] else '')
+                if h in row_cols: totals.append('TOTAL' if i==0 else '')
                 else:
-                    col_vals = [row[i] for row in rows if row[i] is not None and isinstance(row[i], (int, float))]
-                    totals.append(round(sum(col_vals), 2) if col_vals else '')
-        
+                    vals = [r[i] for r in rows if isinstance(r[i], (int, float)) and r[i] is not None]
+                    totals.append(sanitize(sum(vals)) if vals else '')
+        else:
+            summary = df.group_by(row_cols).agg(agg_exprs)
+            if row_cols: summary = summary.sort(row_cols[0])
+            headers = list(summary.columns)
+            rows = []
+            for d in summary.to_dicts():
+                rows.append([sanitize(d.get(h)) for h in headers])
+            
+            totals = []
+            for i, h in enumerate(headers):
+                if h in row_cols: totals.append('TOTAL' if i==0 else '')
+                else:
+                    vals = [r[i] for r in rows if isinstance(r[i], (int, float)) and r[i] is not None]
+                    totals.append(sanitize(sum(vals)) if vals else '')
+
         return jsonify({
             'status': 'success',
             'headers': [str(h) for h in headers],
@@ -847,10 +899,217 @@ def pivot_data():
             'totals': totals,
             'row_count': len(rows)
         })
-    
+
     except Exception as e:
-        print(f"Error generating pivot data: {e}")
+        print(f"Pivot error: {e}")
+        import traceback; traceback.print_exc()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/calculated-field', methods=['POST'])
+def calculated_field():
+    """Create a new calculated column from a formula like 'ColA + ColB * 2'."""
+    if 'user' not in session:
+        return jsonify({'status': 'error', 'message': 'Non autorisé'}), 401
+    
+    cache_id = session.get('cache_id')
+    if not cache_id or cache_id not in DATA_CACHE:
+        return jsonify({'status': 'error', 'message': 'Aucune donnée disponible'}), 404
+    
+    data = request.get_json()
+    new_col_name = data.get('name', '').strip()
+    formula = data.get('formula', '').strip()
+    
+    if not new_col_name:
+        return jsonify({'status': 'error', 'message': 'Nom du champ requis'}), 400
+    if not formula:
+        return jsonify({'status': 'error', 'message': 'Formule requise'}), 400
+    
+    try:
+        df = read_cached_df(cache_id)
+        if df is None:
+            return jsonify({'status': 'error', 'message': 'Erreur de lecture'}), 500
+        
+        if new_col_name in df.columns:
+            return jsonify({'status': 'error', 'message': f'La colonne "{new_col_name}" existe déjà'}), 400
+        
+        # Parse formula into a Polars expression safely
+        expr = parse_formula(formula, df.columns)
+        df = df.with_columns(expr.alias(new_col_name))
+        
+        # Save back to file
+        filepath = DATA_CACHE[cache_id].get('filepath')
+        if filepath.endswith('.csv'):
+            df.write_csv(filepath)
+        elif filepath.endswith(('.xls', '.xlsx')):
+            df.write_excel(filepath)
+        
+        # Refresh the preview cache
+        DATA_CACHE[cache_id]['preview'] = process_file_preview(
+            filepath, 
+            sheet_name=DATA_CACHE[cache_id].get('selected_sheet'),
+            schema_overrides=DATA_CACHE[cache_id].get('schema_overrides')
+        )
+        
+        new_notif = add_notification(f'Champ calculé "{new_col_name}" créé avec succès', 'success')
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'Colonne "{new_col_name}" créée',
+            'notification': new_notif,
+            'new_column': {
+                'name': new_col_name,
+                'dtype': str(df[new_col_name].dtype),
+                'is_numeric': df[new_col_name].dtype.is_numeric()
+            }
+        })
+        
+    except ValueError as ve:
+        return jsonify({'status': 'error', 'message': f'Erreur de formule: {str(ve)}'}), 400
+    except Exception as e:
+        print(f"Calculated field error: {e}")
+        import traceback; traceback.print_exc()
         return jsonify({'status': 'error', 'message': f'Erreur: {str(e)}'}), 500
+
+
+def parse_formula(formula, valid_columns):
+    """
+    Parses a simple math formula string into a Polars expression.
+    Supports: column names, +, -, *, /, parentheses, and numeric literals.
+    Example: "Ventes - Coûts" => pl.col("Ventes") - pl.col("Coûts")
+    Example: "(Prix * Quantité) / 100" => (pl.col("Prix") * pl.col("Quantité")) / pl.lit(100)
+    """
+    import re
+    
+    # Tokenize: extract column names (quoted or unquoted), numbers, operators
+    tokens = []
+    i = 0
+    formula_str = formula.strip()
+    
+    while i < len(formula_str):
+        c = formula_str[i]
+        
+        # Skip whitespace
+        if c == ' ':
+            i += 1
+            continue
+        
+        # Operators and parens
+        if c in '+-*/()':
+            tokens.append(('OP', c))
+            i += 1
+            continue
+        
+        # Quoted column name: "Col Name" or 'Col Name'
+        if c in '"\'':
+            quote = c
+            j = i + 1
+            while j < len(formula_str) and formula_str[j] != quote:
+                j += 1
+            col_name = formula_str[i+1:j]
+            if col_name not in valid_columns:
+                raise ValueError(f'Colonne "{col_name}" introuvable')
+            tokens.append(('COL', col_name))
+            i = j + 1
+            continue
+        
+        # Number (int or float)
+        if c.isdigit() or c == '.':
+            j = i
+            while j < len(formula_str) and (formula_str[j].isdigit() or formula_str[j] == '.'):
+                j += 1
+            tokens.append(('NUM', float(formula_str[i:j])))
+            i = j
+            continue
+        
+        # Unquoted identifier (column name) — greedy match against known columns
+        # Try to match the longest valid column name starting at position i
+        matched = None
+        for col in sorted(valid_columns, key=len, reverse=True):
+            if formula_str[i:i+len(col)] == col:
+                # Make sure the next char is not alphanumeric (word boundary)
+                end = i + len(col)
+                if end >= len(formula_str) or not formula_str[end].isalnum():
+                    matched = col
+                    break
+        
+        if matched:
+            tokens.append(('COL', matched))
+            i += len(matched)
+            continue
+        
+        raise ValueError(f'Caractère inattendu: "{c}" à la position {i}')
+    
+    if not tokens:
+        raise ValueError('Formule vide')
+    
+    # Convert tokens to a Polars expression using a simple recursive descent parser
+    pos = [0]  # Using list for mutability in nested functions
+    
+    def peek():
+        if pos[0] < len(tokens):
+            return tokens[pos[0]]
+        return None
+    
+    def consume():
+        t = tokens[pos[0]]
+        pos[0] += 1
+        return t
+    
+    def parse_expr():
+        left = parse_term()
+        while peek() and peek()[0] == 'OP' and peek()[1] in '+-':
+            op = consume()[1]
+            right = parse_term()
+            if op == '+':
+                left = left + right
+            else:
+                left = left - right
+        return left
+    
+    def parse_term():
+        left = parse_factor()
+        while peek() and peek()[0] == 'OP' and peek()[1] in '*/':
+            op = consume()[1]
+            right = parse_factor()
+            if op == '*':
+                left = left * right
+            else:
+                left = left / right
+        return left
+    
+    def parse_factor():
+        token = peek()
+        if token is None:
+            raise ValueError('Expression incomplète')
+        
+        if token[0] == 'OP' and token[1] == '(':
+            consume()  # eat '('
+            expr = parse_expr()
+            if not peek() or peek()[1] != ')':
+                raise ValueError('Parenthèse fermante manquante')
+            consume()  # eat ')'
+            return expr
+        
+        if token[0] == 'OP' and token[1] == '-':
+            consume()  # unary minus
+            return -parse_factor()
+        
+        if token[0] == 'COL':
+            consume()
+            return pl.col(token[1]).cast(pl.Float64, strict=False)
+        
+        if token[0] == 'NUM':
+            consume()
+            return pl.lit(token[1])
+        
+        raise ValueError(f'Élément inattendu: {token}')
+    
+    result = parse_expr()
+    
+    if pos[0] < len(tokens):
+        raise ValueError(f'Formule invalide: éléments restants après la fin')
+    
+    return result
 
 
 if __name__ == '__main__':

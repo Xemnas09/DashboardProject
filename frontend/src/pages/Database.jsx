@@ -5,7 +5,7 @@ import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-quartz.css';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
-import { Trash2, AlertCircle, Settings2, FileType2, Database as DatabaseIcon, Maximize2, Minimize2, Info } from 'lucide-react';
+import { Trash2, AlertCircle, Settings2, FileType2, Database as DatabaseIcon, Info, Calculator, Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Database({ addNotification }) {
@@ -18,7 +18,13 @@ export default function Database({ addNotification }) {
     const [showTypeModal, setShowTypeModal] = useState(false);
     const [columnsInfo, setColumnsInfo] = useState([]);
     const [isSavingTypes, setIsSavingTypes] = useState(false);
-    const [isExpanded, setIsExpanded] = useState(false);
+
+    // Calculated Fields State
+    const [showFormulaModal, setShowFormulaModal] = useState(false);
+    const [formulaName, setFormulaName] = useState('');
+    const [formulaExpr, setFormulaExpr] = useState('');
+    const [formulaError, setFormulaError] = useState('');
+    const [formulaLoading, setFormulaLoading] = useState(false);
 
     // Human-friendly mapping for Polars/Technical types (Excel-like)
     const TYPE_LABELS = {
@@ -41,17 +47,14 @@ export default function Database({ addNotification }) {
         fetchDataPreview();
     }, []);
 
-    const [isFullData, setIsFullData] = useState(false);
 
-    const fetchDataPreview = async (forceFull = null) => {
+    const fetchDataPreview = async () => {
         setLoading(true);
-        const useFull = forceFull !== null ? forceFull : isFullData;
         try {
-            const res = await fetch(`/api/database?full_data=${useFull}`);
+            const res = await fetch(`/api/database?full_data=true`);
             if (res.ok) {
                 const data = await res.json();
                 setDataPreview(data.data_preview);
-                if (forceFull !== null) setIsFullData(forceFull);
             }
         } catch (e) {
             console.error(e);
@@ -59,10 +62,6 @@ export default function Database({ addNotification }) {
         } finally {
             setLoading(false);
         }
-    };
-
-    const toggleFullData = () => {
-        fetchDataPreview(!isFullData);
     };
 
     const fetchColumnsInfo = async () => {
@@ -248,26 +247,13 @@ export default function Database({ addNotification }) {
                                 <Settings2 className="mr-2 h-4 w-4 transition-transform group-hover:rotate-90" />
                                 Configurer les types
                             </button>
-                            <div className="flex bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                                <button
-                                    onClick={() => setIsExpanded(!isExpanded)}
-                                    className="flex items-center px-6 py-3 text-sm font-black text-bank-700 hover:bg-bank-50 transition-all border-r border-gray-50"
-                                >
-                                    <Maximize2 className="mr-2 h-4 w-4" />
-                                    Plein Écran
-                                </button>
-                                <button
-                                    onClick={toggleFullData}
-                                    className={`flex items-center px-4 py-3 transition-all ${isFullData ? 'bg-amber-50 text-amber-600' : 'text-gray-400 hover:bg-gray-50'
-                                        }`}
-                                    title={isFullData ? "Analyse complète (Toutes les lignes)" : "Aperçu limité (2000 lignes)"}
-                                >
-                                    <DatabaseIcon className="h-4 w-4" />
-                                    <span className="ml-2 text-[10px] font-black uppercase tracking-tighter">
-                                        {isFullData ? "100%" : "2K"}
-                                    </span>
-                                </button>
-                            </div>
+                            <button
+                                onClick={() => { setShowFormulaModal(true); setFormulaError(''); setFormulaName(''); setFormulaExpr(''); }}
+                                className="group inline-flex items-center px-6 py-3 text-sm font-black rounded-2xl text-white bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 transition-all hover:shadow-xl hover:shadow-emerald-200 hover:-translate-y-0.5 active:translate-y-0"
+                            >
+                                <Calculator className="mr-2 h-4 w-4" />
+                                Champ Calculé
+                            </button>
                             <button
                                 onClick={() => setShowDeleteModal(true)}
                                 className="inline-flex items-center px-6 py-3 text-sm font-black rounded-2xl text-red-600 bg-white hover:bg-red-50 transition-all border border-red-100/50 hover:shadow-lg hover:-translate-y-0.5"
@@ -278,36 +264,6 @@ export default function Database({ addNotification }) {
                         </div>
                     </div>
 
-                    {/* Expanded Modal Overlay */}
-                    {isExpanded && (
-                        <div className="fixed inset-0 z-[100] bg-white p-6 flex flex-col animate-in fade-in zoom-in duration-200">
-                            <div className="flex justify-between items-center mb-6">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-xl bg-bank-600 flex items-center justify-center text-white shadow-lg">
-                                        <DatabaseIcon className="w-6 h-6" />
-                                    </div>
-                                    <h2 className="text-xl font-black text-gray-900">Vue Étendue - Explorateur</h2>
-                                </div>
-                                <button
-                                    onClick={() => setIsExpanded(false)}
-                                    className="flex items-center px-4 py-2 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 transition-all shadow-lg"
-                                >
-                                    <Minimize2 className="mr-2 h-4 w-4" />
-                                    Quitter le Plein Écran
-                                </button>
-                            </div>
-                            <div className="flex-1 min-h-0 ag-theme-quartz rounded-2xl border border-gray-100 shadow-2xl overflow-hidden">
-                                <AgGridReact
-                                    rowData={dataPreview.data}
-                                    columnDefs={colDefs}
-                                    pagination={true}
-                                    paginationPageSize={25}
-                                    animateRows={true}
-                                    onGridReady={(params) => params.api.sizeColumnsToFit()}
-                                />
-                            </div>
-                        </div>
-                    )}
 
                     <div className="flex-1 min-h-0 bg-transparent p-6">
                         <div className="h-full ag-theme-quartz overflow-hidden">
@@ -432,6 +388,153 @@ export default function Database({ addNotification }) {
                                 onClick={() => setShowTypeModal(false)}
                                 disabled={isSavingTypes}
                                 className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-all"
+                            >
+                                Annuler
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Calculated Field Modal */}
+            {showFormulaModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-500/75 backdrop-blur-sm px-4">
+                    <div className="bg-white rounded-2xl overflow-hidden shadow-2xl transform transition-all sm:max-w-2xl w-full max-h-[85vh] flex flex-col">
+                        <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-emerald-50 to-emerald-100/50 flex items-center gap-3 shrink-0">
+                            <div className="flex-shrink-0 w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-white shadow-lg shadow-emerald-200">
+                                <Calculator className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-black text-gray-900">Nouveau Champ Calculé</h3>
+                                <p className="text-xs text-gray-500">Créez une nouvelle colonne à partir d'une formule mathématique.</p>
+                            </div>
+                        </div>
+
+                        <div className="p-6 overflow-y-auto flex-1 space-y-5">
+                            {/* Column Name Input */}
+                            <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Nom de la nouvelle colonne</label>
+                                <input
+                                    type="text"
+                                    value={formulaName}
+                                    onChange={(e) => setFormulaName(e.target.value)}
+                                    placeholder="Ex: Marge, Total_TTC, Ratio..."
+                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none font-bold text-gray-800 placeholder-gray-300 transition-all"
+                                />
+                            </div>
+
+                            {/* Formula Input */}
+                            <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Formule</label>
+                                <textarea
+                                    value={formulaExpr}
+                                    onChange={(e) => setFormulaExpr(e.target.value)}
+                                    placeholder={`Ex: Prix * Quantité   ou   "CA" - Coûts`}
+                                    rows={3}
+                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none font-mono text-sm text-gray-800 placeholder-gray-300 transition-all resize-none"
+                                />
+                            </div>
+
+                            {/* Operator Buttons */}
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 mr-2">Opérateurs :</span>
+                                {['+', '-', '*', '/', '(', ')'].map(op => (
+                                    <button
+                                        key={op}
+                                        onClick={() => setFormulaExpr(prev => prev + ' ' + op + ' ')}
+                                        className="w-9 h-9 bg-gray-100 hover:bg-emerald-100 text-gray-700 hover:text-emerald-700 font-mono font-black rounded-lg border border-gray-200 hover:border-emerald-300 transition-all text-sm"
+                                    >
+                                        {op}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Available Columns (clickable chips) */}
+                            <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Colonnes disponibles <span className="text-gray-300">(cliquer pour insérer)</span></label>
+                                <div className="flex flex-wrap gap-2 max-h-[150px] overflow-y-auto p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                    {dataPreview && dataPreview.columns_info ? dataPreview.columns_info.filter(c => c.is_numeric).map(col => (
+                                        <button
+                                            key={col.name}
+                                            onClick={() => setFormulaExpr(prev => prev + (col.name.includes(' ') ? `"${col.name}"` : col.name))}
+                                            className="px-3 py-1.5 bg-white border border-emerald-200 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-50 hover:border-emerald-400 transition-all shadow-sm hover:shadow-md"
+                                        >
+                                            <span className="text-emerald-400 mr-1">Σ</span> {col.name}
+                                        </button>
+                                    )) : <span className="text-xs text-gray-400 italic">Aucune colonne numérique disponible</span>}
+                                </div>
+                                {dataPreview && dataPreview.columns_info && dataPreview.columns_info.some(c => !c.is_numeric) && (
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                        {dataPreview.columns_info.filter(c => !c.is_numeric).map(col => (
+                                            <button
+                                                key={col.name}
+                                                onClick={() => setFormulaExpr(prev => prev + (col.name.includes(' ') ? `"${col.name}"` : col.name))}
+                                                className="px-3 py-1.5 bg-white border border-amber-200 text-amber-700 rounded-lg text-xs font-bold hover:bg-amber-50 hover:border-amber-400 transition-all shadow-sm"
+                                            >
+                                                <span className="text-amber-400 mr-1">A</span> {col.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Error Display */}
+                            {formulaError && (
+                                <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2">
+                                    <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+                                    <p className="text-xs font-semibold text-red-700">{formulaError}</p>
+                                </div>
+                            )}
+
+                            {/* Help */}
+                            <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl">
+                                <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider mb-1">💡 Exemples de formules</p>
+                                <ul className="text-xs text-blue-700 space-y-1 font-mono">
+                                    <li>Prix * Quantité</li>
+                                    <li>"Chiffre d'affaires" - Coûts</li>
+                                    <li>(Ventes - Retours) / Ventes * 100</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div className="bg-gray-50 px-6 py-4 flex flex-row-reverse gap-3 shrink-0 border-t border-gray-200">
+                            <button
+                                onClick={async () => {
+                                    if (!formulaName.trim()) { setFormulaError('Nom du champ requis'); return; }
+                                    if (!formulaExpr.trim()) { setFormulaError('Formule requise'); return; }
+                                    setFormulaLoading(true);
+                                    setFormulaError('');
+                                    try {
+                                        const res = await fetch('/api/calculated-field', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ name: formulaName, formula: formulaExpr })
+                                        });
+                                        const result = await res.json();
+                                        if (res.ok && result.status === 'success') {
+                                            addNotification(result.message, 'success');
+                                            setShowFormulaModal(false);
+                                            fetchDataPreview(); // Refresh the grid
+                                        } else {
+                                            setFormulaError(result.message || 'Erreur inconnue');
+                                        }
+                                    } catch (e) {
+                                        setFormulaError('Impossible de contacter le serveur.');
+                                    } finally {
+                                        setFormulaLoading(false);
+                                    }
+                                }}
+                                disabled={formulaLoading}
+                                className="px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white rounded-xl font-black text-sm hover:from-emerald-500 hover:to-emerald-400 transition-all flex items-center justify-center min-w-[140px] shadow-lg shadow-emerald-200 hover:-translate-y-0.5 active:translate-y-0"
+                            >
+                                {formulaLoading ? <span className="block w-4 h-4 rounded-full border-2 border-t-white border-r-transparent animate-spin"></span> : (
+                                    <><Plus className="w-4 h-4 mr-2" /> Créer le champ</>
+                                )}
+                            </button>
+                            <button
+                                onClick={() => setShowFormulaModal(false)}
+                                disabled={formulaLoading}
+                                className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-xl hover:bg-gray-50 transition-all font-bold"
                             >
                                 Annuler
                             </button>
