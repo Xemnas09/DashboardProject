@@ -14,6 +14,25 @@ export default function Reports({ addNotification }) {
     const [activeTab, setActiveTab] = useState('charts');
     const [loading, setLoading] = useState(true);
 
+    // Human-friendly mapping for Polars/Technical types (Excel-like)
+    const TYPE_LABELS = {
+        'Int64': 'Nombre Entier',
+        'Int32': 'Nombre Entier',
+        'Float64': 'Nombre Décimal',
+        'Float32': 'Nombre Décimal',
+        'String': 'Texte / Catégorie',
+        'Utf8': 'Texte / Catégorie',
+        'Object': 'Texte / Catégorie',
+        'Date': 'Date',
+        'Datetime': 'Date et Heure',
+        'Boolean': 'Logique (Vrai/Faux)',
+        'Null': 'Inconnu'
+    };
+    const getFriendlyType = (dtype) => {
+        if (!dtype) return 'Inconnu';
+        return TYPE_LABELS[dtype] || (dtype.includes('Int') ? 'Nombre Entier' : dtype.includes('Float') ? 'Nombre Décimal' : dtype);
+    };
+
     // Chart States
     const [chartX, setChartX] = useState('');
     const [chartY, setChartY] = useState('');
@@ -105,6 +124,8 @@ export default function Reports({ addNotification }) {
                 series: [{
                     type: 'pie', radius: ['35%', '65%'], center: ['50%', '45%'],
                     itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
+                    label: { show: true, formatter: '{b}: {d}%', fontSize: 11 },
+                    emphasis: { label: { show: true, fontSize: 13, fontWeight: 'bold' } },
                     data: d.data
                 }]
             };
@@ -147,16 +168,16 @@ export default function Reports({ addNotification }) {
     // Statistical Constraints Logic
     const xColType = useMemo(() => {
         const col = columnsInfo.find(c => c.name === chartX);
-        return col ? col.type : null;
+        return col ? col.dtype : null;
     }, [chartX, columnsInfo]);
 
     const yColType = useMemo(() => {
         const col = columnsInfo.find(c => c.name === chartY);
-        return col ? col.type : null;
+        return col ? col.dtype : null;
     }, [chartY, columnsInfo]);
 
-    const isNumeric = (type) => ['float64', 'int64', 'numeric'].includes(type);
-    const isCategorical = (type) => ['object', 'string', 'categorical'].includes(type);
+    const isNumeric = (type) => type && (type.includes('Int') || type.includes('Float') || type.includes('Decimal'));
+    const isCategorical = (type) => type && (type.includes('String') || type.includes('Utf8') || type.includes('Object') || type.includes('Categorical'));
 
     // Filter available chart types based on selected variables
     const getAvailableChartTypes = () => {
@@ -309,14 +330,14 @@ export default function Reports({ addNotification }) {
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Variable X</label>
                                 <select value={chartX} onChange={e => setChartX(e.target.value)} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-bank-500 bg-white">
                                     <option value="">— Sélectionner —</option>
-                                    {columnsInfo.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+                                    {columnsInfo.map(c => <option key={c.name} value={c.name}>{c.name} ({getFriendlyType(c.dtype)})</option>)}
                                 </select>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Variable Y</label>
                                 <select value={chartY} onChange={e => setChartY(e.target.value)} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-bank-500 bg-white">
                                     <option value="">— Aucune (comptage) —</option>
-                                    {columnsInfo.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+                                    {columnsInfo.map(c => <option key={c.name} value={c.name}>{c.name} ({getFriendlyType(c.dtype)})</option>)}
                                 </select>
                             </div>
                             <div>

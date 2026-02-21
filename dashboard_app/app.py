@@ -87,6 +87,7 @@ def login():
         add_notification("Connexion réussie", "success")
         return jsonify({'status': 'success'})
     else:
+        add_notification("Échec de connexion", "error")
         return jsonify({'status': 'error', 'message': 'Identifiants incorrects'}), 401
 
 @app.route('/logout', methods=['POST'])
@@ -108,10 +109,11 @@ def clear_data():
     cache_id = session.get('cache_id')
     if cache_id and cache_id in DATA_CACHE:
         del DATA_CACHE[cache_id]
+        add_notification("Données supprimées", "warning")
         
     return jsonify({'status': 'success'})
 
-def process_file_preview(filepath, sheet_name=None):
+def process_file_preview(filepath, sheet_name=None, schema_overrides=None):
     try:
         # Check for multiple sheets in Excel
         if filepath.endswith(('.xls', '.xlsx')) and sheet_name is None:
@@ -125,22 +127,47 @@ def process_file_preview(filepath, sheet_name=None):
             sheet_name = xl.sheet_names[0]
             
         if filepath.endswith('.csv'):
-            df = pl.read_csv(filepath, ignore_errors=True)
+            with open(filepath, 'rb') as f:
+                df = pl.read_csv(f.read(), ignore_errors=True)
         elif filepath.endswith(('.xls', '.xlsx')):
             if sheet_name:
-                # Polars can read specific sheets
                 df = pl.read_excel(filepath, sheet_name=sheet_name)
             else:
                 df = pl.read_excel(filepath)
         else:
             raise ValueError("Format non supporté")
             
+        # Apply manual type overrides if provided
+        if schema_overrides:
+            cast_exprs = []
+            for col, target in schema_overrides.items():
+                if col in df.columns:
+                    current_type = str(df[col].dtype)
+                    if target == 'String' and 'String' not in current_type and 'Utf8' not in current_type:
+                        cast_exprs.append(pl.col(col).cast(pl.String))
+                    elif target == 'Int64' and 'Int' not in current_type:
+                        cast_exprs.append(pl.col(col).cast(pl.Int64, strict=False))
+                    elif target == 'Float64' and 'Float' not in current_type:
+                        cast_exprs.append(pl.col(col).cast(pl.Float64, strict=False))
+            if cast_exprs:
+                df = df.with_columns(cast_exprs)
+
+        # Extract column info for the UI
+        columns_info = []
+        for col in df.columns:
+            columns_info.append({
+                'name': col,
+                'dtype': str(df[col].dtype),
+                'is_numeric': df[col].dtype.is_numeric()
+            })
+
         limit = 2000 
         safe_df = df.head(limit).select(pl.all().cast(pl.String))
         
         return {
             'requires_sheet_selection': False,
             'columns': [{'title': col, 'field': col} for col in df.columns],
+            'columns_info': columns_info,
             'data': safe_df.to_dicts(), 
             'total_rows': df.height,
             'selected_sheet': sheet_name
@@ -149,50 +176,91 @@ def process_file_preview(filepath, sheet_name=None):
         logger.error(f"Error processing preview: {e}", exc_info=True)
         return None
 
+def read_cached_df(cache_id):
+    if not cache_id or cache_id not in DATA_CACHE:
+        return None
+    
+    item = DATA_CACHE[cache_id]
+    filepath = item.get('filepath')
+    selected_sheet = item.get('selected_sheet')
+    overrides = item.get('schema_overrides', {})
+    
+    if not filepath or not os.path.exists(filepath):
+        return None
+        
+    try:
+        if filepath.endswith('.csv'):
+            with open(filepath, 'rb') as f:
+                df = pl.read_csv(f.read(), ignore_errors=True)
+        elif filepath.endswith(('.xls', '.xlsx')):
+            if selected_sheet:
+                df = pl.read_excel(filepath, sheet_name=selected_sheet)
+            else:
+                df = pl.read_excel(filepath)
+        else:
+            return None
+            
+        # Apply overrides if they don't match current inference
+        if overrides:
+            cast_exprs = []
+            for col, target in overrides.items():
+                if col in df.columns:
+                    current_type = str(df[col].dtype)
+                    # Simple check: if override starts with Int and current doesn't, or similar
+                    if target == 'String' and 'String' not in current_type and 'Utf8' not in current_type:
+                        cast_exprs.append(pl.col(col).cast(pl.String))
+                    elif target == 'Int64' and 'Int' not in current_type:
+                        cast_exprs.append(pl.col(col).cast(pl.Int64, strict=False))
+                    elif target == 'Float64' and 'Float' not in current_type:
+                        cast_exprs.append(pl.col(col).cast(pl.Float64, strict=False))
+            
+            if cast_exprs:
+                df = df.with_columns(cast_exprs)
+        return df
+    except Exception as e:
+        logger.error(f"Error reading cached df: {e}")
+        return None
+
 @app.route('/upload', methods=['POST'])
 def upload_file():
     if 'user' not in session:
         return jsonify({'status': 'error', 'message': 'Non autorisé'}), 401
         
     if 'file' not in request.files:
-        return jsonify({'status': 'error', 'message': 'Aucun fichier'}), 400
+        return jsonify({'status': 'error', 'message': 'Pas de fichier'}), 400
         
     file = request.files['file']
     if file.filename == '':
-        return jsonify({'status': 'error', 'message': 'Aucun fichier'}), 400
-
+        return jsonify({'status': 'error', 'message': 'Nom de fichier vide'}), 400
+        
     try:
         filename = secure_filename(file.filename)
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
 
-        # Initialize user cache
-        cache_id = session.get('cache_id')
-        if not cache_id:
-             cache_id = str(uuid.uuid4())
-             session['cache_id'] = cache_id
+        cache_id = str(uuid.uuid4())
+        session['cache_id'] = cache_id
         
-        # Process and Cache
         preview_data = process_file_preview(filepath)
         
+        # Core cache entry initialization
+        DATA_CACHE[cache_id] = {
+            'filepath': filepath,
+            'filename': filename,
+            'schema_overrides': {},
+            'preview': preview_data,
+            'selected_sheet': preview_data.get('selected_sheet') if preview_data else None
+        }
+
         if preview_data and preview_data.get('requires_sheet_selection'):
-            # Cache the filepath temporarily to allow sheet selection
-            DATA_CACHE[cache_id] = {
-                'filepath': filepath,
-                'preview': None,
-                'pending_sheets': preview_data['sheets']
-            }
+            # Update cache for multi-sheet scenario
+            DATA_CACHE[cache_id]['preview'] = None
+            DATA_CACHE[cache_id]['pending_sheets'] = preview_data['sheets']
             return jsonify({
                 'status': 'requires_sheet',
                 'sheets': preview_data['sheets'],
                 'message': 'Plusieurs feuilles détectées.'
             })
-        
-        DATA_CACHE[cache_id] = {
-            'filepath': filepath,
-            'preview': preview_data,
-            'selected_sheet': preview_data.get('selected_sheet') if preview_data else None
-        }
         
         new_notif = add_notification(f"Fichier {file.filename} importé", "info")
         
@@ -228,10 +296,14 @@ def select_sheet():
     try:
         preview_data = process_file_preview(filepath, sheet_name=sheet_name)
         
+        # Keep existing overrides if any
+        overrides = DATA_CACHE[cache_id].get('schema_overrides', {})
+        
         DATA_CACHE[cache_id] = {
             'filepath': filepath,
             'preview': preview_data,
-            'selected_sheet': sheet_name
+            'selected_sheet': sheet_name,
+            'schema_overrides': overrides
         }
         
         new_notif = add_notification(f"Feuille '{sheet_name}' chargée", "info")
@@ -266,8 +338,10 @@ def database_recast():
         
     try:
         # 1. Load the dataframe
+        # 1. Load the dataframe safely (avoiding memory mapping)
         if filepath.endswith('.csv'):
-            df = pl.read_csv(filepath, ignore_errors=True)
+            with open(filepath, 'rb') as f:
+                df = pl.read_csv(f.read(), ignore_errors=True)
         elif filepath.endswith(('.xls', '.xlsx')):
             if selected_sheet:
                 df = pl.read_excel(filepath, sheet_name=selected_sheet)
@@ -282,37 +356,100 @@ def database_recast():
             col_name = mod['column']
             target_type = mod['type']
             if col_name in df.columns:
+                # Clean the column: strip whitespace, handle European decimal commas, remove currency/percent symbols
+                clean_col = pl.col(col_name).cast(pl.String).str.strip_chars()
+                # Remove spaces between numbers (e.g., "1 000") and common non-numeric chars
+                clean_col = clean_col.str.replace_all(r"[^\d.,\-]", "")
+                # Final pass: convert comma to dot for parsing
+                clean_col = clean_col.str.replace(r",", ".")
+
                 if target_type == 'String':
                     expressions.append(pl.col(col_name).cast(pl.String))
                 elif target_type == 'Int64':
-                    # Parse numerical strings accurately if needed, then cast to int
-                    expressions.append(pl.col(col_name).cast(pl.String).str.replace(r",", ".").cast(pl.Float64, strict=False).cast(pl.Int64, strict=False))
+                    # Cast to Float first to handle "12.0" as string, then to Int
+                    expressions.append(clean_col.cast(pl.Float64, strict=False).cast(pl.Int64, strict=False))
                 elif target_type == 'Float64':
-                    expressions.append(pl.col(col_name).cast(pl.String).str.replace(r",", ".").cast(pl.Float64, strict=False))
+                    expressions.append(clean_col.cast(pl.Float64, strict=False))
                     
         if not expressions:
             return jsonify({'status': 'error', 'message': 'Types non supportés'}), 400
             
         # Execute the transformations
+        # Before casting, record non-null counts
+        stats = {}
+        for mod in modifications:
+            col = mod['column']
+            if col in df.columns:
+                stats[col] = {'before': df[col].n_unique() - (1 if df[col].null_count() > 0 else 0)}
+
         df = df.with_columns(expressions)
         
-        # 3. Save back to the file
+        # After casting, check if we lost data
+        warnings = []
+        for mod in modifications:
+            col = mod['column']
+            if col in df.columns:
+                # Ensure schema_overrides exists
+                if 'schema_overrides' not in DATA_CACHE[cache_id]:
+                    DATA_CACHE[cache_id]['schema_overrides'] = {}
+                
+                # Update schema overrides for persistence
+                DATA_CACHE[cache_id]['schema_overrides'][col] = mod['type']
+                
+                non_null_after = df.height - df[col].null_count()
+                if non_null_after == 0 and stats.get(col, {}).get('before', 0) > 0:
+                    warnings.append(f"La colonne '{col}' n'a pas pu être convertie (données non numériques).")
+                elif non_null_after < stats.get(col, {}).get('before', 0) * 0.5:
+                    warnings.append(f"Attention: >50% de perte de données sur '{col}' lors de la conversion.")
+
+        # 3. Save back to the file (safely)
+        temp_filepath = filepath + ".tmp"
         if filepath.endswith('.csv'):
-            df.write_csv(filepath)
+            df.write_csv(temp_filepath)
         elif filepath.endswith('.xlsx'):
-            df.write_excel(filepath, worksheet=selected_sheet or 'Sheet1')
+            df.write_excel(temp_filepath, worksheet=selected_sheet or 'Sheet1')
         elif filepath.endswith('.xls'):
-            # Can't directly write .xls with polars easily, write as xlsx and update filepath
+            temp_filepath = filepath + 'x.tmp' # Save as xlsx
+            df.write_excel(temp_filepath, worksheet=selected_sheet or 'Sheet1')
+            
+        # Atomic replacement to avoid locking issues
+        import shutil
+        if os.path.exists(filepath):
+            # On Windows, we might need multiple attempts or to rename the old one first
+            backup_path = filepath + ".old"
+            if os.path.exists(backup_path):
+                os.remove(backup_path)
+            os.rename(filepath, backup_path)
+            os.rename(temp_filepath, filepath)
+            os.remove(backup_path)
+        else:
+            os.rename(temp_filepath, filepath)
+
+        if filepath.endswith('.xls') and not filepath.endswith('.xlsx'):
             new_filepath = filepath + 'x'
-            df.write_excel(new_filepath, worksheet=selected_sheet or 'Sheet1')
-            os.remove(filepath)
+            os.rename(filepath, new_filepath)
             DATA_CACHE[cache_id]['filepath'] = new_filepath
             filepath = new_filepath
             
-        # 4. Update the preview cache
-        DATA_CACHE[cache_id]['preview'] = process_file_preview(filepath, sheet_name=selected_sheet)
+        # 4. Update the preview cache with overrides
+        DATA_CACHE[cache_id]['preview'] = process_file_preview(
+            filepath, 
+            sheet_name=selected_sheet,
+            schema_overrides=DATA_CACHE[cache_id].get('schema_overrides')
+        )
         
-        return jsonify({'status': 'success', 'message': f'{len(modifications)} variables re-typées avec succès'})
+        msg = f"{len(modifications)} variables re-typées"
+        if warnings:
+            msg += f" ({len(warnings)} alertes)"
+        
+        new_notif = add_notification(msg, "warning" if warnings else "success")
+        
+        return jsonify({
+            'status': 'success', 
+            'message': msg,
+            'warnings': warnings,
+            'notification': new_notif
+        })
         
     except Exception as e:
         logger.error(f"Error recasting columns: {e}", exc_info=True)
@@ -340,32 +477,15 @@ def reports_columns():
     cache_id = session.get('cache_id')
     columns_info = []
     
-    if cache_id and cache_id in DATA_CACHE:
-        filepath = DATA_CACHE[cache_id].get('filepath')
-        if filepath and os.path.exists(filepath):
-            try:
-                selected_sheet = DATA_CACHE[cache_id].get('selected_sheet')
-                if filepath.endswith('.csv'):
-                    df = pl.read_csv(filepath, ignore_errors=True)
-                elif filepath.endswith(('.xls', '.xlsx')):
-                    if selected_sheet:
-                        df = pl.read_excel(filepath, sheet_name=selected_sheet)
-                    else:
-                        df = pl.read_excel(filepath)
-                else:
-                    df = None
-                
-                if df is not None:
-                    for col in df.columns:
-                        dtype = str(df[col].dtype)
-                        is_numeric = df[col].dtype.is_numeric()
-                        columns_info.append({
-                            'name': col,
-                            'dtype': dtype,
-                            'is_numeric': is_numeric
-                        })
-            except Exception as e:
-                print(f"Error reading file for reports: {e}")
+    if cache_id:
+        df = read_cached_df(cache_id)
+        if df is not None:
+            for col in df.columns:
+                columns_info.append({
+                    'name': col,
+                    'dtype': str(df[col].dtype),
+                    'is_numeric': df[col].dtype.is_numeric()
+                })
     
     return jsonify({'status': 'success', 'columns_info': columns_info})
 
@@ -392,12 +512,9 @@ def chart_data():
         return jsonify({'status': 'error', 'message': 'Veuillez sélectionner au moins la variable X'}), 400
     
     try:
-        if filepath.endswith('.csv'):
-            df = pl.read_csv(filepath, ignore_errors=True)
-        elif filepath.endswith(('.xls', '.xlsx')):
-            df = pl.read_excel(filepath)
-        else:
-            return jsonify({'status': 'error', 'message': 'Format non supporté'}), 400
+        df = read_cached_df(cache_id)
+        if df is None:
+            return jsonify({'status': 'error', 'message': 'Impossible de lire les données'}), 500
         
         if x_col not in df.columns:
             return jsonify({'status': 'error', 'message': f'Colonne "{x_col}" introuvable'}), 400
@@ -568,13 +685,10 @@ def pivot_data():
         return jsonify({'status': 'error', 'message': 'Veuillez sélectionner au moins une ligne et une valeur'}), 400
     
     try:
-        if filepath.endswith('.csv'):
-            df = pl.read_csv(filepath, ignore_errors=True)
-        elif filepath.endswith(('.xls', '.xlsx')):
-            df = pl.read_excel(filepath)
-        else:
-            return jsonify({'status': 'error', 'message': 'Format non supporté'}), 400
-        
+        df = read_cached_df(cache_id)
+        if df is None:
+            return jsonify({'status': 'error', 'message': 'Impossible de lire les données'}), 500
+            
         # Validate columns
         all_cols = row_cols + ([col_col] if col_col else []) + [value_col]
         for c in all_cols:
