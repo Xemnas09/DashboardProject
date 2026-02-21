@@ -136,64 +136,121 @@ export default function Database({ addNotification }) {
     };
 
     const colDefs = useMemo(() => {
-        if (!dataPreview || !dataPreview.columns) return [];
-        return dataPreview.columns.map(col => ({
-            field: col.field,
-            headerName: col.title,
-            sortable: true,
-            filter: true,
-            resizable: true,
-            flex: 1,
-            minWidth: 120
-        }));
+        if (!dataPreview || !dataPreview.columns || !dataPreview.columns_info) return [];
+
+        return dataPreview.columns.map(col => {
+            const info = dataPreview.columns_info.find(i => i.name === col.field);
+            const baseDef = {
+                field: col.field,
+                headerName: col.title,
+                sortable: true,
+                filter: true,
+                resizable: true,
+                flex: 1,
+                minWidth: 150,
+            };
+
+            // Enhanced Type Detection
+            const isNumeric = info?.is_numeric;
+            const isCategorical = info?.dtype === 'String' || info?.dtype === 'Utf8';
+
+            if (isNumeric) {
+                return {
+                    ...baseDef,
+                    cellClass: 'font-mono text-bank-700 font-medium',
+                    headerClass: 'header-numeric'
+                };
+            }
+
+            if (isCategorical) {
+                // Logic-based Rendering: Only badge if it looks like a label
+                // (e.g., short string, distinct values < 20% of rows or < 15 unique values)
+                const samples = dataPreview.data.map(r => String(r[col.field] || ''));
+                const distinctCount = new Set(samples).size;
+                const avgLength = samples.reduce((acc, s) => acc + s.length, 0) / samples.length;
+
+                const isLabelLike = avgLength < 15 && (distinctCount < 20 || distinctCount < dataPreview.data.length * 0.2);
+
+                if (isLabelLike) {
+                    return {
+                        ...baseDef,
+                        cellRenderer: (params) => {
+                            if (!params.value) return null;
+                            const str = String(params.value);
+                            // Simple hash for consistent professional colors
+                            let hash = 0;
+                            for (let i = 0; i < str.length; i++) {
+                                hash = str.charCodeAt(i) + ((hash << 5) - hash);
+                            }
+                            const colorClasses = ['badge-indigo', 'badge-emerald', 'badge-slate', 'badge-rose', 'badge-amber', 'badge-violet'];
+                            const colorClass = colorClasses[Math.abs(hash) % colorClasses.length];
+
+                            return (
+                                <div className="flex items-center h-full">
+                                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-tighter border ${colorClass} shadow-sm transform transition-transform hover:scale-110`}>
+                                        {str}
+                                    </span>
+                                </div>
+                            );
+                        }
+                    };
+                }
+            }
+
+            return baseDef;
+        });
     }, [dataPreview]);
 
     return (
-        <div className="h-full flex flex-col pt-2 pb-6 animate-fade-in-up">
+        <div className="h-full flex flex-col pt-2 pb-6 animate-fade-in-up relative overflow-hidden">
+            {/* Ambient Background Blobs */}
+            <div className="bg-blob bg-bank-200" style={{ top: '-10%', right: '-5%' }}></div>
+            <div className="bg-blob bg-violet-200" style={{ bottom: '-10%', left: '-5%', animationDelay: '-5s' }}></div>
+
             {loading ? (
-                <div className="flex-1 bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-8">
-                    <div className="animate-pulse space-y-4">
-                        <div className="h-10 bg-gray-200 rounded w-full"></div>
-                        <div className="h-12 bg-gray-200 rounded w-full"></div>
-                        <div className="h-12 bg-gray-200 rounded w-full"></div>
-                        <div className="h-12 bg-gray-200 rounded w-full"></div>
+                <div className="flex-1 premium-glass rounded-3xl p-8 flex items-center justify-center">
+                    <div className="flex flex-col items-center gap-4">
+                        <div className="w-12 h-12 border-4 border-bank-200 border-t-bank-600 rounded-full animate-spin"></div>
+                        <p className="text-bank-700 font-bold animate-pulse">Chargement de votre univers...</p>
                     </div>
                 </div>
             ) : dataPreview && dataPreview.data ? (
-                <div className="flex-1 bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
-                    <div className="px-6 py-5 border-b border-gray-100 bg-white/50 flex justify-between items-center flex-shrink-0">
-                        <div className="flex items-center gap-5">
-                            <div className="p-3 bg-bank-50 rounded-xl text-bank-600 shadow-sm border border-bank-100">
+                <div className="flex-1 premium-glass rounded-3xl overflow-hidden flex flex-col">
+                    <div className="px-8 py-6 border-b border-white/20 bg-white/30 flex justify-between items-center flex-shrink-0">
+                        <div className="flex items-center gap-6">
+                            <div className="p-4 bg-gradient-to-br from-bank-500 to-bank-700 rounded-2xl text-white shadow-lg shadow-bank-200/50 transform transition-transform hover:scale-110">
                                 <FileType2 className="w-6 h-6" />
                             </div>
                             <div className="flex flex-col">
-                                <h2 className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">Base de Données</h2>
-                                <span className="text-sm font-medium text-gray-400 flex items-center gap-1.5">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-                                    {dataPreview.total_rows.toLocaleString()} lignes importées
-                                </span>
+                                <h2 className="text-2xl font-black text-gray-900 tracking-tight">Explorateur de Données</h2>
+                                <div className="flex items-center gap-2">
+                                    <span className="flex h-2 w-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
+                                    <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">
+                                        {dataPreview.total_rows.toLocaleString()} entrées actives
+                                    </span>
+                                </div>
                             </div>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-4">
                             <button
                                 onClick={fetchColumnsInfo}
-                                className="inline-flex items-center px-5 py-2.5 text-sm font-bold rounded-xl text-bank-700 bg-bank-100/80 hover:bg-bank-200 transition-all hover:scale-105 active:scale-95 shadow-sm border border-bank-200/50"
+                                className="group inline-flex items-center px-6 py-3 text-sm font-black rounded-2xl text-white bg-gradient-to-r from-bank-600 to-bank-500 hover:from-bank-500 hover:to-bank-400 transition-all hover:shadow-xl hover:shadow-bank-200 hover:-translate-y-0.5 active:translate-y-0"
                             >
-                                <Settings2 className="mr-2 h-4 w-4" />
+                                <Settings2 className="mr-2 h-4 w-4 transition-transform group-hover:rotate-90" />
                                 Configurer les types
                             </button>
                             <button
                                 onClick={() => setShowDeleteModal(true)}
-                                className="inline-flex items-center px-5 py-2.5 text-sm font-bold rounded-xl text-red-700 bg-red-100/50 hover:bg-red-200 transition-all hover:scale-105 active:scale-95 shadow-sm border border-red-200/50"
+                                className="inline-flex items-center px-6 py-3 text-sm font-black rounded-2xl text-red-600 bg-white hover:bg-red-50 transition-all border border-red-100/50 hover:shadow-lg hover:-translate-y-0.5"
                             >
                                 <Trash2 className="mr-2 h-4 w-4" />
-                                Nettoyer la base
+                                Réinitialiser
                             </button>
                         </div>
                     </div>
 
-                    <div className="flex-1 min-h-0 bg-white p-4">
-                        <div className="h-full ag-theme-quartz shadow-inner rounded-xl overflow-hidden border border-gray-100">
+                    <div className="flex-1 min-h-0 bg-transparent p-6">
+                        <div className="h-full ag-theme-quartz overflow-hidden">
                             <AgGridReact
                                 rowData={dataPreview.data}
                                 columnDefs={colDefs}
@@ -202,7 +259,6 @@ export default function Database({ addNotification }) {
                                 animateRows={true}
                                 onGridReady={(params) => params.api.sizeColumnsToFit()}
                                 defaultColDef={{
-                                    minWidth: 100,
                                     cellStyle: { display: 'flex', alignItems: 'center' }
                                 }}
                             />

@@ -374,33 +374,43 @@ def database_recast():
         if not expressions:
             return jsonify({'status': 'error', 'message': 'Types non supportés'}), 400
             
-        # Execute the transformations
-        # Before casting, record non-null counts
-        stats = {}
+        # Execute a "Dry-Run" for validation
+        test_df = df.with_columns(expressions)
+        
+        # Validate for impossible conversions (100% data loss)
         for mod in modifications:
             col = mod['column']
             if col in df.columns:
-                stats[col] = {'before': df[col].n_unique() - (1 if df[col].null_count() > 0 else 0)}
+                before_count = df[col].n_unique() - (1 if df[col].null_count() > 0 else 0)
+                after_count = test_df[col].n_unique() - (1 if test_df[col].null_count() > 0 else 0)
+                
+                if before_count > 0 and after_count == 0:
+                    return jsonify({
+                        'status': 'error', 
+                        'message': f"Conversion impossible pour '{col}' : toutes les données seraient perdues (texte incompatible avec un nombre)."
+                    }), 400
 
-        df = df.with_columns(expressions)
+        # If validation passes, proceed with official conversion
+        df = test_df
         
-        # After casting, check if we lost data
+        # Update schema overrides for persistence
+        for mod in modifications:
+            col = mod['column']
+            if col in df.columns:
+                if 'schema_overrides' not in DATA_CACHE[cache_id]:
+                    DATA_CACHE[cache_id]['schema_overrides'] = {}
+                DATA_CACHE[cache_id]['schema_overrides'][col] = mod['type']
+        
+        # Check for partial data loss warnings
         warnings = []
         for mod in modifications:
             col = mod['column']
             if col in df.columns:
-                # Ensure schema_overrides exists
-                if 'schema_overrides' not in DATA_CACHE[cache_id]:
-                    DATA_CACHE[cache_id]['schema_overrides'] = {}
-                
-                # Update schema overrides for persistence
-                DATA_CACHE[cache_id]['schema_overrides'][col] = mod['type']
-                
-                non_null_after = df.height - df[col].null_count()
-                if non_null_after == 0 and stats.get(col, {}).get('before', 0) > 0:
-                    warnings.append(f"La colonne '{col}' n'a pas pu être convertie (données non numériques).")
-                elif non_null_after < stats.get(col, {}).get('before', 0) * 0.5:
-                    warnings.append(f"Attention: >50% de perte de données sur '{col}' lors de la conversion.")
+                before_val_count = df.height - df[col].null_count() # Approximate before/after
+                # Note: df is already casted here, so we need to compare with original stats if we want precise delta
+                # But for a simple warning, we can just check null count after cast
+                if df[col].null_count() > (df.height * 0.5):
+                    warnings.append(f"Attention: >50% de données nulles dans '{col}' après conversion.")
 
         # 3. Save back to the file (safely)
         temp_filepath = filepath + ".tmp"
