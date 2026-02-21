@@ -25,18 +25,25 @@ DATA_CACHE = {}
 def add_notification(message, category='info'):
     if 'notifications' not in session:
         session['notifications'] = []
+    if 'notifications_history' not in session:
+        session['notifications_history'] = []
     
-    # Add new notification
+    timestamp = datetime.now().strftime('%H:%M:%S')
     new_notif = {
         'message': message,
         'category': category,
-        'time': datetime.now().strftime('%H:%M')
+        'time': timestamp
     }
-    session['notifications'].insert(0, new_notif)
     
-    # Keep only last 5
+    # Toast notifications (last 5)
+    session['notifications'].insert(0, new_notif)
     if len(session['notifications']) > 5:
         session['notifications'] = session['notifications'][:5]
+    
+    # Full History (last 50)
+    session['notifications_history'].insert(0, new_notif)
+    if len(session['notifications_history']) > 50:
+        session['notifications_history'] = session['notifications_history'][:50]
     
     session['has_unread'] = True
     session.modified = True
@@ -48,6 +55,15 @@ def add_notification(message, category='info'):
 def mark_notifications_read():
     session['has_unread'] = False
     return jsonify({'status': 'success'})
+
+@app.route('/api/notifications/history', methods=['GET'])
+def get_notifications_history():
+    if 'user' not in session:
+        return jsonify({'status': 'error', 'message': 'Non autorisé'}), 401
+    return jsonify({
+        'status': 'success', 
+        'history': session.get('notifications_history', [])
+    })
 
 # Config for uploads
 UPLOAD_FOLDER = 'uploads'
@@ -113,7 +129,7 @@ def clear_data():
         
     return jsonify({'status': 'success'})
 
-def process_file_preview(filepath, sheet_name=None, schema_overrides=None):
+def process_file_preview(filepath, sheet_name=None, schema_overrides=None, row_limit=2000):
     try:
         # Check for multiple sheets in Excel
         if filepath.endswith(('.xls', '.xlsx')) and sheet_name is None:
@@ -152,6 +168,8 @@ def process_file_preview(filepath, sheet_name=None, schema_overrides=None):
             if cast_exprs:
                 df = df.with_columns(cast_exprs)
 
+        total_rows = df.height
+
         # Extract column info for the UI
         columns_info = []
         for col in df.columns:
@@ -161,8 +179,13 @@ def process_file_preview(filepath, sheet_name=None, schema_overrides=None):
                 'is_numeric': df[col].dtype.is_numeric()
             })
 
-        limit = 2000 
-        safe_df = df.head(limit).select(pl.all().cast(pl.String))
+        # Apply limit if row_limit is not None
+        if row_limit:
+            df_preview = df.head(row_limit)
+        else:
+            df_preview = df
+        
+        safe_df = df_preview.select(pl.all().cast(pl.String))
         
         return {
             'requires_sheet_selection': False,
@@ -470,12 +493,23 @@ def database_view():
     if 'user' not in session:
         return jsonify({'status': 'error', 'message': 'Non autorisé'}), 401
         
-    data_preview = None
+    full_data = request.args.get('full_data') == 'true'
     cache_id = session.get('cache_id')
     
-    if cache_id and cache_id in DATA_CACHE:
-         data_preview = DATA_CACHE[cache_id].get('preview')
-            
+    if not cache_id or cache_id not in DATA_CACHE:
+         return jsonify({'status': 'success', 'data_preview': None})
+    
+    # If full data is requested, we might need to re-process if the current cache is limited
+    if full_data:
+        filepath = DATA_CACHE[cache_id].get('filepath')
+        selected_sheet = DATA_CACHE[cache_id].get('selected_sheet')
+        overrides = DATA_CACHE[cache_id].get('schema_overrides')
+        
+        # We don't overwrite the standard 'preview' cache to keep it fast for normal navigation
+        full_preview = process_file_preview(filepath, sheet_name=selected_sheet, schema_overrides=overrides, row_limit=None)
+        return jsonify({'status': 'success', 'data_preview': full_preview})
+    
+    data_preview = DATA_CACHE[cache_id].get('preview')
     return jsonify({'status': 'success', 'data_preview': data_preview})
 
 
@@ -534,11 +568,14 @@ def chart_data():
         x_is_numeric = df[x_col].dtype.is_numeric()
         y_is_numeric = df[y_col].dtype.is_numeric() if y_col else False
         
+        full_data = data.get('full_data') == True
+        limit = 30 if not full_data else 200
+
         # === FREQUENCY MODE (no Y column) ===
         if not y_col:
             df = df.drop_nulls(subset=[x_col])
             freq_df = df.group_by(x_col).agg(pl.count().alias('count'))
-            freq_df = freq_df.sort('count', descending=True).head(30)
+            freq_df = freq_df.sort('count', descending=True).head(limit)
             
             labels = [str(row[x_col]) for row in freq_df.to_dicts()]
             values = [int(row['count']) for row in freq_df.to_dicts()]
@@ -724,10 +761,13 @@ def pivot_data():
         if agg_func in ['sum', 'mean'] and not is_numeric:
             return jsonify({'status': 'error', 'message': f'La colonne "{value_col}" doit être numérique pour une agrégation de type {agg_func}'}), 400
 
+        full_data = data.get('full_data') == True
+        max_cardinality = 60 if not full_data else 200
+
         if col_col:
-            # Check cardinality of the pivot column to prevent browser crash (Limit to 60)
+            # Check cardinality of the pivot column to prevent browser crash (Limit to 60/200)
             cardinality = df[col_col].n_unique()
-            if cardinality > 60:
+            if cardinality > max_cardinality:
                  return jsonify({'status': 'error', 'message': f'Cardinalité trop élevée ({cardinality}). Le champ "{col_col}" contient trop de modalités différentes pour un pivot lisible.'}), 400
             
             # Pivot table with column header

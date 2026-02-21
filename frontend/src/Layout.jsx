@@ -11,6 +11,25 @@ export default function Layout({ theme, setTheme, notifications, removeNotificat
 
     const navigate = useNavigate();
     const unreadCount = notifications.length;
+    const [notifHistory, setNotifHistory] = useState([]);
+
+    const fetchNotifHistory = async () => {
+        try {
+            const res = await fetch('/api/notifications/history');
+            if (res.ok) {
+                const data = await res.json();
+                setNotifHistory(data.history || []);
+            }
+        } catch (e) {
+            console.error("Error fetching history:", e);
+        }
+    };
+
+    useEffect(() => {
+        if (showNotifMenu) {
+            fetchNotifHistory();
+        }
+    }, [showNotifMenu]);
 
     useEffect(() => {
         const handleResize = () => {
@@ -108,8 +127,9 @@ export default function Layout({ theme, setTheme, notifications, removeNotificat
                                             <h3 className="text-sm font-semibold text-gray-900">Notifications</h3>
                                         </div>
                                         <div className="max-h-80 overflow-y-auto w-full flex flex-col">
+                                            <div className="px-4 py-2 bg-gray-50/50 text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100">Récentes</div>
                                             {notifications.length === 0 ? (
-                                                <div className="px-4 py-8 text-sm text-gray-500 text-center">Aucune notification</div>
+                                                <div className="px-4 py-4 text-sm text-gray-500 text-center">Aucune notification</div>
                                             ) : (
                                                 notifications.map(n => (
                                                     <div key={n.id} className="px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors animate-fade-in-down">
@@ -118,9 +138,24 @@ export default function Layout({ theme, setTheme, notifications, removeNotificat
                                                                 <div className={`w-2 h-2 rounded-full ${n.category === 'error' ? 'bg-red-500' : 'bg-bank-500'}`}></div>
                                                             </div>
                                                             <div>
-                                                                <p className="text-sm text-gray-800 leading-snug">{n.message}</p>
+                                                                <p className="text-sm text-gray-800 leading-snug font-medium">{n.message}</p>
                                                                 <p className="text-[10px] text-gray-400 mt-1">{n.time}</p>
                                                             </div>
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            )}
+
+                                            <div className="px-4 py-2 bg-gray-50/50 text-[10px] font-bold text-gray-400 uppercase tracking-wider border-y border-gray-100">Historique de session</div>
+                                            {notifHistory.length === 0 ? (
+                                                <div className="px-4 py-4 text-xs text-gray-400 text-center italic">Historique vide</div>
+                                            ) : (
+                                                notifHistory.map((h, i) => (
+                                                    <div key={`hist-${i}`} className="px-4 py-2 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors opacity-70">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-[10px] font-mono text-gray-400 w-16">{h.time}</span>
+                                                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${h.category === 'error' ? 'bg-red-300' : 'bg-gray-300'}`}></span>
+                                                            <p className="text-xs text-gray-600 truncate">{h.message}</p>
                                                         </div>
                                                     </div>
                                                 ))
