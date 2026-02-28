@@ -357,3 +357,27 @@ async def recommend_chart_type(
     )
     
     return {"status": "success", "recommendations": recommendations}
+
+
+@router.post("/api/chart-data/interpret")
+@limiter.limit("20/minute")
+async def interpret_chart_data(
+    request: Request,
+    body: LLMInterpretRequest,
+    user: TokenPayload = Depends(get_current_user)
+):
+    """
+    Appelle Gemini Flash Lite pour interpréter un résumé de données de graphique en langage naturel.
+    """
+    interpretation = await llm_interpreter.interpret_chart(
+        chart_type=body.chart_type,
+        x_column=body.x_column,
+        y_column=body.y_column,
+        summary=body.summary,
+        language=body.language
+    )
+    
+    return {
+        "status": "success",
+        "interpretation": interpretation
+    }
