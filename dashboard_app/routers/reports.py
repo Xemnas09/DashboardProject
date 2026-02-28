@@ -8,10 +8,11 @@ from fastapi import APIRouter, Request, Depends
 from loguru import logger
 
 from schemas.auth import TokenPayload
-from schemas.reports import ChartDataRequest, PivotDataRequest
+from schemas.reports import ChartDataRequest, PivotDataRequest, LLMInterpretRequest, RecommendRequest, RecommendResponse
 from dependencies import get_current_user, limiter
-from exceptions import ValidationException, NotFoundException
+from exceptions import ValidationException, NotFoundException, SessionExpiredException
 from services.file_processor import read_cached_df, apply_filters
+from services.llm_interpreter import llm_interpreter
 
 router = APIRouter(tags=["Reports"])
 
@@ -32,8 +33,10 @@ async def reports_columns(user: TokenPayload = Depends(get_current_user)):
     entry = await cache_manager.get(user.cache_id)
     columns_info = []
 
+    row_count = 0
     if entry:
         df = _get_df(entry)
+        row_count = len(df)
         for col in df.columns:
             columns_info.append({
                 'name': col,
@@ -41,7 +44,7 @@ async def reports_columns(user: TokenPayload = Depends(get_current_user)):
                 'is_numeric': df[col].dtype.is_numeric(),
             })
 
-    return {"status": "success", "columns_info": columns_info}
+    return {"status": "success", "columns_info": columns_info, "row_count": row_count}
 
 
 # ---------------------------------------------------------------------------
@@ -57,7 +60,7 @@ async def chart_data(
     from main import cache_manager
     entry = await cache_manager.get(user.cache_id)
     if not entry:
-        raise NotFoundException("Aucune donnée disponible")
+        raise SessionExpiredException()
 
     if not entry.filepath:
         raise NotFoundException("Fichier introuvable")
@@ -219,7 +222,7 @@ async def pivot_data(
     from main import cache_manager
     entry = await cache_manager.get(user.cache_id)
     if not entry:
-        raise NotFoundException("Aucune donnée disponible")
+        raise SessionExpiredException()
 
     if not entry.filepath:
         raise NotFoundException("Fichier introuvable")
@@ -333,3 +336,24 @@ async def pivot_data(
         "totals": totals,
         "row_count": len(rows),
     }
+
+@router.post("/api/chart-data/recommend", response_model=RecommendResponse)
+@limiter.limit("20/minute")
+async def recommend_chart_type(
+    request: Request,
+    body: RecommendRequest,
+    user: TokenPayload = Depends(get_current_user)
+):
+    """
+    Recommande le meilleur type de graphique selon les colonnes sélectionnées via IA.
+    """
+    recommendations = await llm_interpreter.recommend(
+        x_col=body.x_column,
+        x_type=body.x_type or "unknown",
+        y_col=body.y_column or "",
+        y_type=body.y_type or "unknown",
+        row_count=body.row_count,
+        language=body.language
+    )
+    
+    return {"status": "success", "recommendations": recommendations}

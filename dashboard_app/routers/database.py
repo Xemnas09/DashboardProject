@@ -11,7 +11,7 @@ from loguru import logger
 from schemas.auth import TokenPayload
 from schemas.database import RecastRequest, CalculatedFieldRequest
 from dependencies import get_current_user, limiter
-from exceptions import ValidationException, NotFoundException
+from exceptions import ValidationException, NotFoundException, SessionExpiredException
 from services.file_processor import process_file_preview, read_cached_df, apply_filters
 from services.formula_parser import parse_formula
 from services.notifications import notification_store
@@ -72,7 +72,7 @@ async def database_recast(
     from main import cache_manager
     entry = await cache_manager.get(user.cache_id)
     if not entry:
-        raise NotFoundException("Aucune donnée disponible")
+        raise SessionExpiredException()
 
     filepath = entry.filepath
     selected_sheet = entry.selected_sheet
@@ -193,7 +193,7 @@ async def calculated_field(
     from main import cache_manager
     entry = await cache_manager.get(user.cache_id)
     if not entry:
-        raise NotFoundException("Aucune donnée disponible")
+        raise SessionExpiredException()
 
     new_col_name = body.name.strip()
     formula = body.formula.strip()

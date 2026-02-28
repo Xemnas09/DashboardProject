@@ -6,7 +6,7 @@ import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-quartz.css';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
-import { BarChart3, Settings2, Download, Table as TableIcon, AlertCircle, Database as DatabaseIcon, Filter, X as XIcon } from 'lucide-react';
+import { BarChart3, Settings2, Download, Table as TableIcon, AlertCircle, Database as DatabaseIcon, Filter, X as XIcon, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Reports({ addNotification }) {
@@ -62,6 +62,78 @@ export default function Reports({ addNotification }) {
     const generatePivotRef = useRef(null);
     const isFirstRender = useRef(true);
 
+    const [totalRows, setTotalRows] = useState(0);
+
+    // LLM States
+    const [llmInterpretation, setLlmInterpretation] = useState('');
+    const [llmLoading, setLlmLoading] = useState(false);
+    const [llmError, setLlmError] = useState('');
+    const [llmRecommendations, setLlmRecommendations] = useState([]);
+    const [llmRecLoading, setLlmRecLoading] = useState(false);
+    const [llmRecError, setLlmRecError] = useState('');
+
+    // ====================== LLM LOGIC ======================
+    const handleInterpret = async () => {
+        if (!chartData) return;
+        setLlmLoading(true); setLlmError(''); setLlmInterpretation('');
+
+        const isYNum = isNumeric(yColType) || (!yColType);
+        let summary = {};
+        if (isYNum && chartData.values) {
+            summary = {
+                min: Math.min(...chartData.values),
+                max: Math.max(...chartData.values),
+                mean: Math.round(chartData.values.reduce((a, b) => a + b, 0) / chartData.values.length),
+                trend: chartData.values[0] < chartData.values[chartData.values.length - 1] ? 'ascendant' : 'descendant',
+                top_values: chartData.labels.map((l, i) => ({ label: l, value: chartData.values[i] })).sort((a, b) => b.value - a.value).slice(0, 3)
+            };
+        } else if (chartData.data && Array.isArray(chartData.data) && chartData.data[0]?.value !== undefined) {
+            const vals = chartData.data.map(d => d.value);
+            summary = { min: Math.min(...vals), max: Math.max(...vals) };
+        }
+
+        try {
+            const res = await fetch('/api/chart-data/interpret', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chart_type: chartType, x_column: chartX, y_column: chartY,
+                    summary: summary, language: 'fr'
+                })
+            });
+            const data = await res.json();
+            if (res.ok && data.status === 'success') {
+                setLlmInterpretation(data.interpretation);
+            } else if (res.status === 503) {
+                setLlmError("Le service d'interprétation est temporairement indisponible. Réessayez dans quelques instants.");
+            } else {
+                setLlmError("Erreur lors de l'interprétation.");
+            }
+        } catch { setLlmError("Erreur de connexion."); }
+        setLlmLoading(false);
+    };
+
+    const handleRecommend = async () => {
+        if (!chartX) return;
+        setLlmRecLoading(true); setLlmRecError(''); setLlmRecommendations([]);
+        try {
+            const res = await fetch('/api/chart-data/recommend', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    x_column: chartX, x_type: getFriendlyType(xColType),
+                    y_column: chartY, y_type: getFriendlyType(yColType),
+                    row_count: totalRows, language: 'fr'
+                })
+            });
+            const data = await res.json();
+            if (res.ok && data.status === 'success') {
+                setLlmRecommendations(data.recommendations || []);
+            } else if (res.status === 503) {
+                setLlmRecError("503");
+            }
+        } catch { }
+        setLlmRecLoading(false);
+    };
+
     // Auto-refresh when filters change (skip first render to avoid double-fetch on mount)
     useEffect(() => {
         if (isFirstRender.current) {
@@ -105,6 +177,7 @@ export default function Reports({ addNotification }) {
             if (res.ok) {
                 const data = await res.json();
                 setColumnsInfo(data.columns_info || []);
+                setTotalRows(data.row_count || 0);
             }
         } catch (e) {
             console.error(e);
@@ -130,6 +203,7 @@ export default function Reports({ addNotification }) {
         setChartLoading(true);
         setChartError('');
         setChartData(null);
+        setLlmInterpretation('');
 
         try {
             const res = await fetch('/api/chart-data', {
@@ -496,8 +570,15 @@ export default function Reports({ addNotification }) {
                                     {columnsInfo.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
                                 </select>
                             </div>
-                            <div className="md:col-span-2">
-                                <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Type</label>
+                            <div className="md:col-span-2 relative">
+                                <div className="flex justify-between items-center mb-2">
+                                    <label className="block text-xs font-black text-gray-400 uppercase tracking-widest">Type</label>
+                                    {chartX && !llmRecError && (
+                                        <button type="button" onClick={handleRecommend} disabled={llmRecLoading} className="text-[10px] text-bank-600 font-bold hover:underline flex items-center">
+                                            {llmRecLoading ? <span className="animate-spin mr-1">↻</span> : '✨ Recommander'}
+                                        </button>
+                                    )}
+                                </div>
                                 <select value={chartType} onChange={e => setChartType(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-bank-500 transition-all font-bold text-gray-700">
                                     <option value="bar" disabled={!availableCharts.includes('bar')}>📊 Barres {(!availableCharts.includes('bar') && chartX) ? '(Y Numérique requis)' : ''}</option>
                                     <option value="line" disabled={!availableCharts.includes('line')}>📈 Ligne {(!availableCharts.includes('line') && chartX) ? '(Y Numérique requis)' : ''}</option>
@@ -517,25 +598,67 @@ export default function Reports({ addNotification }) {
                             {/* Option tags removed for limited preview */}
                         </div>
                         {chartError && <p className="mt-4 text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-100">{chartError}</p>}
+
+                        {llmRecommendations.length > 0 && (
+                            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in-up">
+                                {llmRecommendations.map((rec, i) => (
+                                    <div
+                                        key={i}
+                                        onClick={() => setChartType(rec.chart_type)}
+                                        className="p-4 border border-bank-100 rounded-2xl bg-gradient-to-br from-bank-50/30 to-white hover:border-bank-400 hover:shadow-lg transition-all cursor-pointer group"
+                                    >
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="font-black text-bank-800 uppercase tracking-wide flex items-center gap-2">
+                                                <BarChart3 className="w-4 h-4 text-bank-600 group-hover:scale-110 transition-transform" /> {rec.chart_type}
+                                            </span>
+                                            <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded-full ${rec.confidence === 'high' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                                {rec.confidence === 'high' ? 'Recommandé' : 'Alternatif'}
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-gray-500 leading-relaxed font-medium">
+                                            {rec.reason}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 overflow-hidden min-h-[500px] flex flex-col relative">
                         {chartData ? (
-                            <div className="p-4 flex-1 w-full h-full">
-                                <ReactECharts
-                                    ref={echartsRef}
-                                    option={getChartOptions()}
-                                    notMerge={true}
-                                    style={{ height: '500px', width: '100%' }}
-                                    onEvents={{
-                                        'click': (params) => {
-                                            // Only filter if clicking a data point/axis label and we have an X column
-                                            if (params.name && chartX) {
-                                                setGlobalFilters(prev => ({ ...prev, [chartX]: params.name }));
+                            <div className="flex-1 flex flex-col w-full h-full">
+                                <div className="p-4 flex-1 w-full">
+                                    <ReactECharts
+                                        ref={echartsRef}
+                                        option={getChartOptions()}
+                                        notMerge={true}
+                                        style={{ height: '500px', width: '100%' }}
+                                        onEvents={{
+                                            'click': (params) => {
+                                                if (params.name && chartX) {
+                                                    setGlobalFilters(prev => ({ ...prev, [chartX]: params.name }));
+                                                }
                                             }
-                                        }
-                                    }}
-                                />
+                                        }}
+                                    />
+                                </div>
+                                {!llmInterpretation && (
+                                    <div className="p-4 border-t border-gray-50 flex flex-col items-center bg-gray-50/30 relative z-10 w-full block">
+                                        <button onClick={handleInterpret} disabled={llmLoading} className="px-6 py-2.5 bg-white border border-bank-200 text-bank-700 font-bold text-sm rounded-xl shadow-sm hover:bg-bank-50 hover:border-bank-300 transition-all flex items-center">
+                                            {llmLoading ? <span className="w-4 h-4 rounded-full border-2 border-t-bank-600 border-r-transparent animate-spin mr-2"></span> : <Sparkles className="w-4 h-4 mr-2" />}
+                                            Interpréter ce graphique
+                                        </button>
+                                        {llmError && !llmError.includes("503") && <p className="text-xs font-bold text-red-500 mt-3">{llmError}</p>}
+                                        {llmError && llmError.includes("temporairement indisponible") && <p className="text-xs font-bold text-orange-500 mt-3 bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-100">{llmError}</p>}
+                                    </div>
+                                )}
+                                {llmInterpretation && (
+                                    <div className="p-6 border-t border-bank-100 bg-gradient-to-br from-bank-50/80 to-white relative z-10 animate-fade-in-up w-full">
+                                        <button onClick={() => setLlmInterpretation('')} className="absolute top-4 right-4 text-xs font-bold uppercase tracking-widest text-gray-400 hover:text-gray-700 transition-colors">Fermer ✕</button>
+                                        <h4 className="font-black text-bank-800 mb-3 flex items-center text-sm uppercase tracking-wider"><Sparkles className="w-4 h-4 mr-2 text-bank-600" /> Analyse Intelligente</h4>
+                                        <p className="text-gray-700 text-sm leading-relaxed font-medium">{llmInterpretation}</p>
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <div className="flex-1 flex flex-col items-center justify-center py-20 text-gray-500 font-medium">

@@ -61,3 +61,8 @@ class InvalidFileTypeException(AppException):
 class RateLimitException(AppException):
     def __init__(self):
         super().__init__("RATE_LIMITED", "Trop de requêtes. Réessayez dans un instant.", 429)
+
+
+class LLMUnavailableException(AppException):
+    def __init__(self, message: str = "Le service d'interprétation LLM est actuellement indisponible."):
+        super().__init__(code="LLM_UNAVAILABLE", message=message, status_code=503)

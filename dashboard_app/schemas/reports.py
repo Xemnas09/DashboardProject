@@ -1,5 +1,6 @@
 """Schemas for report endpoints."""
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from typing import Any
 from typing import Literal
 
 
@@ -16,9 +17,33 @@ class PivotValueSpec(BaseModel):
 
 
 class PivotDataRequest(BaseModel):
-    row_cols: list[str]
-    col_cols: list[str] = []
-    value_cols: list[PivotValueSpec] = []
-    value_col: str | None = None      # backwards compat
-    agg_func: str | None = None       # backwards compat
+    row_cols: list[str] = Field(default_factory=list)
+    col_cols: list[str] = Field(default_factory=list)
+    value_cols: list[PivotValueSpec] = Field(default_factory=list)
+    limit: int | None = None
+
+class LLMInterpretRequest(BaseModel):
+    chart_type: str
+    x_column: str
+    y_column: str | None = None
+    summary: dict[str, Any]
+    language: str = "fr"
+
+class ChartRecommendation(BaseModel):
+    chart_type: str
+    confidence: Literal["high", "medium", "low"]
+    reason: str
+
+class RecommendRequest(BaseModel):
+    x_column: str
+    x_type: str | None = None
+    y_column: str | None = None
+    y_type: str | None = None
+    row_count: int = 0
+    language: str = "fr"
+
+class RecommendResponse(BaseModel):
+    status: str = "success"
+    recommendations: list[ChartRecommendation]
+    agg_func: str | None = None
     filters: dict = {}

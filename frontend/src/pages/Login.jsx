@@ -157,13 +157,10 @@ export default function Login({ addNotification }) {
                         </div>
 
                         <div>
-                            <div className="flex items-center justify-between mb-2">
+                            <div className="mb-2">
                                 <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-gray-400" htmlFor="password">
                                     Mot de passe
                                 </label>
-                                <a href="#" className="text-[10px] font-bold text-bank-600 hover:text-bank-700 uppercase tracking-wider transition-colors">
-                                    Oublié ?
-                                </a>
                             </div>
                             <div className="relative">
                                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300">
