@@ -8,9 +8,13 @@ import Reports from './pages/Reports';
 
 function ProtectedRoute({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [connectionError, setConnectionError] = useState(false);
 
   useEffect(() => {
-    const checkAuth = async () => {
+    let timeoutId;
+
+    const checkAuth = async (attempt = 1) => {
       try {
         const res = await fetch('/api/status');
         if (res.ok) {
@@ -20,14 +24,36 @@ function ProtectedRoute({ children }) {
           setIsAuthenticated(false);
         }
       } catch (e) {
-        setIsAuthenticated(false);
+        if (attempt < 3) {
+          setRetryCount(attempt);
+          timeoutId = setTimeout(() => checkAuth(attempt + 1), 1000);
+        } else {
+          setConnectionError(true);
+        }
       }
     };
     checkAuth();
+
+    return () => clearTimeout(timeoutId);
   }, []);
 
+  if (connectionError) {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-gray-50 p-6 text-center">
+        <svg className="w-12 h-12 text-red-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        <h2 className="text-xl font-bold text-gray-800 mb-2">Impossible de joindre le serveur</h2>
+        <p className="text-gray-500 font-medium">Vérifiez que le backend est démarré.</p>
+      </div>
+    );
+  }
+
   if (isAuthenticated === null) {
-    return <div className="h-screen w-screen flex items-center justify-center bg-gray-50"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-bank-600"></div></div>;
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-bank-600 mb-4"></div>
+        {retryCount > 0 && <p className="text-sm font-bold text-gray-400 animate-pulse tracking-wide">Connexion au serveur...</p>}
+      </div>
+    );
   }
 
   return isAuthenticated ? children : <Navigate to="/login" replace />;

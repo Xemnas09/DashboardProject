@@ -12,7 +12,11 @@ export default defineConfig({
       },
       '/login': {
         target: 'http://127.0.0.1:8000',
-        changeOrigin: true
+        changeOrigin: true,
+        // Bypass Vite proxy for GET requests to /login so React Router renders the page
+        bypass: (req) => {
+          if (req.method === 'GET') return '/index.html';
+        }
       },
       '/logout': {
         target: 'http://127.0.0.1:8000',
