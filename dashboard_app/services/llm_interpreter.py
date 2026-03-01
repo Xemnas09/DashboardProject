@@ -15,10 +15,12 @@ class GeminiInterpreter:
         if not self.api_key:
             raise LLMUnavailableException("La clé API Gemini n'est pas configurée sur le serveur.")
 
+        # ✅ Fix : extraire la partie conditionnelle hors de la f-string
+        y_axis_part = f" et l'axe secondaire représente {y_column}" if y_column else ""
         prompt = (
             f"Tu es un analyste de données expert. Interprète les statistiques suivantes d'un diagramme de type {chart_type}. "
             f"L'axe principal représente '{x_column}'"
-            f'{f" et l\'axe secondaire représente {y_column}" if y_column else ""}.\n\n'
+            f"{y_axis_part}.\n\n"
             f"Statistiques résumées : {summary}\n\n"
             f"Instruction : Rédige une analyse claire, concise et professionnelle (maximum 3 phrases). "
             f"Ne mentionne pas le fait que je t'ai donné un JSON. "
@@ -29,7 +31,6 @@ class GeminiInterpreter:
         
         start_time = time.time()
         try:
-            # Synchronous call blocking offloaded implicitly, or just runs fine for this volume
             response = model.generate_content(prompt)
             duration = round((time.time() - start_time) * 1000)
             
