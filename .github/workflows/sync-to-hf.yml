@@ -22,3 +22,17 @@ jobs:
           git config --global user.name "GitHub Actions"
           git remote add hf "https://api:$HF_TOKEN@huggingface.co/spaces/Xemnas09/Datavera"
           git push hf main --force
+
+      - name: Set HuggingFace Space secrets
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          pip install huggingface_hub
+          python - <<EOF2
+          from huggingface_hub import HfApi
+          import os
+          api = HfApi(token=os.environ["HF_TOKEN"])
+          api.add_space_secret("Xemnas09/Datavera", "GEMINI_API_KEY", os.environ["GEMINI_API_KEY"])
+          print("Secret GEMINI_API_KEY ajouté avec succès !")
+          EOF2
