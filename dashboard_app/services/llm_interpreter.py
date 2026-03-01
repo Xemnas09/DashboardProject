@@ -90,4 +90,29 @@ class GeminiInterpreter:
             logger.error(f"[Gemini API - Recommend] Failed after {duration}ms | Error: {str(e)}")
             raise LLMUnavailableException()
 
+    async def summarize_anomalies(self, anomaly_count: int, anomaly_rate: float, method_used: str, flagged_columns_freq: dict, top_anomalies: list, language: str) -> str | None:
+        if not self.api_key:
+            return None
+        
+        prompt = (
+            f"Tu es un expert en audit de données. Rédige un résumé clair et professionnel (3 à 5 phrases) "
+            f"des anomalies détectées par la méthode '{method_used}'.\n\n"
+            f"Statistiques globales : {anomaly_count} anomalies trouvées, soit {anomaly_rate}% du jeu de données.\n"
+            f"Colonnes principalement touchées (fréquence) : {flagged_columns_freq}\n"
+            f"Top 3 des lignes les plus anormales : {top_anomalies}\n\n"
+            f"Instruction : Ne donne AUCUN conseil de code ou de nettoyage, synthétise simplement la répartition et l'intensité "
+            f"des anomalies telles qu'elles apparaissent. Format JSON requis: {{\"summary\": \"ton texte...\"}}.\n"
+            f"Réponds précisément dans cette langue : {language}."
+        )
+
+        try:
+            model = genai.GenerativeModel(self.model_name)
+            response = await model.generate_content_async(prompt, generation_config=genai.GenerationConfig(response_mime_type="application/json"))
+            import json
+            data = json.loads(response.text.strip())
+            return data.get("summary")
+        except Exception as e:
+            logger.warning(f"[Gemini API - Anomaly] Silent failure : {str(e)}")
+            return None
+
 llm_interpreter = GeminiInterpreter()

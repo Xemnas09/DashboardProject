@@ -5,7 +5,7 @@ import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-quartz.css';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
-import { Trash2, AlertCircle, Settings2, FileType2, Database as DatabaseIcon, Info, Calculator, Plus } from 'lucide-react';
+import { Trash2, AlertCircle, Settings2, FileType2, Database as DatabaseIcon, Info, Calculator, Plus, Sparkles, Check, ChevronDown, Download, Layers } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Database({ addNotification }) {
@@ -25,6 +25,15 @@ export default function Database({ addNotification }) {
     const [formulaExpr, setFormulaExpr] = useState('');
     const [formulaError, setFormulaError] = useState('');
     const [formulaLoading, setFormulaLoading] = useState(false);
+
+    // Anomaly Detection State
+    const [showAnomalyPanel, setShowAnomalyPanel] = useState(false);
+    const [selectedAnomalyCols, setSelectedAnomalyCols] = useState([]);
+    const [anomalyMethod, setAnomalyMethod] = useState('zscore');
+    const [anomalyThreshold, setAnomalyThreshold] = useState(3.0);
+    const [anomalyResult, setAnomalyResult] = useState(null);
+    const [anomalyLoading, setAnomalyLoading] = useState(false);
+    const [showAnomaliesOnly, setShowAnomaliesOnly] = useState(false);
 
     // Human-friendly mapping for Polars/Technical types (Excel-like)
     const TYPE_LABELS = {
@@ -207,7 +216,71 @@ export default function Database({ addNotification }) {
 
             return baseDef;
         });
-    }, [dataPreview]);
+    }, [dataPreview, anomalyResult, showAnomaliesOnly]);
+
+    const rowClassRules = useMemo(() => ({
+        'anomaly-row': (params) => {
+            if (!anomalyResult || !anomalyResult.anomalies) return false;
+            return anomalyResult.anomalies.some(a => a.row_index === params.node.rowIndex);
+        },
+        'faded-row': (params) => {
+            if (!anomalyResult || showAnomaliesOnly) return false;
+            return !anomalyResult.anomalies.some(a => a.row_index === params.node.rowIndex);
+        }
+    }), [anomalyResult, showAnomaliesOnly]);
+
+    const handleAnalyzeAnomalies = async () => {
+        if (selectedAnomalyCols.length === 0) {
+            addNotification("Sélectionnez au moins une colonne.", "warning");
+            return;
+        }
+        setAnomalyLoading(true);
+        try {
+            const res = await fetch('/api/anomalies', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    columns: selectedAnomalyCols,
+                    method: anomalyMethod,
+                    threshold: parseFloat(anomalyThreshold),
+                    language: 'fr'
+                })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setAnomalyResult(data);
+                addNotification(`${data.anomaly_count} anomalies détectées.`, data.anomaly_rate > 5 ? "error" : "success");
+            } else {
+                addNotification(data.message || "Erreur de détection", "error");
+            }
+        } catch (e) {
+            addNotification("Impossible de contacter le serveur.", "error");
+        } finally {
+            setAnomalyLoading(false);
+        }
+    };
+
+    const handleExportAnomalies = () => {
+        if (!anomalyResult || !anomalyResult.anomalies) return;
+        const rows = anomalyResult.anomalies.map(a => a.values);
+        if (rows.length === 0) return;
+
+        const headers = Object.keys(rows[0]);
+        const csvContent = [
+            headers.join(','),
+            ...rows.map(row => headers.map(h => `"${String(row[h]).replace(/"/g, '""')}"`).join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `anomalies_${anomalyMethod}_${new Date().getTime()}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     return (
         <div className="h-full flex flex-col pt-2 pb-6 animate-fade-in-up relative overflow-hidden">
@@ -255,6 +328,13 @@ export default function Database({ addNotification }) {
                                 Champ Calculé
                             </button>
                             <button
+                                onClick={() => setShowAnomalyPanel(true)}
+                                className="group inline-flex items-center px-6 py-3 text-sm font-black rounded-2xl text-white bg-gradient-to-r from-bank-900 to-gray-800 hover:from-black hover:to-gray-900 transition-all hover:shadow-xl hover:shadow-gray-200 hover:-translate-y-0.5 active:translate-y-0"
+                            >
+                                <Sparkles className="mr-2 h-4 w-4 text-bank-400 group-hover:animate-pulse" />
+                                Détecter les Anomalies
+                            </button>
+                            <button
                                 onClick={() => setShowDeleteModal(true)}
                                 className="inline-flex items-center px-6 py-3 text-sm font-black rounded-2xl text-red-600 bg-white hover:bg-red-50 transition-all border border-red-100/50 hover:shadow-lg hover:-translate-y-0.5"
                             >
@@ -264,6 +344,59 @@ export default function Database({ addNotification }) {
                         </div>
                     </div>
 
+                    {anomalyResult && (
+                        <div className={`px-8 py-3 flex items-center justify-between border-b transition-all ${anomalyResult.anomaly_rate < 1 ? 'bg-green-50 border-green-100 text-green-800' :
+                                anomalyResult.anomaly_rate < 5 ? 'bg-amber-50 border-amber-100 text-amber-800' :
+                                    'bg-red-50 border-red-100 text-red-800'
+                            }`}>
+                            <div className="flex items-center gap-4">
+                                <AlertCircle className="w-5 h-5" />
+                                <span className="text-sm font-black uppercase tracking-tight">
+                                    {anomalyResult.anomaly_count} anomalies détectées sur {anomalyResult.total_rows} lignes ({anomalyResult.anomaly_rate}%)
+                                </span>
+                                {anomalyResult.skipped_columns.length > 0 && (
+                                    <span className="text-[10px] font-bold opacity-60 ml-4">
+                                        IGNORÉES : {anomalyResult.skipped_columns.join(', ')}
+                                    </span>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={() => setShowAnomaliesOnly(!showAnomaliesOnly)}
+                                    className={`px-3 py-1 rounded-lg text-xs font-black transition-all border ${showAnomaliesOnly ? 'bg-white border-current' : 'bg-transparent border-transparent opacity-60 hover:opacity-100'
+                                        }`}
+                                >
+                                    {showAnomaliesOnly ? 'Voir tout le dataset' : 'Voir anomalies uniquement'}
+                                </button>
+                                <button
+                                    onClick={handleExportAnomalies}
+                                    className="flex items-center gap-2 px-3 py-1 bg-white/50 hover:bg-white rounded-lg text-xs font-black transition-all"
+                                >
+                                    <Download className="w-3 h-3" /> Exporter
+                                </button>
+                                <button onClick={() => setAnomalyResult(null)} className="p-1 hover:bg-black/5 rounded-full transition-all">
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {anomalyResult && anomalyResult.llm_summary && (
+                        <div className="px-8 py-5 border-b border-white/20 bg-gradient-to-r from-bank-50/50 to-bank-100/30 flex gap-6 items-start">
+                            <div className="p-3 bg-white rounded-xl shadow-sm flex-shrink-0">
+                                <Sparkles className="w-6 h-6 text-bank-600" />
+                            </div>
+                            <div className="flex-1">
+                                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-bank-500 mb-1 flex items-center gap-2">
+                                    Analyse IA par Gemini Flash
+                                    <span className="flex h-1.5 w-1.5 rounded-full bg-bank-400 animate-ping"></span>
+                                </h4>
+                                <p className="text-sm font-medium text-gray-800 leading-relaxed italic">
+                                    "{anomalyResult.llm_summary}"
+                                </p>
+                            </div>
+                        </div>
+                    )}
 
                     <div className="flex-1 min-h-0 bg-transparent p-6">
                         <div className="h-full ag-theme-quartz overflow-hidden">
@@ -274,6 +407,7 @@ export default function Database({ addNotification }) {
                                 paginationPageSize={15}
                                 animateRows={true}
                                 onGridReady={(params) => params.api.sizeColumnsToFit()}
+                                rowClassRules={rowClassRules}
                                 defaultColDef={{
                                     cellStyle: { display: 'flex', alignItems: 'center' }
                                 }}
@@ -538,6 +672,161 @@ export default function Database({ addNotification }) {
                             >
                                 Annuler
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Anomaly Detection Panel */}
+            {showAnomalyPanel && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-500/75 backdrop-blur-sm px-4">
+                    <div className="bg-white rounded-3xl overflow-hidden shadow-2xl transform transition-all sm:max-w-3xl w-full max-h-[90vh] flex flex-col border border-white">
+                        <div className="px-8 py-6 border-b border-gray-100 bg-gray-950 flex items-center justify-between shrink-0 text-white">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-bank-500/20 rounded-2xl text-bank-400">
+                                    <Sparkles className="h-6 w-6 animate-pulse" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-black tracking-tight">Moteur de Détection d'Anomalies</h3>
+                                    <p className="text-xs text-white/40 font-medium tracking-wide">Identifiez les données atypiques via Intelligence Artificielle & Statistique</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setShowAnomalyPanel(false)} className="p-2 hover:bg-white/10 rounded-full transition-all">
+                                <Plus className="w-6 h-6 rotate-45" />
+                            </button>
+                        </div>
+
+                        <div className="p-8 overflow-y-auto flex-1 space-y-8">
+                            {/* Step 1: Columns */}
+                            <div>
+                                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-4 flex items-center gap-2">
+                                    <span className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-gray-900 border border-gray-200">1</span>
+                                    Sélectionnez les colonnes à analyser
+                                </h4>
+                                <div className="flex flex-wrap gap-2 p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                                    {dataPreview && dataPreview.columns_info && dataPreview.columns_info.map(col => (
+                                        <button
+                                            key={col.name}
+                                            onClick={() => {
+                                                setSelectedAnomalyCols(prev =>
+                                                    prev.includes(col.name) ? prev.filter(c => c !== col.name) : [...prev, col.name]
+                                                );
+                                            }}
+                                            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 border-2 ${selectedAnomalyCols.includes(col.name)
+                                                    ? 'bg-bank-600 border-bank-600 text-white shadow-lg shadow-bank-200'
+                                                    : 'bg-white border-gray-100 text-gray-500 hover:border-gray-300'
+                                                }`}
+                                        >
+                                            {selectedAnomalyCols.includes(col.name) && <Check className="w-3 h-3" />}
+                                            {col.name}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="mt-2 flex gap-4">
+                                    <button onClick={() => setSelectedAnomalyCols(dataPreview.columns_info.map(c => c.name))} className="text-[10px] font-bold text-bank-600 hover:underline uppercase tracking-tight">Tout sélectionner</button>
+                                    <button onClick={() => setSelectedAnomalyCols([])} className="text-[10px] font-bold text-gray-400 hover:underline uppercase tracking-tight">Désélectionner tout</button>
+                                </div>
+                            </div>
+
+                            {/* Step 2: Method */}
+                            <div>
+                                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-4 flex items-center gap-2">
+                                    <span className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-gray-900 border border-gray-200">2</span>
+                                    Choisissez une méthode de détection
+                                </h4>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {[
+                                        { id: 'zscore', title: 'Z-Score', sub: 'Rapide, idéal pour les distributions normales', icon: Layers },
+                                        { id: 'iqr', title: 'IQR', sub: 'Robuste aux distributions asymétriques', icon: FileType2 },
+                                        { id: 'isolation_forest', title: 'Isolation Forest', sub: 'Multivarié, patterns complexes', icon: Sparkles }
+                                    ].map(m => (
+                                        <button
+                                            key={m.id}
+                                            onClick={() => setAnomalyMethod(m.id)}
+                                            className={`p-5 rounded-2xl text-left transition-all border-2 flex flex-col gap-3 group ${anomalyMethod === m.id
+                                                    ? 'bg-bank-50 border-bank-500 ring-4 ring-bank-500/10'
+                                                    : 'bg-white border-gray-100 hover:border-gray-200 hover:bg-gray-50'
+                                                }`}
+                                        >
+                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${anomalyMethod === m.id ? 'bg-bank-500 text-white' : 'bg-gray-100 text-gray-400'
+                                                }`}>
+                                                <m.icon className="w-5 h-5" />
+                                            </div>
+                                            <div>
+                                                <div className="font-black text-sm text-gray-900 mb-1">{m.title}</div>
+                                                <div className="text-[10px] font-medium text-gray-400 leading-tight">{m.sub}</div>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Step 3: Threshold (if applicable) */}
+                            {anomalyMethod !== 'isolation_forest' && (
+                                <div className="animate-fade-in-up">
+                                    <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-4 flex items-center gap-2">
+                                        <span className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-gray-900 border border-gray-200">3</span>
+                                        Seuil de sensibilité (Threshold)
+                                    </h4>
+                                    <div className="flex items-center gap-6 p-6 bg-gray-50 rounded-2xl border border-gray-100">
+                                        <div className="flex-1">
+                                            <input
+                                                type="range"
+                                                min="1"
+                                                max="10"
+                                                step="0.5"
+                                                value={anomalyThreshold}
+                                                onChange={(e) => setAnomalyThreshold(e.target.value)}
+                                                className="w-full accent-bank-600 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                            />
+                                            <div className="flex justify-between mt-2 text-[9px] font-black text-gray-300 uppercase tracking-widest">
+                                                <span>Sensible (1.0)</span>
+                                                <span>Strict (10.0)</span>
+                                            </div>
+                                        </div>
+                                        <div className="w-20 p-4 bg-white rounded-2xl border border-gray-200 text-center">
+                                            <span className="text-xl font-black text-bank-600">{anomalyThreshold}</span>
+                                        </div>
+                                    </div>
+                                    <p className="mt-3 text-[10px] font-bold text-gray-400 italic">
+                                        {anomalyMethod === 'zscore'
+                                            ? "Un seuil de 3.0 capture les valeurs au-delà de 3 écarts-types (standard pour les distributions en cloche)."
+                                            : "Un seuil de 1.5 est le standard de Tukey pour détecter les outliers modérés."}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="px-8 py-6 bg-gray-50 border-t border-gray-100 flex items-center justify-between shrink-0">
+                            <div className="flex items-center gap-2 text-[10px] font-bold text-gray-400 flex-shrink-0">
+                                <Info className="w-3 h-3 text-bank-400" />
+                                {selectedAnomalyCols.length} colonne(s) sélectionnée(s)
+                            </div>
+                            <div className="flex gap-4">
+                                <button
+                                    onClick={() => setShowAnomalyPanel(false)}
+                                    className="px-6 py-3 text-sm font-black text-gray-500 hover:text-gray-900 transition-all uppercase tracking-widest"
+                                >
+                                    Annuler
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        await handleAnalyzeAnomalies();
+                                        setShowAnomalyPanel(false);
+                                    }}
+                                    disabled={anomalyLoading || selectedAnomalyCols.length === 0}
+                                    className="group relative px-8 py-3 bg-gray-950 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-gray-300 hover:shadow-bank-200 transition-all flex items-center justify-center min-w-[200px] overflow-hidden disabled:opacity-50"
+                                >
+                                    <div className="absolute inset-0 bg-gradient-to-r from-bank-600 to-bank-400 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                                    <span className="relative z-10 flex items-center gap-3">
+                                        {anomalyLoading ? (
+                                            <span className="w-4 h-4 border-2 border-t-white border-r-transparent animate-spin rounded-full"></span>
+                                        ) : (
+                                            <><Sparkles className="w-4 h-4" /> Analyser les données</>
+                                        )}
+                                    </span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

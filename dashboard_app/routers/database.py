@@ -35,7 +35,7 @@ async def database_view(
     request: Request,
     user: TokenPayload = Depends(get_current_user),
 ):
-    from main import cache_manager
+    from services.data_cache import cache_manager
     entry = await cache_manager.get(user.cache_id)
     if not entry:
         return {"status": "success", "data_preview": None}
@@ -69,7 +69,7 @@ async def database_recast(
     body: RecastRequest,
     user: TokenPayload = Depends(get_current_user),
 ):
-    from main import cache_manager
+    from services.data_cache import cache_manager
     entry = await cache_manager.get(user.cache_id)
     if not entry:
         raise SessionExpiredException()
@@ -190,7 +190,7 @@ async def calculated_field(
     body: CalculatedFieldRequest,
     user: TokenPayload = Depends(get_current_user),
 ):
-    from main import cache_manager
+    from services.data_cache import cache_manager
     entry = await cache_manager.get(user.cache_id)
     if not entry:
         raise SessionExpiredException()
@@ -240,4 +240,58 @@ async def calculated_field(
             "dtype": str(df[new_col_name].dtype),
             "is_numeric": df[new_col_name].dtype.is_numeric(),
         },
+    }
+
+# ---------------------------------------------------------------------------
+# POST /api/anomalies
+# ---------------------------------------------------------------------------
+from schemas.anomaly import AnomalyRequest, AnomalyResponse
+from services.anomaly_detector import anomaly_detector
+from services.llm_interpreter import llm_interpreter
+
+@router.post("/api/anomalies", response_model=AnomalyResponse)
+@limiter.limit("20/minute")
+async def detect_anomalies(
+    request: Request,
+    body: AnomalyRequest,
+    user: TokenPayload = Depends(get_current_user),
+):
+    from services.data_cache import cache_manager
+    entry = await cache_manager.get(user.cache_id)
+    if not entry: raise SessionExpiredException()
+    
+    df = _get_df(entry)
+    total_rows = len(df)
+    
+    anomalies, skipped = anomaly_detector.detect(df, body.columns, body.method, body.threshold)
+    anomaly_count = len(anomalies)
+    anomaly_rate = round((anomaly_count / total_rows) * 100, 2) if total_rows > 0 else 0
+
+    # Préparation pour le LLM
+    llm_summary = None
+    if anomaly_count > 0:
+        freqs = {}
+        for a in anomalies:
+            for c in a["flagged_columns"]:
+                freqs[c] = freqs.get(c, 0) + 1
+        
+        # Correction : Limiter aux 3 premières colonnes flaggées par ligne
+        top_anomalies = [
+            {c: a["values"][c] for c in a["flagged_columns"][:3]} 
+            for a in anomalies[:3]
+        ]
+        
+        llm_summary = await llm_interpreter.summarize_anomalies(
+            anomaly_count, anomaly_rate, body.method, freqs, top_anomalies, body.language
+        )
+
+    return {
+        "status": "success",
+        "method_used": body.method,
+        "total_rows": total_rows,
+        "anomaly_count": anomaly_count,
+        "anomaly_rate": anomaly_rate,
+        "skipped_columns": skipped,
+        "anomalies": anomalies,
+        "llm_summary": llm_summary
     }

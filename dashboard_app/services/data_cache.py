@@ -91,3 +91,5 @@ class DataCacheManager:
                 "total_memory_mb": round(total_mb, 2),
                 "details": entries_info,
             }
+
+cache_manager = DataCacheManager()

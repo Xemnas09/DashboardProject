@@ -48,9 +48,7 @@ else:
 # Cache manager (singleton — imported by routers via `from main import cache_manager`)
 # ---------------------------------------------------------------------------
 # Import here after logger is configured so services can use it
-from services.data_cache import DataCacheManager  # noqa: E402
-
-cache_manager = DataCacheManager()
+from services.data_cache import cache_manager  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
