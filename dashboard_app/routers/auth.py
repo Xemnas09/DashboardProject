@@ -47,11 +47,15 @@ def _set_auth_cookies(response: Response, username: str, cache_id: str):
 
     is_prod = settings.environment == "production"
 
+    # ✅ Fix HuggingFace iframe : samesite="none" requis en production
+    # HuggingFace affiche l'app dans un iframe, ce qui bloque les cookies samesite="lax"
+    samesite = "none" if is_prod else "lax"
+
     response.set_cookie(
         key="access_token",
         value=access_token,
         httponly=True,
-        samesite="lax",
+        samesite=samesite,
         secure=is_prod,
         max_age=settings.access_token_expire_minutes * 60,
         path="/",
@@ -60,7 +64,7 @@ def _set_auth_cookies(response: Response, username: str, cache_id: str):
         key="refresh_token",
         value=refresh_token,
         httponly=True,
-        samesite="lax",
+        samesite=samesite,
         secure=is_prod,
         max_age=settings.refresh_token_expire_days * 86400,
         path="/api/auth/refresh",
@@ -80,7 +84,6 @@ async def login(request: Request, body: LoginRequest, response: Response):
         notification_store.add(username or "unknown", "Échec de connexion", "error")
         raise UnauthorizedException("Identifiants incorrects")
 
-    # Create or reuse cache_id
     cache_id = str(uuid.uuid4())
     _set_auth_cookies(response, username, cache_id)
 
@@ -96,7 +99,6 @@ async def login(request: Request, body: LoginRequest, response: Response):
 # ---------------------------------------------------------------------------
 @router.post("/logout")
 async def logout(request: Request, response: Response):
-    # Try to get user for cache cleanup
     token = request.cookies.get("access_token")
     if token:
         try:
@@ -109,8 +111,11 @@ async def logout(request: Request, response: Response):
         except JWTError:
             pass
 
-    response.delete_cookie("access_token", path="/")
-    response.delete_cookie("refresh_token", path="/api/auth/refresh")
+    is_prod = settings.environment == "production"
+    samesite = "none" if is_prod else "lax"
+
+    response.delete_cookie("access_token", path="/", samesite=samesite, secure=is_prod)
+    response.delete_cookie("refresh_token", path="/api/auth/refresh", samesite=samesite, secure=is_prod)
     return {"status": "success"}
 
 
@@ -145,7 +150,6 @@ async def refresh_token(request: Request, response: Response):
     if payload.get("type") != "refresh":
         raise UnauthorizedException("Type de token invalide.")
 
-    # Issue new access token
     access_token = _create_token(
         {"sub": payload["sub"], "cache_id": payload["cache_id"]},
         "access",
@@ -153,11 +157,13 @@ async def refresh_token(request: Request, response: Response):
     )
 
     is_prod = settings.environment == "production"
+    samesite = "none" if is_prod else "lax"
+
     response.set_cookie(
         key="access_token",
         value=access_token,
         httponly=True,
-        samesite="lax",
+        samesite=samesite,
         secure=is_prod,
         max_age=settings.access_token_expire_minutes * 60,
         path="/",
