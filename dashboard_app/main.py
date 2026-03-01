@@ -69,7 +69,7 @@ async def _cache_cleanup_loop():
 async def lifespan(app: FastAPI):
     # Startup
     os.makedirs(settings.upload_folder, exist_ok=True)
-    logger.info(f"DataVision API starting (env={settings.environment})")
+    logger.info(f"Datavera API starting (env={settings.environment})")
     logger.info(f"Upload folder: {settings.upload_folder} | Max size: {settings.max_upload_size_mb}MB")
     logger.info(f"Cache TTL: {settings.cache_ttl_hours}h | Cleanup interval: {settings.cache_cleanup_interval_minutes}min")
     logger.info(f"CORS origins: {settings.origins_list}")
@@ -82,15 +82,15 @@ async def lifespan(app: FastAPI):
         await cleanup_task
     except asyncio.CancelledError:
         pass
-    logger.info("DataVision API stopped")
+    logger.info("Datavera API stopped")
 
 
 # ---------------------------------------------------------------------------
 # FastAPI app
 # ---------------------------------------------------------------------------
 app = FastAPI(
-    title="DataVision Analytics API",
-    description="Backend API for the DataVision data analytics dashboard.",
+    title="Datavera API",
+    description="Backend API for the Datavera data analytics dashboard.",
     version="2.0.0",
     lifespan=lifespan,
     docs_url="/docs",
@@ -193,4 +193,4 @@ app.include_router(notifications.router)
 # ---------------------------------------------------------------------------
 @app.get("/", include_in_schema=False)
 async def root():
-    return {"status": "ok", "app": "DataVision Analytics API", "version": "2.0.0"}
+    return {"status": "ok", "app": "Datavera API", "version": "2.0.0"}

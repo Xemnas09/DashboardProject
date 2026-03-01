@@ -80,7 +80,7 @@ export default function Layout({ theme, setTheme, notifications, removeNotificat
                                 <Shield className="w-4 h-4" />
                             </div>
                             <div className="flex flex-col">
-                                <span className="font-black text-white text-sm tracking-tight">DataVision</span>
+                                <span className="font-black text-white text-sm tracking-tight">Datavera</span>
                                 <span className="text-[9px] font-bold text-white/30 uppercase tracking-[0.2em]">Analytics</span>
                             </div>
                         </div>

@@ -5,14 +5,32 @@ import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-quartz.css';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
-import { Trash2, AlertCircle, Settings2, FileType2, Database as DatabaseIcon, Info, Calculator, Plus, Sparkles, Check, ChevronDown, Download, Layers } from 'lucide-react';
+import { Trash2, AlertCircle, Settings2, FileType2, Database as DatabaseIcon, Info, Calculator, Plus, Sparkles, Check, ChevronDown, Download, Layers, AlertTriangle, Settings, Search, ArrowUpDown, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import CardView from '../components/CardView';
 
 export default function Database({ addNotification }) {
     const [dataPreview, setDataPreview] = useState(null);
     const [loading, setLoading] = useState(true);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
+
+    // Responsive State
+    const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+    const [isTablet, setIsTablet] = useState(window.innerWidth >= 768 && window.innerWidth <= 1024);
+    const [visibleCount, setVisibleCount] = useState(20);
+
+    useEffect(() => {
+        const handleResize = () => {
+            const width = window.innerWidth;
+            setWindowWidth(width);
+            setIsMobile(width < 768);
+            setIsTablet(width >= 768 && width <= 1024);
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     // Type Management State
     const [showTypeModal, setShowTypeModal] = useState(false);
@@ -34,6 +52,14 @@ export default function Database({ addNotification }) {
     const [anomalyResult, setAnomalyResult] = useState(null);
     const [anomalyLoading, setAnomalyLoading] = useState(false);
     const [showAnomaliesOnly, setShowAnomaliesOnly] = useState(false);
+    const [showAllColumnsTablet, setShowAllColumnsTablet] = useState(false);
+    const [pageSize, setPageSize] = useState(15);
+    const gridRef = React.useRef(null);
+
+    // Mobile specific state
+    const [mobileSearchQuery, setMobileSearchQuery] = useState('');
+    const [mobileSortCol, setMobileSortCol] = useState('');
+    const [showMobileActions, setShowMobileActions] = useState(false);
 
     // Human-friendly mapping for Polars/Technical types (Excel-like)
     const TYPE_LABELS = {
@@ -155,7 +181,7 @@ export default function Database({ addNotification }) {
     const colDefs = useMemo(() => {
         if (!dataPreview || !dataPreview.columns || !dataPreview.columns_info) return [];
 
-        return dataPreview.columns.map(col => {
+        return dataPreview.columns.map((col, index) => {
             const info = dataPreview.columns_info.find(i => i.name === col.field);
             const baseDef = {
                 field: col.field,
@@ -163,8 +189,10 @@ export default function Database({ addNotification }) {
                 sortable: true,
                 filter: true,
                 resizable: true,
-                flex: 1,
+                flex: isMobile || isTablet ? 0 : 1,
                 minWidth: 150,
+                hide: isTablet && !showAllColumnsTablet && index >= 4,
+                pinned: index === 0 && (isTablet || !isMobile) ? 'left' : null
             };
 
             // Enhanced Type Detection
@@ -297,57 +325,71 @@ export default function Database({ addNotification }) {
                 </div>
             ) : dataPreview && dataPreview.data ? (
                 <div className="flex-1 premium-glass rounded-3xl overflow-hidden flex flex-col">
-                    <div className="px-8 py-6 border-b border-white/20 bg-white/30 flex justify-between items-center flex-shrink-0">
-                        <div className="flex items-center gap-6">
-                            <div className="p-4 bg-gradient-to-br from-bank-500 to-bank-700 rounded-2xl text-white shadow-lg shadow-bank-200/50 transform transition-transform hover:scale-110">
-                                <FileType2 className="w-6 h-6" />
+                    {/* Compact Header (Change 2) */}
+                    <div className="px-4 py-2 border-b border-white/20 bg-white/30 flex justify-between items-center h-[60px] shrink-0">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-gradient-to-br from-bank-500 to-bank-700 rounded-xl text-white shadow-lg shadow-bank-200/50">
+                                <FileType2 className="w-5 h-5 md:w-6 md:h-6" />
                             </div>
-                            <div className="flex flex-col">
-                                <h2 className="text-2xl font-black text-gray-900 tracking-tight">Explorateur de Données</h2>
-                                <div className="flex items-center gap-2">
-                                    <span className="flex h-2 w-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
-                                    <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">
-                                        {dataPreview.total_rows.toLocaleString()} entrées actives
-                                    </span>
-                                </div>
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-base md:text-lg font-black text-gray-900 tracking-tight whitespace-nowrap">Explorateur</h2>
+                                <span className="px-2 py-0.5 rounded-full bg-bank-100 text-bank-700 text-[10px] md:text-xs font-black">
+                                    {dataPreview.total_rows.toLocaleString()}
+                                </span>
                             </div>
                         </div>
-                        <div className="flex items-center gap-4">
+
+                        {/* Compact Toolbar (Change 1) */}
+                        <div className="flex items-center gap-2 flex-wrap justify-end">
                             <button
                                 onClick={fetchColumnsInfo}
-                                className="group inline-flex items-center px-6 py-3 text-sm font-black rounded-2xl text-white bg-gradient-to-r from-bank-600 to-bank-500 hover:from-bank-500 hover:to-bank-400 transition-all hover:shadow-xl hover:shadow-bank-200 hover:-translate-y-0.5 active:translate-y-0"
+                                title="Configurer les types"
+                                className="inline-flex items-center px-3 py-1.5 text-xs font-black rounded-lg text-white bg-gradient-to-r from-bank-600 to-bank-500 hover:from-bank-500 hover:to-bank-400 transition-all"
                             >
-                                <Settings2 className="mr-2 h-4 w-4 transition-transform group-hover:rotate-90" />
-                                Configurer les types
+                                <Settings className="h-3.5 w-3.5 md:mr-1.5" />
+                                <span className="hidden md:inline">Types</span>
                             </button>
                             <button
                                 onClick={() => { setShowFormulaModal(true); setFormulaError(''); setFormulaName(''); setFormulaExpr(''); }}
-                                className="group inline-flex items-center px-6 py-3 text-sm font-black rounded-2xl text-white bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 transition-all hover:shadow-xl hover:shadow-emerald-200 hover:-translate-y-0.5 active:translate-y-0"
+                                title="Champ Calculé"
+                                className="inline-flex items-center px-3 py-1.5 text-xs font-black rounded-lg text-white bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 transition-all"
                             >
-                                <Calculator className="mr-2 h-4 w-4" />
-                                Champ Calculé
+                                <Calculator className="h-3.5 w-3.5 md:mr-1.5" />
+                                <span className="hidden md:inline">Calculé</span>
                             </button>
+                            {isTablet && (
+                                <div className="relative">
+                                    <button
+                                        onClick={() => setShowAllColumnsTablet(!showAllColumnsTablet)}
+                                        className={`inline-flex items-center px-3 py-1.5 text-xs font-black rounded-lg transition-all border ${showAllColumnsTablet ? 'bg-bank-100 border-bank-200 text-bank-700' : 'bg-white border-gray-100 text-gray-500'}`}
+                                    >
+                                        <Layers className="h-3.5 w-3.5 mr-1.5" />
+                                        Colonnes +
+                                    </button>
+                                </div>
+                            )}
                             <button
                                 onClick={() => setShowAnomalyPanel(true)}
-                                className="group inline-flex items-center px-6 py-3 text-sm font-black rounded-2xl text-white bg-gradient-to-r from-bank-900 to-gray-800 hover:from-black hover:to-gray-900 transition-all hover:shadow-xl hover:shadow-gray-200 hover:-translate-y-0.5 active:translate-y-0"
+                                title="Détecter les Anomalies"
+                                className="inline-flex items-center px-3 py-1.5 text-xs font-black rounded-lg text-white bg-gradient-to-r from-bank-900 to-gray-800 hover:from-black hover:to-gray-900 transition-all"
                             >
-                                <Sparkles className="mr-2 h-4 w-4 text-bank-400 group-hover:animate-pulse" />
-                                Détecter les Anomalies
+                                <AlertTriangle className="h-3.5 w-3.5 md:mr-1.5 text-bank-400" />
+                                <span className="hidden md:inline">Anomalies</span>
                             </button>
                             <button
                                 onClick={() => setShowDeleteModal(true)}
-                                className="inline-flex items-center px-6 py-3 text-sm font-black rounded-2xl text-red-600 bg-white hover:bg-red-50 transition-all border border-red-100/50 hover:shadow-lg hover:-translate-y-0.5"
+                                title="Réinitialiser"
+                                className="inline-flex items-center p-1.5 text-xs font-black rounded-lg text-red-600 bg-white hover:bg-red-50 transition-all border border-red-100/50"
                             >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Réinitialiser
+                                <Trash2 className="h-3.5 w-3.5" />
                             </button>
                         </div>
                     </div>
 
                     {anomalyResult && (
                         <div className={`px-8 py-3 flex items-center justify-between border-b transition-all ${anomalyResult.anomaly_rate < 1 ? 'bg-green-50 border-green-100 text-green-800' :
-                                anomalyResult.anomaly_rate < 5 ? 'bg-amber-50 border-amber-100 text-amber-800' :
-                                    'bg-red-50 border-red-100 text-red-800'
+                            anomalyResult.anomaly_rate < 5 ? 'bg-amber-50 border-amber-100 text-amber-800' :
+                                'bg-red-50 border-red-100 text-red-800'
                             }`}>
                             <div className="flex items-center gap-4">
                                 <AlertCircle className="w-5 h-5" />
@@ -398,21 +440,122 @@ export default function Database({ addNotification }) {
                         </div>
                     )}
 
-                    <div className="flex-1 min-h-0 bg-transparent p-6">
-                        <div className="h-full ag-theme-quartz overflow-hidden">
-                            <AgGridReact
-                                rowData={dataPreview.data}
-                                columnDefs={colDefs}
-                                pagination={true}
-                                paginationPageSize={15}
-                                animateRows={true}
-                                onGridReady={(params) => params.api.sizeColumnsToFit()}
-                                rowClassRules={rowClassRules}
-                                defaultColDef={{
-                                    cellStyle: { display: 'flex', alignItems: 'center' }
-                                }}
-                            />
+                    {/* Mobile Controls (Change 4) */}
+                    {isMobile && (
+                        <div className="px-4 py-3 bg-white/50 border-b border-white/20 flex flex-col gap-3">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Rechercher..."
+                                    value={mobileSearchQuery}
+                                    onChange={(e) => setMobileSearchQuery(e.target.value)}
+                                    className="w-full pl-10 pr-4 py-2 bg-white/50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-bank-500"
+                                />
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="flex-1 relative">
+                                    <ArrowUpDown className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                    <select
+                                        value={mobileSortCol}
+                                        onChange={(e) => setMobileSortCol(e.target.value)}
+                                        className="w-full pl-10 pr-8 py-2 bg-white/50 border border-gray-200 rounded-xl text-sm appearance-none outline-none"
+                                    >
+                                        <option value="">Trier par...</option>
+                                        {dataPreview.columns.map(col => (
+                                            <option key={col.field} value={col.field}>{col.title}</option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                                </div>
+                            </div>
                         </div>
+                    )}
+
+                    <div className="flex-1 min-h-0 bg-transparent p-6 relative">
+                        {isMobile ? (
+                            <CardView
+                                rows={dataPreview.data}
+                                columns={colDefs}
+                                anomalies={anomalyResult}
+                                searchQuery={mobileSearchQuery}
+                                sortCol={mobileSortCol}
+                                visibleCount={visibleCount}
+                                onLoadMore={() => setVisibleCount(prev => prev + 20)}
+                                isLoading={loading}
+                            />
+                        ) : (
+                            <div
+                                className="ag-theme-quartz overflow-hidden"
+                                style={{
+                                    height: isTablet ? 'calc(100vh - 260px)' : 'calc(100vh - 220px)'
+                                }}
+                            >
+                                <AgGridReact
+                                    ref={gridRef}
+                                    rowData={dataPreview.data || []}
+                                    columnDefs={colDefs}
+                                    pagination={true}
+                                    paginationPageSize={pageSize}
+                                    animateRows={true}
+                                    onGridReady={(params) => params.api.sizeColumnsToFit()}
+                                    rowClassRules={rowClassRules}
+                                    defaultColDef={{
+                                        cellStyle: { display: 'flex', alignItems: 'center' }
+                                    }}
+                                />
+
+                                {/* Page Size Selector (Change 5) */}
+                                <div className="mt-4 flex items-center gap-2 text-xs font-bold text-gray-500">
+                                    <span>Afficher :</span>
+                                    <select
+                                        value={pageSize}
+                                        onChange={(e) => setPageSize(Number(e.target.value))}
+                                        className="bg-white border border-gray-200 rounded px-2 py-1 outline-none"
+                                    >
+                                        {[15, 25, 50, 100].map(s => (
+                                            <option key={s} value={s}>{s}</option>
+                                        ))}
+                                    </select>
+                                    <span>par page</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Mobile FAB (Change 4) */}
+                        {isMobile && (
+                            <div className="fixed bottom-8 right-6 z-40 flex flex-col items-end gap-3">
+                                {showMobileActions && (
+                                    <div className="flex flex-col gap-3 mb-2 animate-fade-in-up">
+                                        <button
+                                            onClick={() => { fetchColumnsInfo(); setShowMobileActions(false); }}
+                                            className="flex items-center gap-3 px-4 py-3 bg-bank-600 text-white rounded-xl shadow-xl font-black text-xs uppercase tracking-widest"
+                                        >
+                                            <Settings className="w-4 h-4" /> Types
+                                        </button>
+                                        <button
+                                            onClick={() => { setShowFormulaModal(true); setShowMobileActions(false); }}
+                                            className="flex items-center gap-3 px-4 py-3 bg-emerald-600 text-white rounded-xl shadow-xl font-black text-xs uppercase tracking-widest"
+                                        >
+                                            <Calculator className="w-4 h-4" /> Calculé
+                                        </button>
+                                        <button
+                                            onClick={() => { setShowAnomalyPanel(true); setShowMobileActions(false); }}
+                                            className="flex items-center gap-3 px-4 py-3 bg-gray-950 text-white rounded-xl shadow-xl font-black text-xs uppercase tracking-widest"
+                                        >
+                                            <AlertTriangle className="w-4 h-4 text-bank-400" /> Anomalies
+                                        </button>
+                                    </div>
+                                )}
+                                <button
+                                    onClick={() => setShowMobileActions(!showMobileActions)}
+                                    className={`w-14 h-14 rounded-full flex items-center justify-center text-white shadow-2xl transition-all transform active:scale-95 ${showMobileActions ? 'bg-red-500 rotate-45' : 'bg-bank-600'
+                                        }`}
+                                >
+                                    <Plus className="w-7 h-7" />
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             ) : (
@@ -677,19 +820,16 @@ export default function Database({ addNotification }) {
                 </div>
             )}
 
-            {/* Anomaly Detection Panel */}
+            {/* Anomaly Detection Drawer (Change 3) */}
             {showAnomalyPanel && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-500/75 backdrop-blur-sm px-4">
-                    <div className="bg-white rounded-3xl overflow-hidden shadow-2xl transform transition-all sm:max-w-3xl w-full max-h-[90vh] flex flex-col border border-white">
-                        <div className="px-8 py-6 border-b border-gray-100 bg-gray-950 flex items-center justify-between shrink-0 text-white">
+                <div className="fixed inset-0 z-50 flex justify-end bg-gray-900/40 backdrop-blur-sm px-0">
+                    <div className={`bg-white h-full shadow-2xl transform transition-transform duration-500 ease-out flex flex-col border-l border-white ${isMobile ? 'w-full' : 'max-w-2xl w-full translate-x-0'}`}>
+                        <div className="px-6 py-4 border-b border-gray-100 bg-gray-950 flex items-center justify-between shrink-0 text-white">
                             <div className="flex items-center gap-4">
-                                <div className="p-3 bg-bank-500/20 rounded-2xl text-bank-400">
-                                    <Sparkles className="h-6 w-6 animate-pulse" />
+                                <div className="p-2 bg-bank-500/20 rounded-xl text-bank-400">
+                                    <Sparkles className="h-5 w-5 animate-pulse" />
                                 </div>
-                                <div>
-                                    <h3 className="text-xl font-black tracking-tight">Moteur de Détection d'Anomalies</h3>
-                                    <p className="text-xs text-white/40 font-medium tracking-wide">Identifiez les données atypiques via Intelligence Artificielle & Statistique</p>
-                                </div>
+                                <h3 className="text-lg font-black tracking-tight">Anomalies</h3>
                             </div>
                             <button onClick={() => setShowAnomalyPanel(false)} className="p-2 hover:bg-white/10 rounded-full transition-all">
                                 <Plus className="w-6 h-6 rotate-45" />
@@ -713,8 +853,8 @@ export default function Database({ addNotification }) {
                                                 );
                                             }}
                                             className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 border-2 ${selectedAnomalyCols.includes(col.name)
-                                                    ? 'bg-bank-600 border-bank-600 text-white shadow-lg shadow-bank-200'
-                                                    : 'bg-white border-gray-100 text-gray-500 hover:border-gray-300'
+                                                ? 'bg-bank-600 border-bank-600 text-white shadow-lg shadow-bank-200'
+                                                : 'bg-white border-gray-100 text-gray-500 hover:border-gray-300'
                                                 }`}
                                         >
                                             {selectedAnomalyCols.includes(col.name) && <Check className="w-3 h-3" />}
@@ -744,8 +884,8 @@ export default function Database({ addNotification }) {
                                             key={m.id}
                                             onClick={() => setAnomalyMethod(m.id)}
                                             className={`p-5 rounded-2xl text-left transition-all border-2 flex flex-col gap-3 group ${anomalyMethod === m.id
-                                                    ? 'bg-bank-50 border-bank-500 ring-4 ring-bank-500/10'
-                                                    : 'bg-white border-gray-100 hover:border-gray-200 hover:bg-gray-50'
+                                                ? 'bg-bank-50 border-bank-500 ring-4 ring-bank-500/10'
+                                                : 'bg-white border-gray-100 hover:border-gray-200 hover:bg-gray-50'
                                                 }`}
                                         >
                                             <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${anomalyMethod === m.id ? 'bg-bank-500 text-white' : 'bg-gray-100 text-gray-400'

@@ -66,9 +66,9 @@ export default function Login({ addNotification }) {
                         <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-bank-400 to-bank-600 flex items-center justify-center shadow-2xl shadow-bank-500/30">
                             <Shield className="w-6 h-6 text-white" />
                         </div>
-                        <span className="text-white/90 font-black text-2xl tracking-tight">DataVision</span>
+                        <span className="text-white/90 font-black text-2xl tracking-tight">Datavera</span>
                     </div>
-                    <p className="text-white/40 text-sm font-medium mt-1 tracking-wide">Analytics Intelligence Platform</p>
+                    <p className="text-white/40 text-sm font-medium mt-1 tracking-wide">Data Analysis Platform</p>
                 </div>
 
                 <div className={`relative z-10 space-y-8 transition-all duration-1000 delay-300 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
@@ -78,15 +78,15 @@ export default function Login({ addNotification }) {
                             <span className="bg-gradient-to-r from-bank-400 to-bank-300 bg-clip-text text-transparent">données en décisions.</span>
                         </h2>
                         <p className="mt-6 text-white/50 text-base leading-relaxed max-w-md">
-                            Explorez, analysez et visualisez vos données en temps réel grâce à des outils d'intelligence avancée.
+                            Importez, analysez et interprétez vos données grâce à l'intelligence artificielle intégrée.
                         </p>
                     </div>
 
                     <div className="flex gap-6">
                         {[
-                            { label: 'Graphiques', value: '6+', sub: 'types' },
                             { label: 'Analyses', value: '∞', sub: 'illimitées' },
-                            { label: 'Export', value: 'Pro', sub: 'premium' }
+                            { label: 'Détection', value: 'AI', sub: 'anomalies' },
+                            { label: 'Export', value: 'PDF', sub: 'rapports' }
                         ].map((stat, i) => (
                             <div key={i} className="border border-white/10 rounded-2xl px-5 py-4 bg-white/[0.03] backdrop-blur-sm">
                                 <div className="text-2xl font-black text-bank-400">{stat.value}</div>
@@ -99,7 +99,7 @@ export default function Login({ addNotification }) {
                 <div className={`relative z-10 transition-all duration-1000 delay-500 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
                     <div className="flex items-center gap-3 text-white/30 text-xs">
                         <Sparkles className="w-3 h-3" />
-                        <span className="font-bold uppercase tracking-[0.3em]">Secure • Encrypted • Real-time</span>
+                        <span className="font-bold uppercase tracking-[0.3em]">Secure • AI-Powered • Multi-format</span>
                     </div>
                 </div>
             </div>
@@ -118,7 +118,7 @@ export default function Login({ addNotification }) {
                         <div className="mx-auto w-14 h-14 bg-gradient-to-br from-bank-500 to-bank-700 rounded-2xl flex items-center justify-center shadow-xl shadow-bank-200 mb-4">
                             <Shield className="w-7 h-7 text-white" />
                         </div>
-                        <h1 className="text-2xl font-black text-gray-900">DataVision</h1>
+                        <h1 className="text-2xl font-black text-gray-900">Datavera</h1>
                     </div>
 
                     <div className="mb-8">
@@ -196,7 +196,7 @@ export default function Login({ addNotification }) {
 
                     <div className="mt-10 text-center">
                         <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-gray-300">
-                            Propulsé par DataVision Analytics
+                            Propulsé par Datavera
                         </p>
                     </div>
                 </div>
