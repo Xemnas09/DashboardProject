@@ -1,8 +1,12 @@
-title: Dashboard Project
+---
+title: Datavera
 emoji: 📊
 colorFrom: blue
 colorTo: indigo
 sdk: docker
 pinned: false
-Dashboard Project
+---
+
+# Datavera
+
 Application de dashboard data science avec FastAPI + React + Tailwind.
