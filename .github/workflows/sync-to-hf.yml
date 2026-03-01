@@ -14,12 +14,19 @@ jobs:
           fetch-depth: 0
           lfs: true
 
+      - name: Remove large files from uploads before pushing to HF
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+          # Installe git-filter-repo
+          pip install git-filter-repo
+          # Supprime le dossier uploads de tout l'historique
+          git filter-repo --invert-paths --path uploads/ --path dashboard_app/uploads/ --force
+
       - name: Push to Hugging Face Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
           git remote add hf "https://api:$HF_TOKEN@huggingface.co/spaces/Xemnas09/Datavera"
           git push hf main --force
 
