@@ -9,7 +9,8 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from jose import jwt, JWTError
 from loguru import logger
@@ -22,13 +23,12 @@ from exceptions import AppException
 # ---------------------------------------------------------------------------
 # Loguru configuration
 # ---------------------------------------------------------------------------
-# Remove default stderr handler and reconfigure
 logger.remove()
 
 if settings.log_format == "json":
     logger.add(
         sys.stderr,
-        serialize=True,       # JSON output
+        serialize=True,
         level="DEBUG",
         backtrace=False,
         diagnose=False,
@@ -45,9 +45,8 @@ else:
 
 
 # ---------------------------------------------------------------------------
-# Cache manager (singleton — imported by routers via `from main import cache_manager`)
+# Cache manager
 # ---------------------------------------------------------------------------
-# Import here after logger is configured so services can use it
 from services.data_cache import cache_manager  # noqa: E402
 
 
@@ -55,7 +54,6 @@ from services.data_cache import cache_manager  # noqa: E402
 # Lifespan: background cache cleanup task
 # ---------------------------------------------------------------------------
 async def _cache_cleanup_loop():
-    """Runs every N minutes, evicts cache entries older than TTL."""
     while True:
         await asyncio.sleep(settings.cache_cleanup_interval_minutes * 60)
         evicted = await cache_manager.evict_expired(settings.cache_ttl_hours)
@@ -67,7 +65,6 @@ async def _cache_cleanup_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     os.makedirs(settings.upload_folder, exist_ok=True)
     logger.info(f"Datavera API starting (env={settings.environment})")
     logger.info(f"Upload folder: {settings.upload_folder} | Max size: {settings.max_upload_size_mb}MB")
@@ -76,7 +73,6 @@ async def lifespan(app: FastAPI):
 
     cleanup_task = asyncio.create_task(_cache_cleanup_loop())
     yield
-    # Shutdown
     cleanup_task.cancel()
     try:
         await cleanup_task
@@ -104,14 +100,14 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.origins_list,
-    allow_credentials=True,   # Required for HttpOnly cookie auth
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
 # ---------------------------------------------------------------------------
-# Rate limiter (slowapi)
+# Rate limiter
 # ---------------------------------------------------------------------------
 from dependencies import limiter  # noqa: E402
 
@@ -120,7 +116,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 # ---------------------------------------------------------------------------
-# Global exception handler — catches all AppException subclasses
+# Global exception handler
 # ---------------------------------------------------------------------------
 @app.exception_handler(AppException)
 async def app_exception_handler(request: Request, exc: AppException):
@@ -147,7 +143,6 @@ async def log_requests(request: Request, call_next):
     response = await call_next(request)
     duration_ms = (time.perf_counter() - start) * 1000
 
-    # Extract user from JWT cookie with full signature verification
     user = "anonymous"
     token = request.cookies.get("access_token")
     if token:
@@ -161,7 +156,6 @@ async def log_requests(request: Request, call_next):
         except JWTError:
             user = "invalid_token"
 
-    # Pick log level based on status code
     if response.status_code < 400:
         level = "INFO"
     elif response.status_code < 500:
@@ -189,8 +183,23 @@ app.include_router(notifications.router)
 
 
 # ---------------------------------------------------------------------------
-# Root health check
+# Serve React frontend (doit être en DERNIER pour ne pas intercepter les routes API)
 # ---------------------------------------------------------------------------
-@app.get("/", include_in_schema=False)
-async def root():
-    return {"status": "ok", "app": "Datavera API", "version": "2.0.0"}
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+
+if os.path.exists(STATIC_DIR):
+    # Sert les assets Vite (JS, CSS, images)
+    app.mount("/assets", StaticFiles(directory=os.path.join(STATIC_DIR, "assets")), name="assets")
+
+    @app.get("/", include_in_schema=False)
+    async def serve_index():
+        return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_react(full_path: str):
+        return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+else:
+    # Fallback si le frontend n'est pas buildé (dev local)
+    @app.get("/", include_in_schema=False)
+    async def root():
+        return {"status": "ok", "app": "Datavera API", "version": "2.0.0"}
