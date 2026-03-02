@@ -16,11 +16,12 @@ from loguru import logger
 
 router = APIRouter(tags=["Auth"])
 
-# Mock users (to be replaced with DB in SaaS phase)
-USERS = {
-    "admin": "password123",
-    "user": "bank2024",
-}
+# ✅ Les mots de passe sont chargés depuis les variables d'environnement
+def get_users() -> dict:
+    return {
+        "admin": settings.admin_password,
+        "user": settings.user_password,
+    }
 
 
 def _create_token(data: dict, token_type: str, expires_delta: timedelta) -> str:
@@ -46,9 +47,6 @@ def _set_auth_cookies(response: Response, username: str, cache_id: str):
     )
 
     is_prod = settings.environment == "production"
-
-    # ✅ Fix HuggingFace iframe : samesite="none" requis en production
-    # HuggingFace affiche l'app dans un iframe, ce qui bloque les cookies samesite="lax"
     samesite = "none" if is_prod else "lax"
 
     response.set_cookie(
@@ -71,16 +69,14 @@ def _set_auth_cookies(response: Response, username: str, cache_id: str):
     )
 
 
-# ---------------------------------------------------------------------------
-# POST /login
-# ---------------------------------------------------------------------------
 @router.post("/login")
 @limiter.limit("5/minute")
 async def login(request: Request, body: LoginRequest, response: Response):
     username = body.username
     password = body.password
 
-    if username not in USERS or USERS[username] != password:
+    users = get_users()
+    if username not in users or users[username] != password:
         notification_store.add(username or "unknown", "Échec de connexion", "error")
         raise UnauthorizedException("Identifiants incorrects")
 
@@ -94,9 +90,6 @@ async def login(request: Request, body: LoginRequest, response: Response):
     return {"status": "success"}
 
 
-# ---------------------------------------------------------------------------
-# POST /logout
-# ---------------------------------------------------------------------------
 @router.post("/logout")
 async def logout(request: Request, response: Response):
     token = request.cookies.get("access_token")
@@ -119,9 +112,6 @@ async def logout(request: Request, response: Response):
     return {"status": "success"}
 
 
-# ---------------------------------------------------------------------------
-# GET /api/status
-# ---------------------------------------------------------------------------
 @router.get("/api/status")
 async def status(user: TokenPayload = Depends(get_current_user)):
     return {
@@ -132,12 +122,8 @@ async def status(user: TokenPayload = Depends(get_current_user)):
     }
 
 
-# ---------------------------------------------------------------------------
-# POST /api/auth/refresh
-# ---------------------------------------------------------------------------
 @router.post("/api/auth/refresh")
 async def refresh_token(request: Request, response: Response):
-    """Issues a new access token from a valid refresh token cookie."""
     token = request.cookies.get("refresh_token")
     if not token:
         raise UnauthorizedException("Refresh token manquant.")
@@ -172,9 +158,6 @@ async def refresh_token(request: Request, response: Response):
     return {"status": "success", "message": "Token rafraîchi"}
 
 
-# ---------------------------------------------------------------------------
-# GET /api/cache/status (admin only)
-# ---------------------------------------------------------------------------
 @router.get("/api/cache/status")
 async def cache_status(admin: TokenPayload = Depends(require_admin)):
     from main import cache_manager

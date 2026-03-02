@@ -13,7 +13,6 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
     gemini_api_key: str | None = None
-    gemini_api_key: str | None = None
 
     # Filesystem uploads
     upload_folder: str = "uploads/"
@@ -31,6 +30,10 @@ class Settings(BaseSettings):
 
     # Access control
     admin_users: str = "admin"
+
+    # ✅ Mots de passe utilisateurs (définis comme Secrets sur HuggingFace)
+    admin_password: str = "password123"
+    user_password: str = "bank2024"
 
     # CORS
     allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"

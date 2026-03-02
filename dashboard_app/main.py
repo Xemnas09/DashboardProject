@@ -186,18 +186,23 @@ app.include_router(notifications.router)
 # Serve React frontend (doit être en DERNIER pour ne pas intercepter les routes API)
 # ---------------------------------------------------------------------------
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+ASSETS_DIR = os.path.join(STATIC_DIR, "assets")
+INDEX_FILE = os.path.join(STATIC_DIR, "index.html")
 
-if os.path.exists(STATIC_DIR):
+# On vérifie que le build React est complet (index.html + assets/)
+FRONTEND_READY = os.path.exists(ASSETS_DIR) and os.path.exists(INDEX_FILE)
+
+if FRONTEND_READY:
     # Sert les assets Vite (JS, CSS, images)
-    app.mount("/assets", StaticFiles(directory=os.path.join(STATIC_DIR, "assets")), name="assets")
+    app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
 
     @app.get("/", include_in_schema=False)
     async def serve_index():
-        return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+        return FileResponse(INDEX_FILE)
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_react(full_path: str):
-        return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+        return FileResponse(INDEX_FILE)
 else:
     # Fallback si le frontend n'est pas buildé (dev local)
     @app.get("/", include_in_schema=False)
