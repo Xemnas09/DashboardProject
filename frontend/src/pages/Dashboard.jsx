@@ -13,7 +13,21 @@ export default function Dashboard({ addNotification }) {
     const [username, setUsername] = useState('Utilisateur');
 
     useEffect(() => {
-        setUsername('Admin');
+        const fetchUsername = async () => {
+            try {
+                const res = await fetch('/api/status');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.user) {
+                        // Capitalise la première lettre pour l'affichage
+                        setUsername(data.user.charAt(0).toUpperCase() + data.user.slice(1));
+                    }
+                }
+            } catch (e) {
+                console.error('Erreur lors de la récupération du profil:', e);
+            }
+        };
+        fetchUsername();
     }, []);
 
     const handleDrag = (e) => {
