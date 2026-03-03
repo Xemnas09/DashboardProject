@@ -86,7 +86,7 @@ export default function Database({ addNotification }) {
     const fetchDataPreview = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`/api/database?full_data=true`);
+            const res = await fetch(`/api/database?full_data=true`, { credentials: 'include' });
             if (res.ok) {
                 const data = await res.json();
                 setDataPreview(data.data_preview);
@@ -101,7 +101,7 @@ export default function Database({ addNotification }) {
 
     const fetchColumnsInfo = async () => {
         try {
-            const res = await fetch('/api/reports/columns');
+            const res = await fetch('/api/reports/columns', { credentials: 'include' });
             if (res.ok) {
                 const data = await res.json();
                 setColumnsInfo(data.columns_info || []);
@@ -135,7 +135,8 @@ export default function Database({ addNotification }) {
             const res = await fetch('/api/database/recast', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ modifications })
+                body: JSON.stringify({ modifications }),
+                credentials: 'include',
             });
             const result = await res.json();
 
@@ -164,7 +165,8 @@ export default function Database({ addNotification }) {
         setIsDeleting(true);
         try {
             const res = await fetch('/clear_data', {
-                method: 'POST'
+                method: 'POST',
+                credentials: 'include',
             });
             if (res.ok) {
                 setDataPreview(null);
@@ -272,7 +274,8 @@ export default function Database({ addNotification }) {
                     method: anomalyMethod,
                     threshold: parseFloat(anomalyThreshold),
                     language: 'fr'
-                })
+                }),
+                credentials: 'include',
             });
             const data = await res.json();
             if (res.ok) {
@@ -785,7 +788,8 @@ export default function Database({ addNotification }) {
                                         const res = await fetch('/api/calculated-field', {
                                             method: 'POST',
                                             headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ name: formulaName, formula: formulaExpr })
+                                            body: JSON.stringify({ name: formulaName, formula: formulaExpr }),
+                                            credentials: 'include',
                                         });
                                         const result = await res.json();
                                         if (res.ok && result.status === 'success') {

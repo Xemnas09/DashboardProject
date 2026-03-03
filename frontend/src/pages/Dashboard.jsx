@@ -15,7 +15,7 @@ export default function Dashboard({ addNotification }) {
     useEffect(() => {
         const fetchUsername = async () => {
             try {
-                const res = await fetch('/api/status');
+                const res = await fetch('/api/status', { credentials: 'include' });
                 if (res.ok) {
                     const data = await res.json();
                     if (data.user) {
@@ -71,6 +71,7 @@ export default function Dashboard({ addNotification }) {
                 method: 'POST',
                 body: formData,
                 signal: controller.signal,
+                credentials: 'include',
             });
 
             clearTimeout(timeoutId);
@@ -103,7 +104,8 @@ export default function Dashboard({ addNotification }) {
             const res = await fetch('/api/select-sheet', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sheet_name: selectedSheet })
+                body: JSON.stringify({ sheet_name: selectedSheet }),
+                credentials: 'include',
             });
             const result = await res.json();
 

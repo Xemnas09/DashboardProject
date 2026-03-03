@@ -98,7 +98,8 @@ export default function Reports({ addNotification }) {
                 body: JSON.stringify({
                     chart_type: chartType, x_column: chartX, y_column: chartY,
                     summary: summary, language: 'fr'
-                })
+                }),
+                credentials: 'include',
             });
             const data = await res.json();
             if (res.ok && data.status === 'success') {
@@ -122,7 +123,8 @@ export default function Reports({ addNotification }) {
                     x_column: chartX, x_type: getFriendlyType(xColType),
                     y_column: chartY, y_type: getFriendlyType(yColType),
                     row_count: totalRows, language: 'fr'
-                })
+                }),
+                credentials: 'include',
             });
             const data = await res.json();
             if (res.ok && data.status === 'success') {
@@ -173,7 +175,7 @@ export default function Reports({ addNotification }) {
     const fetchColumnsInfo = async () => {
         try {
             setLoading(true);
-            const res = await fetch('/api/reports/columns');
+            const res = await fetch('/api/reports/columns', { credentials: 'include' });
             if (res.ok) {
                 const data = await res.json();
                 setColumnsInfo(data.columns_info || []);
@@ -214,7 +216,8 @@ export default function Reports({ addNotification }) {
                     y_column: chartY,
                     chart_type: chartType,
                     filters: globalFilters
-                })
+                }),
+                credentials: 'include',
             });
             const result = await res.json();
             if (res.ok && result.status === 'success') {
@@ -417,7 +420,8 @@ export default function Reports({ addNotification }) {
                     col_cols: pivotCols,
                     value_cols: pivotValues.map(v => ({ col: v.col, agg: v.agg })),
                     filters: globalFilters
-                })
+                }),
+                credentials: 'include',
             });
 
             const result = await res.json();

@@ -15,7 +15,7 @@ export default function Layout({ theme, setTheme, notifications, removeNotificat
 
     const fetchNotifHistory = async () => {
         try {
-            const res = await fetch('/api/notifications/history');
+            const res = await fetch('/api/notifications/history', { credentials: 'include' });
             if (res.ok) {
                 const data = await res.json();
                 setNotifHistory(data.history || []);
@@ -43,7 +43,7 @@ export default function Layout({ theme, setTheme, notifications, removeNotificat
 
     const handleLogout = async () => {
         try {
-            await fetch('/logout', { method: 'POST' });
+            await fetch('/logout', { method: 'POST', credentials: 'include' });
             navigate('/login');
         } catch (e) {
             console.error(e);

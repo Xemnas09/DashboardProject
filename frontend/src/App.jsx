@@ -16,7 +16,7 @@ function ProtectedRoute({ children }) {
 
     const checkAuth = async (attempt = 1) => {
       try {
-        const res = await fetch('/api/status');
+        const res = await fetch('/api/status', { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
           setIsAuthenticated(data.status === 'success');
