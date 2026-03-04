@@ -105,6 +105,15 @@ class ConnectionManager:
                 await ws.close(code=4002)
             except Exception:
                 pass
+        
+        # Broadcast immédiat pour ne pas faire attendre les autres utilisateurs (contourne le debounce du F5)
+        self.presence.pop(username, None)
+        self.connections.pop(username, None)
+        await self.broadcast_except(username, {
+            "event": "USER_OFFLINE",
+            "payload": {"username": username},
+            "timestamp": datetime.utcnow().isoformat(),
+        })
 
     # ── Presence ──────────────────────────────────────────────────────────────
 

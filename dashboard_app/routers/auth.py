@@ -126,6 +126,8 @@ async def logout(request: Request, response: Response):
                 from main import cache_manager
                 await cache_manager.delete(cache_id)
             logger.info(f"User logged out: {payload.get('sub')}")
+            from services.connection_manager import connection_manager
+            await connection_manager.force_disconnect_user(payload.get('sub'), "Déconnexion.")
         except JWTError:
             pass
 

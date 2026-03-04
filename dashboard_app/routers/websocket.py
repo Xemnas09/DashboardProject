@@ -81,9 +81,17 @@ async def websocket_endpoint(websocket: WebSocket, token: str = ""):
     finally:
         # 6. Nettoyage à la déconnexion
         await connection_manager.disconnect(websocket, username)
-        if not connection_manager.is_user_online(username):
-            await connection_manager.broadcast_except(username, {
-                "event": "USER_OFFLINE",
-                "payload": {"username": username},
-                "timestamp": _now(),
-            })
+        async def _handle_disconnect():
+            if not connection_manager.is_user_online(username):
+                # 0 onglets restants, on attend 1s (masque le rafraîchissement F5 court)
+                import asyncio
+                await asyncio.sleep(1.0)
+                if not connection_manager.is_user_online(username):
+                    await connection_manager.broadcast_except(username, {
+                        "event": "USER_OFFLINE",
+                        "payload": {"username": username},
+                        "timestamp": _now(),
+                    })
+
+        import asyncio
+        asyncio.create_task(_handle_disconnect())

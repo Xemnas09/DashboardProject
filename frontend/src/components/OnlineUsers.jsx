@@ -43,12 +43,6 @@ export default function OnlineUsers() {
                                     {user.username === currentUser?.username && (
                                         <span className="text-[10px] text-gray-400">(vous)</span>
                                     )}
-                                    {user.session_count > 1 && (
-                                        <span className="text-[10px] font-bold text-gray-400
-                                     bg-gray-100 px-1.5 py-0.5 rounded-full">
-                                            {user.session_count} onglets
-                                        </span>
-                                    )}
                                 </div>
                             </div>
                             {/* Status dot */}
