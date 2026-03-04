@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Users, UserPlus, Key, Trash2, Edit2, ShieldAlert, X, Shield, Lock, User as UserIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useRealtime } from '../contexts/RealtimeContext';
 
 export default function AdminUsers({ addNotification }) {
     const [users, setUsers] = useState([]);
@@ -8,6 +9,7 @@ export default function AdminUsers({ addNotification }) {
 
     // ✅ Synchronous read — role known before first render, zero flash
     const { currentUser } = useAuth();
+    const { onlineUsers } = useRealtime();
 
     // Modals
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -200,91 +202,108 @@ export default function AdminUsers({ addNotification }) {
                                 <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-100">ID</th>
                                 <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-100">Utilisateur</th>
                                 <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-100">Rôle</th>
-                                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-100">Statut</th>
+                                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-100">Compte</th>
+                                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-100">Présence</th>
                                 <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-100">Création</th>
                                 <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-100 text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
-                            {users.map((user) => (
-                                <tr key={user.id} className="hover:bg-gray-50/50 transition-colors group">
-                                    <td className="px-6 py-4 text-xs font-mono text-gray-400">#{user.id}</td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${user.role === 'super_admin' ? 'bg-amber-100 text-amber-600' : 'bg-gray-100 text-gray-500'}`}>
-                                                {user.role === 'super_admin' ? <Shield size={14} /> : <UserIcon size={14} />}
+                            {users.map((user) => {
+                                const isOnline = onlineUsers.some(ou => ou.username === user.username);
+                                return (
+                                    <tr key={user.id} className="hover:bg-gray-50/50 transition-colors group">
+                                        <td className="px-6 py-4 text-xs font-mono text-gray-400">#{user.id}</td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${user.role === 'super_admin' ? 'bg-amber-100 text-amber-600' : 'bg-gray-100 text-gray-500'}`}>
+                                                    {user.role === 'super_admin' ? <Shield size={14} /> : <UserIcon size={14} />}
+                                                </div>
+                                                <span className="font-bold text-gray-900">{user.username}</span>
                                             </div>
-                                            <span className="font-bold text-gray-900">{user.username}</span>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${user.role === 'super_admin' ? 'bg-amber-100 text-amber-700 border border-amber-200' :
-                                            user.role === 'admin' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
-                                                'bg-gray-100 text-gray-600 border border-gray-200'
-                                            }`}>
-                                            {user.role === 'super_admin' ? '👑 Super Admin' : user.role === 'admin' ? 'Admin' : 'Utilisateur'}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-2">
-                                            <div className={`w-1.5 h-1.5 rounded-full ${user.is_active ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                                            <span className="text-xs font-medium text-gray-600">{user.is_active ? 'Actif' : 'Inactif'}</span>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 text-xs text-gray-400 font-medium">
-                                        {new Date(user.created_at).toLocaleDateString()}
-                                    </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <div className="flex items-center justify-end gap-1">
-                                            {isSuperAdmin && (
-                                                <>
-                                                    <button
-                                                        title="Réinitialiser le mot de passe"
-                                                        onClick={() => { setSelectedUser(user); setShowPasswordModal(true); }}
-                                                        className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
-                                                    >
-                                                        <Key size={16} />
-                                                    </button>
-                                                    <button
-                                                        title={user.role === 'super_admin' ? 'Impossible de changer le rôle du super admin' : 'Changer de rôle'}
-                                                        onClick={() => { setSelectedUser(user); setNewRole(user.role); setShowRoleModal(true); }}
-                                                        className={`p-2 rounded-xl transition-all ${user.role === 'super_admin' ? 'text-gray-200 cursor-not-allowed' : 'text-gray-400 hover:text-amber-600 hover:bg-amber-50'}`}
-                                                        disabled={user.role === 'super_admin'}
-                                                    >
-                                                        <Shield size={16} />
-                                                    </button>
-                                                    <button
-                                                        title={user.role === 'super_admin' ? 'Impossible de renommer le super admin' : 'Renommer'}
-                                                        onClick={() => { setSelectedUser(user); setNewUsername(user.username); setShowRenameModal(true); }}
-                                                        className={`p-2 rounded-xl transition-all ${user.role === 'super_admin' ? 'text-gray-200 cursor-not-allowed' : 'text-gray-400 hover:text-green-600 hover:bg-green-50'}`}
-                                                        disabled={user.role === 'super_admin'}
-                                                    >
-                                                        <Edit2 size={16} />
-                                                    </button>
-                                                    <button
-                                                        title={
-                                                            user.role === 'super_admin'
-                                                                ? 'Impossible de supprimer le super admin'
-                                                                : user.username === currentUser?.username
-                                                                    ? 'Impossible de supprimer votre propre compte'
-                                                                    : 'Supprimer'
-                                                        }
-                                                        onClick={() => handleDeleteUser(user)}
-                                                        className={`p-2 rounded-xl transition-all ${user.role === 'super_admin' || user.username === currentUser?.username
-                                                            ? 'text-gray-200 cursor-not-allowed'
-                                                            : 'text-gray-400 hover:text-red-600 hover:bg-red-50'
-                                                            }`}
-                                                        disabled={user.role === 'super_admin' || user.username === currentUser?.username}
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                </>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${user.role === 'super_admin' ? 'bg-amber-100 text-amber-700 border border-amber-200' :
+                                                user.role === 'admin' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
+                                                    'bg-gray-100 text-gray-600 border border-gray-200'
+                                                }`}>
+                                                {user.role === 'super_admin' ? '👑 Super Admin' : user.role === 'admin' ? 'Admin' : 'Utilisateur'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-2">
+                                                <div className={`w-1.5 h-1.5 rounded-full ${user.is_active ? 'bg-gray-300' : 'bg-red-500'}`}></div>
+                                                <span className="text-xs font-medium text-gray-600">{user.is_active ? 'Actif' : 'Suspendu'}</span>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {isOnline ? (
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"></span>
+                                                    <span className="text-xs font-bold text-emerald-600">En ligne</span>
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="flex h-2 w-2 rounded-full bg-gray-200"></span>
+                                                    <span className="text-xs font-medium text-gray-400">Hors ligne</span>
+                                                </div>
                                             )}
-                                            {!isSuperAdmin && <span className="text-[10px] text-gray-300 italic">Lecture seule</span>}
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
+                                        </td>
+                                        <td className="px-6 py-4 text-xs text-gray-400 font-medium">
+                                            {new Date(user.created_at).toLocaleDateString()}
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex items-center justify-end gap-1">
+                                                {isSuperAdmin && (
+                                                    <>
+                                                        <button
+                                                            title="Réinitialiser le mot de passe"
+                                                            onClick={() => { setSelectedUser(user); setShowPasswordModal(true); }}
+                                                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                                                        >
+                                                            <Key size={16} />
+                                                        </button>
+                                                        <button
+                                                            title={user.role === 'super_admin' ? 'Impossible de changer le rôle du super admin' : 'Changer de rôle'}
+                                                            onClick={() => { setSelectedUser(user); setNewRole(user.role); setShowRoleModal(true); }}
+                                                            className={`p-2 rounded-xl transition-all ${user.role === 'super_admin' ? 'text-gray-200 cursor-not-allowed' : 'text-gray-400 hover:text-amber-600 hover:bg-amber-50'}`}
+                                                            disabled={user.role === 'super_admin'}
+                                                        >
+                                                            <Shield size={16} />
+                                                        </button>
+                                                        <button
+                                                            title={user.role === 'super_admin' ? 'Impossible de renommer le super admin' : 'Renommer'}
+                                                            onClick={() => { setSelectedUser(user); setNewUsername(user.username); setShowRenameModal(true); }}
+                                                            className={`p-2 rounded-xl transition-all ${user.role === 'super_admin' ? 'text-gray-200 cursor-not-allowed' : 'text-gray-400 hover:text-green-600 hover:bg-green-50'}`}
+                                                            disabled={user.role === 'super_admin'}
+                                                        >
+                                                            <Edit2 size={16} />
+                                                        </button>
+                                                        <button
+                                                            title={
+                                                                user.role === 'super_admin'
+                                                                    ? 'Impossible de supprimer le super admin'
+                                                                    : user.username === currentUser?.username
+                                                                        ? 'Impossible de supprimer votre propre compte'
+                                                                        : 'Supprimer'
+                                                            }
+                                                            onClick={() => handleDeleteUser(user)}
+                                                            className={`p-2 rounded-xl transition-all ${user.role === 'super_admin' || user.username === currentUser?.username
+                                                                ? 'text-gray-200 cursor-not-allowed'
+                                                                : 'text-gray-400 hover:text-red-600 hover:bg-red-50'
+                                                                }`}
+                                                            disabled={user.role === 'super_admin' || user.username === currentUser?.username}
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </>
+                                                )}
+                                                {!isSuperAdmin && <span className="text-[10px] text-gray-300 italic">Lecture seule</span>}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )
+                            })}
                         </tbody>
                     </table>
                 </div>

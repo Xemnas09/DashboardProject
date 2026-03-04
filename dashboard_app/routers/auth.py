@@ -200,7 +200,7 @@ async def get_ws_token(
     """
     expire = datetime.utcnow() + timedelta(minutes=5)
     payload = {
-        "sub": current_user.username,
+        "sub": current_user.sub,
         "type": "ws",
         "jti": str(uuid.uuid4()),
         "exp": expire,
