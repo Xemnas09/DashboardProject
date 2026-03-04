@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, User, ArrowRight, Shield, Sparkles } from 'lucide-react';
+import { storeUser, clearStoredUser } from '../utils/session';
 
 export default function Login({ addNotification }) {
     const [username, setUsername] = useState('');
@@ -12,6 +13,8 @@ export default function Login({ addNotification }) {
     const navigate = useNavigate();
 
     useEffect(() => {
+        // Clear any stale session data when landing on login
+        clearStoredUser();
         setTimeout(() => setMounted(true), 100);
     }, []);
 
@@ -24,18 +27,25 @@ export default function Login({ addNotification }) {
             const res = await fetch('/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password }),
+                body: JSON.stringify({ username: username.trim().toLowerCase(), password }),
                 credentials: 'include',
             });
 
             const data = await res.json();
 
             if (res.ok && data.status === 'success') {
+                // Fetch user info once and store synchronously before navigating
+                const statusRes = await fetch('/api/status', { credentials: 'include' });
+                if (statusRes.ok) {
+                    const statusData = await statusRes.json();
+                    storeUser(statusData.user, statusData.role);
+                }
+
                 addNotification("Connexion réussie", "success");
                 navigate('/dashboard');
             } else {
-                setError(data.message || 'Identifiants incorrects');
-                addNotification(data.message || "Erreur de connexion", "error");
+                setError(data.message || 'Identifiant ou mot de passe incorrect');
+                addNotification(data.message || "Identifiant ou mot de passe incorrect", "error");
             }
         } catch (err) {
             console.error(err);

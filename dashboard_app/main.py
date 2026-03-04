@@ -47,7 +47,8 @@ else:
 # ---------------------------------------------------------------------------
 # Cache manager
 # ---------------------------------------------------------------------------
-from services.data_cache import cache_manager  # noqa: E402
+from services.data_cache import cache_manager
+from services.token_service import load_revoked_tokens, cleanup_expired_tokens
 
 
 # ---------------------------------------------------------------------------
@@ -63,19 +64,29 @@ async def _cache_cleanup_loop():
             logger.debug("Cache cleanup: nothing to evict")
 
 
+async def _token_cleanup_loop():
+    while True:
+        await asyncio.sleep(3600)  # 1 hour
+        await cleanup_expired_tokens()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     os.makedirs(settings.upload_folder, exist_ok=True)
     logger.info(f"Datavera API starting (env={settings.environment})")
-    logger.info(f"Upload folder: {settings.upload_folder} | Max size: {settings.max_upload_size_mb}MB")
-    logger.info(f"Cache TTL: {settings.cache_ttl_hours}h | Cleanup interval: {settings.cache_cleanup_interval_minutes}min")
-    logger.info(f"CORS origins: {settings.origins_list}")
+    
+    # ✅ Load revoked tokens cache BEFORE accepting requests
+    await load_revoked_tokens()
 
     cleanup_task = asyncio.create_task(_cache_cleanup_loop())
+    token_task = asyncio.create_task(_token_cleanup_loop())
+    
     yield
+    
     cleanup_task.cancel()
+    token_task.cancel()
     try:
-        await cleanup_task
+        await asyncio.gather(cleanup_task, token_task)
     except asyncio.CancelledError:
         pass
     logger.info("Datavera API stopped")

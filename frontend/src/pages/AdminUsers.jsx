@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Users, UserPlus, Key, Trash2, Edit2, ShieldAlert, X, Shield, Lock, User as UserIcon } from 'lucide-react';
+import { getStoredUser } from '../utils/session';
 
 export default function AdminUsers({ addNotification }) {
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [currentUser, setCurrentUser] = useState(null);
+
+    // ✅ Synchronous read — role known before first render, zero flash
+    const [currentUser] = useState(() => getStoredUser());
 
     // Modals
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -35,21 +38,8 @@ export default function AdminUsers({ addNotification }) {
         }
     };
 
-    const fetchStatus = async () => {
-        try {
-            const res = await fetch('/api/status', { credentials: 'include' });
-            if (res.ok) {
-                const data = await res.json();
-                setCurrentUser({ username: data.user, role: data.role || 'user' });
-            }
-        } catch (e) {
-            console.error("Error fetching status:", e);
-        }
-    };
-
     useEffect(() => {
         fetchUsers();
-        fetchStatus();
     }, []);
 
     const handleCreateUser = async (e) => {
@@ -228,11 +218,11 @@ export default function AdminUsers({ addNotification }) {
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${user.role === 'super_admin' ? 'bg-amber-100 text-amber-700' :
-                                            user.role === 'admin' ? 'bg-blue-100 text-blue-700' :
-                                                'bg-gray-100 text-gray-600'
+                                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${user.role === 'super_admin' ? 'bg-amber-100 text-amber-700 border border-amber-200' :
+                                            user.role === 'admin' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
+                                                'bg-gray-100 text-gray-600 border border-gray-200'
                                             }`}>
-                                            {user.role}
+                                            {user.role === 'super_admin' ? '👑 Super Admin' : user.role === 'admin' ? 'Admin' : 'Utilisateur'}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4">
@@ -256,23 +246,29 @@ export default function AdminUsers({ addNotification }) {
                                                         <Key size={16} />
                                                     </button>
                                                     <button
-                                                        title="Changer de rôle"
+                                                        title={user.role === 'super_admin' ? 'Impossible de changer le rôle du super admin' : 'Changer de rôle'}
                                                         onClick={() => { setSelectedUser(user); setNewRole(user.role); setShowRoleModal(true); }}
-                                                        className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all"
+                                                        className={`p-2 rounded-xl transition-all ${user.role === 'super_admin' ? 'text-gray-200 cursor-not-allowed' : 'text-gray-400 hover:text-amber-600 hover:bg-amber-50'}`}
                                                         disabled={user.role === 'super_admin'}
                                                     >
                                                         <Shield size={16} />
                                                     </button>
                                                     <button
-                                                        title="Renommer"
+                                                        title={user.role === 'super_admin' ? 'Impossible de renommer le super admin' : 'Renommer'}
                                                         onClick={() => { setSelectedUser(user); setNewUsername(user.username); setShowRenameModal(true); }}
-                                                        className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-xl transition-all"
+                                                        className={`p-2 rounded-xl transition-all ${user.role === 'super_admin' ? 'text-gray-200 cursor-not-allowed' : 'text-gray-400 hover:text-green-600 hover:bg-green-50'}`}
                                                         disabled={user.role === 'super_admin'}
                                                     >
                                                         <Edit2 size={16} />
                                                     </button>
                                                     <button
-                                                        title="Supprimer"
+                                                        title={
+                                                            user.role === 'super_admin'
+                                                                ? 'Impossible de supprimer le super admin'
+                                                                : user.username === currentUser?.username
+                                                                    ? 'Impossible de supprimer votre propre compte'
+                                                                    : 'Supprimer'
+                                                        }
                                                         onClick={() => handleDeleteUser(user)}
                                                         className={`p-2 rounded-xl transition-all ${user.role === 'super_admin' || user.username === currentUser?.username
                                                             ? 'text-gray-200 cursor-not-allowed'

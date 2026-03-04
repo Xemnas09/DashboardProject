@@ -24,23 +24,26 @@ router = APIRouter(tags=["Auth"])
 
 
 def _create_token(data: dict, token_type: str, expires_delta: timedelta) -> str:
+    now = datetime.utcnow()
     payload = {
         **data,
         "type": token_type,
-        "exp": datetime.utcnow() + expires_delta,
+        "jti": str(uuid.uuid4()),
+        "iat": now,
+        "exp": now + expires_delta,
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
-def _set_auth_cookies(response: Response, username: str, cache_id: str):
+def _set_auth_cookies(response: Response, username: str, role: str, cache_id: str):
     """Sets both access and refresh HttpOnly cookies."""
     access_token = _create_token(
-        {"sub": username, "cache_id": cache_id},
+        {"sub": username, "role": role, "cache_id": cache_id},
         "access",
         timedelta(minutes=settings.access_token_expire_minutes),
     )
     refresh_token = _create_token(
-        {"sub": username, "cache_id": cache_id},
+        {"sub": username, "role": role, "cache_id": cache_id},
         "refresh",
         timedelta(days=settings.refresh_token_expire_days),
     )
@@ -82,10 +85,10 @@ async def login(
     user = await authenticate_user(db, username, password)
     if not user:
         notification_store.add(username or "unknown", "Échec de connexion", "error")
-        raise UnauthorizedException("Identifiants incorrects")
+        raise UnauthorizedException("Identifiant ou mot de passe incorrect")
 
     cache_id = str(uuid.uuid4())
-    _set_auth_cookies(response, username, cache_id)
+    _set_auth_cookies(response, username, user.role, cache_id)
 
     notification_store.clear(username)
     notification_store.add(username, "Connexion réussie", "success")
@@ -100,6 +103,13 @@ async def logout(request: Request, response: Response):
     if token:
         try:
             payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+            jti = payload.get("jti")
+            exp = payload.get("exp")
+            if jti and exp:
+                from services.token_service import revoke_token
+                from datetime import datetime
+                await revoke_token(jti, datetime.utcfromtimestamp(exp))
+                
             cache_id = payload.get("cache_id")
             if cache_id:
                 from main import cache_manager
@@ -142,7 +152,7 @@ async def refresh_token(request: Request, response: Response):
         raise UnauthorizedException("Type de token invalide.")
 
     access_token = _create_token(
-        {"sub": payload["sub"], "cache_id": payload["cache_id"]},
+        {"sub": payload["sub"], "role": payload.get("role", "user"), "cache_id": payload["cache_id"]},
         "access",
         timedelta(minutes=settings.access_token_expire_minutes),
     )

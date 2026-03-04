@@ -21,6 +21,7 @@ import os, sys
 sys.path.insert(0, os.path.dirname(__file__))
 from settings import settings
 from models.user import User
+from models.revoked_token import RevokedToken  # ensure table is created
 from database import Base
 from crud.user import (
     get_user_by_username, create_user, get_all_users,

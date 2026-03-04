@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UploadCloud, CheckCircle2, TrendingUp, Users, Database as DatabaseIcon, BarChart3, FileSpreadsheet, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { getStoredUser, getDisplayName } from '../utils/session';
 
 export default function Dashboard({ addNotification }) {
     const [isUploading, setIsUploading] = useState(false);
@@ -10,25 +11,9 @@ export default function Dashboard({ addNotification }) {
     const [selectedSheet, setSelectedSheet] = useState('');
     const fileInputRef = useRef(null);
 
-    const [username, setUsername] = useState('Utilisateur');
-
-    useEffect(() => {
-        const fetchUsername = async () => {
-            try {
-                const res = await fetch('/api/status', { credentials: 'include' });
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.user) {
-                        // Capitalise la première lettre pour l'affichage
-                        setUsername(data.user.charAt(0).toUpperCase() + data.user.slice(1));
-                    }
-                }
-            } catch (e) {
-                console.error('Erreur lors de la récupération du profil:', e);
-            }
-        };
-        fetchUsername();
-    }, []);
+    // ✅ Synchronous read — available before first render, zero flash
+    const [user] = useState(() => getStoredUser());
+    const username = getDisplayName(user) || 'Utilisateur';
 
     const handleDrag = (e) => {
         e.preventDefault();

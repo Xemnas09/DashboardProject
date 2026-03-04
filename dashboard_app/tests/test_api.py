@@ -64,16 +64,22 @@ async def auth_client():
 
 
 def _make_token(sub="admin", cache_id="test-cache", token_type="access", expire_minutes=30):
+    import uuid
     payload = {
         "sub": sub, "cache_id": cache_id, "type": token_type,
+        "role": "super_admin" if sub == "admin" else "user",
+        "jti": str(uuid.uuid4()),
         "exp": datetime.utcnow() + timedelta(minutes=expire_minutes),
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
 def _make_expired_token(sub="admin", cache_id="test-cache", token_type="access"):
+    import uuid
     payload = {
         "sub": sub, "cache_id": cache_id, "type": token_type,
+        "role": "super_admin" if sub == "admin" else "user",
+        "jti": str(uuid.uuid4()),
         "exp": datetime.utcnow() - timedelta(minutes=5),
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)

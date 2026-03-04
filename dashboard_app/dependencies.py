@@ -26,6 +26,8 @@ limiter = Limiter(key_func=get_remote_address)
 # ---------------------------------------------------------------------------
 # JWT auth: extract access token from HttpOnly cookie
 # ---------------------------------------------------------------------------
+from services.token_service import is_token_revoked
+
 async def get_current_user(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -52,6 +54,10 @@ async def get_current_user(
     if payload.get("type") != "access":
         raise UnauthorizedException("Type de token invalide.")
         
+    jti = payload.get("jti")
+    if not jti or is_token_revoked(jti):
+        raise UnauthorizedException("Session révoquée. Veuillez vous reconnecter.")
+
     username = payload.get("sub")
     user = await get_user_by_username(db, username)
     if not user or not user.is_active:

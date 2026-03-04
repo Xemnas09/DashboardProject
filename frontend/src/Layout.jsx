@@ -1,15 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Database, BarChart3, Settings, LogOut, Menu, User, Bell, Shield, ChevronRight, X } from 'lucide-react';
+import { getStoredUser, getDisplayName, clearStoredUser } from './utils/session';
 
 export default function Layout({ theme, setTheme, notifications, removeNotification }) {
+    // ✅ Synchronous read — no flash on username/role
+    const [storedUser] = useState(() => getStoredUser());
+    const [userRole, setUserRole] = useState(storedUser?.role || 'user');
+    const [username, setUsername] = useState(
+        getDisplayName(storedUser) || 'Utilisateur'
+    );
+
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [showSettings, setShowSettings] = useState(false);
     const [showLogout, setShowLogout] = useState(false);
     const [showNotifMenu, setShowNotifMenu] = useState(false);
     const [tempTheme, setTempTheme] = useState(theme);
-    const [userRole, setUserRole] = useState('user');
-    const [username, setUsername] = useState('Utilisateur');
 
     const navigate = useNavigate();
     const unreadCount = notifications.length;
@@ -33,20 +39,24 @@ export default function Layout({ theme, setTheme, notifications, removeNotificat
         }
     }, [showNotifMenu]);
 
+    // Background validation — only updates if session is stale
     useEffect(() => {
-        const fetchUserStatus = async () => {
+        const validateSession = async () => {
             try {
                 const res = await fetch('/api/status', { credentials: 'include' });
                 if (res.ok) {
                     const data = await res.json();
-                    setUserRole(data.role || 'user');
-                    setUsername(data.user || 'Utilisateur');
+                    if (data.role) setUserRole(data.role);
+                    if (data.user) {
+                        const name = data.user.charAt(0).toUpperCase() + data.user.slice(1);
+                        setUsername(name);
+                    }
                 }
             } catch (e) {
-                console.error("Error fetching user status:", e);
+                console.error("Error validating session:", e);
             }
         };
-        fetchUserStatus();
+        validateSession();
     }, []);
 
     useEffect(() => {
@@ -62,9 +72,11 @@ export default function Layout({ theme, setTheme, notifications, removeNotificat
     const handleLogout = async () => {
         try {
             await fetch('/logout', { method: 'POST', credentials: 'include' });
+            clearStoredUser();  // ✅ Clean state for next user
             navigate('/login');
         } catch (e) {
             console.error(e);
+            clearStoredUser();
             navigate('/login');
         }
     };
