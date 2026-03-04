@@ -13,3 +13,4 @@ class TokenPayload(BaseModel):
     cache_id: str     # links to DATA_CACHE
     exp: int          # expiry timestamp
     type: str         # "access" or "refresh"
+    role: str = "user"

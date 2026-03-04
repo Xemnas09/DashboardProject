@@ -9,6 +9,10 @@ from jose import jwt, JWTError, ExpiredSignatureError
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+from sqlalchemy.ext.asyncio import AsyncSession
+from database import get_db
+from crud.user import get_user_by_username
+
 from settings import settings
 from exceptions import UnauthorizedException, SessionExpiredException
 from schemas.auth import TokenPayload
@@ -22,7 +26,10 @@ limiter = Limiter(key_func=get_remote_address)
 # ---------------------------------------------------------------------------
 # JWT auth: extract access token from HttpOnly cookie
 # ---------------------------------------------------------------------------
-async def get_current_user(request: Request) -> TokenPayload:
+async def get_current_user(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> TokenPayload:
     """
     Reads the `access_token` HttpOnly cookie, verifies signature + expiry,
     and returns the decoded payload as a TokenPayload.
@@ -44,6 +51,13 @@ async def get_current_user(request: Request) -> TokenPayload:
 
     if payload.get("type") != "access":
         raise UnauthorizedException("Type de token invalide.")
+        
+    username = payload.get("sub")
+    user = await get_user_by_username(db, username)
+    if not user or not user.is_active:
+        raise UnauthorizedException("Utilisateur introuvable ou inactif.")
+        
+    payload["role"] = user.role
 
     return TokenPayload(**payload)
 
@@ -69,8 +83,17 @@ async def get_cache_entry(user: TokenPayload = Depends(get_current_user)):
 # ---------------------------------------------------------------------------
 async def require_admin(user: TokenPayload = Depends(get_current_user)) -> TokenPayload:
     """
-    Verifies the current user is in the ADMIN_USERS list from settings.
+    Verifies the current user has the admin or super_admin role.
     """
-    if user.sub not in settings.admin_list:
+    if user.role not in ("admin", "super_admin"):
         raise UnauthorizedException("Accès réservé aux administrateurs.")
+    return user
+
+
+async def require_super_admin(user: TokenPayload = Depends(get_current_user)) -> TokenPayload:
+    """
+    Verifies the current user has the super_admin role.
+    """
+    if user.role != "super_admin":
+        raise UnauthorizedException("Accès réservé au super admin.")
     return user

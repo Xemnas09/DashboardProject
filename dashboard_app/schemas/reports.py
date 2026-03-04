@@ -20,6 +20,10 @@ class PivotDataRequest(BaseModel):
     row_cols: list[str] = Field(default_factory=list)
     col_cols: list[str] = Field(default_factory=list)
     value_cols: list[PivotValueSpec] = Field(default_factory=list)
+    filters: dict = {}
+    # Legacy support
+    value_col: str | None = None
+    agg_func: str | None = None
     limit: int | None = None
 
 class LLMInterpretRequest(BaseModel):

@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Database from './pages/Database';
 import Reports from './pages/Reports';
+import AdminUsers from './pages/AdminUsers';
 
 function ProtectedRoute({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(null);
@@ -105,6 +106,7 @@ export default function App() {
           <Route path="dashboard" element={<Dashboard addNotification={addNotification} />} />
           <Route path="database" element={<Database addNotification={addNotification} />} />
           <Route path="reports" element={<Reports addNotification={addNotification} />} />
+          <Route path="admin" element={<AdminUsers addNotification={addNotification} />} />
         </Route>
       </Routes>
 

@@ -33,5 +33,7 @@ COPY --from=frontend-build /app/frontend/dist ./static
 # HuggingFace impose le port 7860
 EXPOSE 7860
 
-# 1 worker car le cache est en mémoire (DATA_CACHE partagé impossible en multi-worker)
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860", "--workers", "1"]
+# Démarrage via le script entrypoint
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+CMD ["/app/entrypoint.sh"]

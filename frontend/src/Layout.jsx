@@ -8,6 +8,8 @@ export default function Layout({ theme, setTheme, notifications, removeNotificat
     const [showLogout, setShowLogout] = useState(false);
     const [showNotifMenu, setShowNotifMenu] = useState(false);
     const [tempTheme, setTempTheme] = useState(theme);
+    const [userRole, setUserRole] = useState('user');
+    const [username, setUsername] = useState('Utilisateur');
 
     const navigate = useNavigate();
     const unreadCount = notifications.length;
@@ -30,6 +32,22 @@ export default function Layout({ theme, setTheme, notifications, removeNotificat
             fetchNotifHistory();
         }
     }, [showNotifMenu]);
+
+    useEffect(() => {
+        const fetchUserStatus = async () => {
+            try {
+                const res = await fetch('/api/status', { credentials: 'include' });
+                if (res.ok) {
+                    const data = await res.json();
+                    setUserRole(data.role || 'user');
+                    setUsername(data.user || 'Utilisateur');
+                }
+            } catch (e) {
+                console.error("Error fetching user status:", e);
+            }
+        };
+        fetchUserStatus();
+    }, []);
 
     useEffect(() => {
         const handleResize = () => {
@@ -56,6 +74,10 @@ export default function Layout({ theme, setTheme, notifications, removeNotificat
         { to: '/database', label: 'Base de Données', icon: Database, description: 'Explorer & gérer' },
         { to: '/reports', label: 'Rapports', icon: BarChart3, description: 'Graphiques & TCD' }
     ];
+
+    if (userRole === 'admin' || userRole === 'super_admin') {
+        navItems.push({ to: '/admin', label: 'Admin', icon: Shield, description: 'Gérer utilisateurs' });
+    }
 
     return (
         <div className="flex h-screen bg-gray-50 font-sans text-gray-900 selection:bg-bank-200 selection:text-bank-900">
@@ -198,8 +220,11 @@ export default function Layout({ theme, setTheme, notifications, removeNotificat
                                 )}
                             </div>
 
-                            {/* User Avatar */}
                             <div className="flex items-center gap-3 pl-3 border-l border-gray-200">
+                                <div className="hidden md:flex flex-col items-end mr-1">
+                                    <span className="text-xs font-black text-gray-900 leading-none">{username}</span>
+                                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-1">{userRole}</span>
+                                </div>
                                 <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-bank-500 to-bank-600 flex items-center justify-center text-white shadow-lg shadow-bank-200">
                                     <User size={16} />
                                 </div>

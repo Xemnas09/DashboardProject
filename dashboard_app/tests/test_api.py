@@ -18,6 +18,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from main import app, cache_manager
 from settings import settings
 from services.data_cache import CacheEntry
+from database import engine, Base
+from crud.user import create_user
+from schemas.user import UserCreate
 
 # Disable rate limiter for testing
 from dependencies import limiter
@@ -27,6 +30,23 @@ limiter.enabled = False
 # ===========================================================================
 # Fixtures
 # ===========================================================================
+
+@pytest.fixture(scope="session", autouse=True)
+async def setup_database():
+    """Ensure tables are created and default users seeded before any tests run."""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all) # Start fresh for tests
+        await conn.run_sync(Base.metadata.create_all)
+    
+    from database import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        # Create admin
+        await create_user(db, UserCreate(
+            username="admin", 
+            password="admin123", 
+            role="super_admin"
+        ))
+    yield
 
 @pytest.fixture
 async def client():
@@ -39,7 +59,7 @@ async def client():
 async def auth_client():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        await ac.post("/login", json={"username": "admin", "password": "password123"})
+        await ac.post("/login", json={"username": "admin", "password": "admin123"})
         yield ac
 
 
@@ -71,7 +91,7 @@ def _make_csv(rows=10) -> bytes:
 # ===========================================================================
 
 async def test_login_success(client):
-    r = await client.post("/login", json={"username": "admin", "password": "password123"})
+    r = await client.post("/login", json={"username": "admin", "password": "admin123"})
     assert r.status_code == 200
     assert r.json()["status"] == "success"
     set_cookie = r.headers.get("set-cookie", "")
@@ -277,7 +297,7 @@ async def test_openapi_all_endpoints(client):
 async def test_full_flow(client):
     """login → upload → DB → columns → chart → pivot → notifs → clear → logout"""
     # 1. Login
-    r = await client.post("/login", json={"username": "admin", "password": "password123"})
+    r = await client.post("/login", json={"username": "admin", "password": "admin123"})
     assert r.status_code == 200
 
     # 2. Upload
@@ -339,7 +359,7 @@ async def test_full_flow(client):
 async def test_response_shapes(client):
     """Verify response shapes match Flask originals."""
     # Login
-    r = await client.post("/login", json={"username": "admin", "password": "password123"})
+    r = await client.post("/login", json={"username": "admin", "password": "admin123"})
     assert r.json() == {"status": "success"}
 
     # Status

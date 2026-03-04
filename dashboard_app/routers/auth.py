@@ -13,15 +13,14 @@ from dependencies import get_current_user, require_admin, limiter
 from exceptions import UnauthorizedException, ValidationException
 from services.notifications import notification_store
 from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
+from database import get_db
+from crud.user import authenticate_user
+from loguru import logger
 
 router = APIRouter(tags=["Auth"])
 
-# ✅ Les mots de passe sont chargés depuis les variables d'environnement
-def get_users() -> dict:
-    return {
-        "admin": settings.admin_password,
-        "user": settings.user_password,
-    }
+# (removed static USERS dictionary)
 
 
 def _create_token(data: dict, token_type: str, expires_delta: timedelta) -> str:
@@ -71,12 +70,17 @@ def _set_auth_cookies(response: Response, username: str, cache_id: str):
 
 @router.post("/login")
 @limiter.limit("5/minute")
-async def login(request: Request, body: LoginRequest, response: Response):
+async def login(
+    request: Request,
+    body: LoginRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
     username = body.username
     password = body.password
 
-    users = get_users()
-    if username not in users or users[username] != password:
+    user = await authenticate_user(db, username, password)
+    if not user:
         notification_store.add(username or "unknown", "Échec de connexion", "error")
         raise UnauthorizedException("Identifiants incorrects")
 
@@ -117,6 +121,7 @@ async def status(user: TokenPayload = Depends(get_current_user)):
     return {
         "status": "success",
         "user": user.sub,
+        "role": user.role,
         "has_unread": notification_store.has_unread(user.sub),
         "notifications": notification_store.get_recent(user.sub),
     }

@@ -173,13 +173,14 @@ async def log_requests(request: Request, call_next):
 # ---------------------------------------------------------------------------
 # Register routers
 # ---------------------------------------------------------------------------
-from routers import auth, upload, database, reports, notifications  # noqa: E402
+from routers import auth, upload, database, reports, notifications, admin  # noqa: E402
 
 app.include_router(auth.router)
 app.include_router(upload.router)
 app.include_router(database.router)
 app.include_router(reports.router)
 app.include_router(notifications.router)
+app.include_router(admin.router)
 
 
 # ---------------------------------------------------------------------------
