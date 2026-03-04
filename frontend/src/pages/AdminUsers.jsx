@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Users, UserPlus, Key, Trash2, Edit2, ShieldAlert, X, Shield, Lock, User as UserIcon } from 'lucide-react';
-import { getStoredUser } from '../utils/session';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function AdminUsers({ addNotification }) {
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
 
     // ✅ Synchronous read — role known before first render, zero flash
-    const [currentUser] = useState(() => getStoredUser());
+    const { currentUser } = useAuth();
 
     // Modals
     const [showCreateModal, setShowCreateModal] = useState(false);

@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UploadCloud, CheckCircle2, TrendingUp, Users, Database as DatabaseIcon, BarChart3, FileSpreadsheet, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { getStoredUser, getDisplayName } from '../utils/session';
+import { useAuth } from '../contexts/AuthContext';
+import { getDisplayName } from '../utils/session';
+import OnlineUsers from '../components/OnlineUsers';
 
 export default function Dashboard({ addNotification }) {
     const [isUploading, setIsUploading] = useState(false);
@@ -12,8 +14,8 @@ export default function Dashboard({ addNotification }) {
     const fileInputRef = useRef(null);
 
     // ✅ Synchronous read — available before first render, zero flash
-    const [user] = useState(() => getStoredUser());
-    const username = getDisplayName(user) || 'Utilisateur';
+    const { currentUser } = useAuth();
+    const username = getDisplayName(currentUser) || 'Utilisateur';
 
     const handleDrag = (e) => {
         e.preventDefault();
@@ -30,18 +32,23 @@ export default function Dashboard({ addNotification }) {
         e.stopPropagation();
         setDragActive(false);
         if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-            handleFiles(e.dataTransfer.files[0]);
+            handleFileProcess(e.dataTransfer.files[0]);
         }
     };
 
     const handleChange = (e) => {
         e.preventDefault();
         if (e.target.files && e.target.files[0]) {
-            handleFiles(e.target.files[0]);
+            handleFileProcess(e.target.files[0]);
         }
     };
 
-    const handleFiles = async (file) => {
+    const handleFileProcess = async (file) => {
+        if (!file.name.match(/\.(csv|xlsx|xls)$/i)) {
+            addNotification('Format non supporté. Utilisez CSV ou Excel.', 'error');
+            return;
+        }
+
         setIsUploading(true);
         setUploadSuccess(false);
 
@@ -52,7 +59,7 @@ export default function Dashboard({ addNotification }) {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-            const res = await fetch('/upload', {
+            const res = await fetch('/api/upload', {
                 method: 'POST',
                 body: formData,
                 signal: controller.signal,
@@ -62,16 +69,15 @@ export default function Dashboard({ addNotification }) {
             clearTimeout(timeoutId);
             const result = await res.json();
 
-            if (res.ok && result.status === 'success') {
-                setUploadSuccess(true);
-                addNotification(result.message, 'success');
-                if (result.notification) {
-                    addNotification(result.notification.message, 'info');
+            if (res.ok) {
+                if (result.status === 'success' && result.pending_sheets) {
+                    setPendingSheets(result.pending_sheets);
+                    if (result.pending_sheets.length > 0) setSelectedSheet(result.pending_sheets[0]);
+                    addNotification(`${result.pending_sheets.length} feuilles détectées`, 'info');
+                } else if (result.status === 'success') {
+                    setUploadSuccess(true);
+                    addNotification('Fichier importé avec succès', 'success');
                 }
-            } else if (res.ok && result.status === 'requires_sheet') {
-                setPendingSheets(result.sheets);
-                if (result.sheets.length > 0) setSelectedSheet(result.sheets[0]);
-                addNotification(result.message, 'info');
             } else {
                 throw new Error(result.message || 'Erreur inconnue');
             }
@@ -83,10 +89,10 @@ export default function Dashboard({ addNotification }) {
         }
     };
 
-    const handleSheetSelection = async () => {
+    const submitSheet = async () => {
         setIsUploading(true);
         try {
-            const res = await fetch('/api/select-sheet', {
+            const res = await fetch('/api/upload/select-sheet', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ sheet_name: selectedSheet }),
@@ -97,9 +103,9 @@ export default function Dashboard({ addNotification }) {
             if (res.ok && result.status === 'success') {
                 setPendingSheets([]);
                 setUploadSuccess(true);
-                addNotification(result.message, 'success');
+                addNotification('Feuille importée avec succès', 'success');
             } else {
-                throw new Error(result.message || 'Erreur lors du chargement de la feuille');
+                throw new Error(result.message || 'Erreur lors de l\'importation de la feuille');
             }
         } catch (err) {
             console.error(err);
@@ -123,28 +129,31 @@ export default function Dashboard({ addNotification }) {
 
     return (
         <div className="max-w-7xl mx-auto space-y-8 animate-fade-in-up">
-            {/* Welcome Section */}
-            <div className="relative bg-gradient-to-r from-gray-950 via-gray-900 to-gray-950 rounded-2xl shadow-2xl p-8 overflow-hidden">
-                {/* Background effects */}
-                <div className="absolute inset-0 overflow-hidden">
-                    <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-bank-500/10 blur-[100px] rounded-full"></div>
-                    <div className="absolute bottom-0 left-[20%] w-[200px] h-[200px] bg-bank-400/5 blur-[80px] rounded-full"></div>
-                    <div className="absolute inset-0 opacity-[0.03]" style={{
-                        backgroundImage: 'linear-gradient(rgba(255,255,255,.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.1) 1px, transparent 1px)',
-                        backgroundSize: '40px 40px'
-                    }}></div>
+            <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
+                {/* Welcome Section - Takes 3 columns */}
+                <div className="xl:col-span-3 relative bg-gradient-to-r from-gray-950 via-gray-900 to-gray-950 rounded-2xl shadow-2xl p-8 overflow-hidden h-full">
+                    {/* Background effects */}
+                    <div className="absolute inset-0 overflow-hidden">
+                        <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-bank-500/10 blur-[100px] rounded-full"></div>
+                        <div className="absolute bottom-0 left-[20%] w-[200px] h-[200px] bg-bank-400/5 blur-[80px] rounded-full"></div>
+                        <div className="absolute inset-0 opacity-[0.03]" style={{
+                            backgroundImage: 'linear-gradient(rgba(255,255,255,.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.1) 1px, transparent 1px)',
+                            backgroundSize: '40px 40px'
+                        }}></div>
+                    </div>
+
+                    <div className="relative z-10 flex flex-col h-full justify-center">
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-bank-400 mb-2">Tableau de Bord</p>
+                            <h2 className="text-3xl font-black text-white tracking-tight">Bienvenue, {username}</h2>
+                            <p className="text-white/40 mt-2 text-sm font-medium">Voici un résumé de l'activité d'aujourd'hui.</p>
+                        </div>
+                    </div>
                 </div>
 
-                <div className="relative z-10 flex justify-between items-center">
-                    <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-bank-400 mb-2">Tableau de Bord</p>
-                        <h2 className="text-3xl font-black text-white tracking-tight">Bienvenue, {username}</h2>
-                        <p className="text-white/40 mt-2 text-sm font-medium">Voici un résumé de l'activité d'aujourd'hui.</p>
-                    </div>
-                    <div className="hidden md:flex items-center gap-2 px-4 py-2 rounded-xl bg-white/[0.06] border border-white/[0.08] backdrop-blur-sm">
-                        <span className="flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"></span>
-                        <span className="text-[10px] font-black text-white/50 uppercase tracking-[0.15em]">Système Actif</span>
-                    </div>
+                {/* Online Users Section - Takes 1 column */}
+                <div className="xl:col-span-1">
+                    <OnlineUsers />
                 </div>
             </div>
 

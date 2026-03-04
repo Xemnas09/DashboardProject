@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, User, ArrowRight, Shield, Sparkles } from 'lucide-react';
-import { storeUser, clearStoredUser } from '../utils/session';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function Login({ addNotification }) {
     const [username, setUsername] = useState('');
@@ -12,9 +12,11 @@ export default function Login({ addNotification }) {
 
     const navigate = useNavigate();
 
+    const { updateUser } = useAuth();
+
     useEffect(() => {
         // Clear any stale session data when landing on login
-        clearStoredUser();
+        updateUser(null);
         setTimeout(() => setMounted(true), 100);
     }, []);
 
@@ -38,7 +40,7 @@ export default function Login({ addNotification }) {
                 const statusRes = await fetch('/api/status', { credentials: 'include' });
                 if (statusRes.ok) {
                     const statusData = await statusRes.json();
-                    storeUser(statusData.user, statusData.role);
+                    updateUser({ username: statusData.user, role: statusData.role });
                 }
 
                 addNotification("Connexion réussie", "success");

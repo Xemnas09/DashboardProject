@@ -4,7 +4,7 @@ Auth router: /login, /logout, /api/status, /api/auth/refresh, /api/cache/status
 import uuid
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Request, Response, Depends
+from fastapi import APIRouter, Request, Response, Depends, HTTPException
 from jose import jwt, JWTError
 
 from settings import settings
@@ -86,6 +86,17 @@ async def login(
     if not user:
         notification_store.add(username or "unknown", "Échec de connexion", "error")
         raise UnauthorizedException("Identifiant ou mot de passe incorrect")
+
+    # ✅ Super admin — session unique
+    from services.connection_manager import connection_manager
+    if user.role == "super_admin" and connection_manager.is_user_online(user.username):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Le compte super administrateur est déjà connecté sur un autre appareil. "
+                "Veuillez d'abord vous déconnecter de l'autre session."
+            )
+        )
 
     cache_id = str(uuid.uuid4())
     _set_auth_cookies(response, username, user.role, cache_id)
@@ -177,3 +188,22 @@ async def refresh_token(request: Request, response: Response):
 async def cache_status(admin: TokenPayload = Depends(require_admin)):
     from main import cache_manager
     return await cache_manager.status()
+
+
+@router.get("/api/auth/ws-token")
+async def get_ws_token(
+    current_user: TokenPayload = Depends(get_current_user),
+):
+    """
+    Token court (5 min) spécifiquement pour l'authentification WebSocket.
+    Ne peut PAS être utilisé pour les appels REST (type: "ws").
+    """
+    expire = datetime.utcnow() + timedelta(minutes=5)
+    payload = {
+        "sub": current_user.username,
+        "type": "ws",
+        "jti": str(uuid.uuid4()),
+        "exp": expire,
+    }
+    token = jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
+    return {"token": token}

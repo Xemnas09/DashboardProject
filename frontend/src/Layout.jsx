@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Database, BarChart3, Settings, LogOut, Menu, User, Bell, Shield, ChevronRight, X } from 'lucide-react';
-import { getStoredUser, getDisplayName, clearStoredUser } from './utils/session';
+import { useAuth } from './contexts/AuthContext';
+import { getDisplayName } from './utils/session';
 
 export default function Layout({ theme, setTheme, notifications, removeNotification }) {
-    // ✅ Synchronous read — no flash on username/role
-    const [storedUser] = useState(() => getStoredUser());
-    const [userRole, setUserRole] = useState(storedUser?.role || 'user');
-    const [username, setUsername] = useState(
-        getDisplayName(storedUser) || 'Utilisateur'
-    );
+    // ✅ Synchronous — currentUser available on first render via AuthContext
+    const { currentUser, updateUser } = useAuth();
+    const userRole = currentUser?.role || 'user';
+    const username = getDisplayName(currentUser) || 'Utilisateur';
 
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [showSettings, setShowSettings] = useState(false);
@@ -39,26 +38,6 @@ export default function Layout({ theme, setTheme, notifications, removeNotificat
         }
     }, [showNotifMenu]);
 
-    // Background validation — only updates if session is stale
-    useEffect(() => {
-        const validateSession = async () => {
-            try {
-                const res = await fetch('/api/status', { credentials: 'include' });
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.role) setUserRole(data.role);
-                    if (data.user) {
-                        const name = data.user.charAt(0).toUpperCase() + data.user.slice(1);
-                        setUsername(name);
-                    }
-                }
-            } catch (e) {
-                console.error("Error validating session:", e);
-            }
-        };
-        validateSession();
-    }, []);
-
     useEffect(() => {
         const handleResize = () => {
             if (window.innerWidth < 768) setIsSidebarOpen(false);
@@ -72,11 +51,11 @@ export default function Layout({ theme, setTheme, notifications, removeNotificat
     const handleLogout = async () => {
         try {
             await fetch('/logout', { method: 'POST', credentials: 'include' });
-            clearStoredUser();  // ✅ Clean state for next user
+            updateUser(null);  // ✅ Clears AuthContext + sessionStorage
             navigate('/login');
         } catch (e) {
             console.error(e);
-            clearStoredUser();
+            updateUser(null);
             navigate('/login');
         }
     };
