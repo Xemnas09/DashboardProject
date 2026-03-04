@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { RealtimeProvider } from './contexts/RealtimeContext';
 import WSInitializer from './components/WSInitializer';
 import Layout from './Layout';
@@ -15,6 +15,8 @@ function ProtectedRoute({ children }) {
   const [retryCount, setRetryCount] = useState(0);
   const [connectionError, setConnectionError] = useState(false);
 
+  const { currentUser, updateUser } = useAuth();
+
   useEffect(() => {
     let timeoutId;
 
@@ -23,6 +25,11 @@ function ProtectedRoute({ children }) {
         const res = await fetch('/api/status', { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
+          if (data.status === 'success') {
+            if (!currentUser || currentUser.username !== data.user || currentUser.role !== data.role) {
+              updateUser({ username: data.user, role: data.role });
+            }
+          }
           setIsAuthenticated(data.status === 'success');
         } else {
           setIsAuthenticated(false);
@@ -39,6 +46,7 @@ function ProtectedRoute({ children }) {
     checkAuth();
 
     return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (connectionError) {
