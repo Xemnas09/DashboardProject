@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Database, BarChart3, Settings, LogOut, Menu, User, Bell, Shield, ChevronRight, X } from 'lucide-react';
+import { LayoutDashboard, Database, BarChart3, Settings, LogOut, Menu, User, Bell, Shield, ChevronRight, X, Clock } from 'lucide-react';
 import { useAuth } from './contexts/AuthContext';
+import { useRealtime } from './contexts/RealtimeContext';
 import { getDisplayName, customFetch, clearToken } from './utils/session';
 
-export default function Layout({ theme, setTheme, notifications, removeNotification }) {
+export default function Layout({ theme, setTheme }) {
     // ✅ Synchronous — currentUser available on first render via AuthContext
     const { currentUser, updateUser } = useAuth();
     const userRole = currentUser?.role || 'user';
@@ -16,27 +17,10 @@ export default function Layout({ theme, setTheme, notifications, removeNotificat
     const [showNotifMenu, setShowNotifMenu] = useState(false);
     const [tempTheme, setTempTheme] = useState(theme);
 
-    const navigate = useNavigate();
-    const unreadCount = notifications.length;
-    const [notifHistory, setNotifHistory] = useState([]);
+    const { notifHistory } = useRealtime();
+    const unreadCount = notifHistory.length > 0 ? 1 : 0; // Simple indicator if there are any session notifications
 
-    const fetchNotifHistory = async () => {
-        try {
-            const res = await customFetch('/api/notifications/history');
-            if (res.ok) {
-                const data = await res.json();
-                setNotifHistory(data.history || []);
-            }
-        } catch (e) {
-            console.error("Error fetching history:", e);
-        }
-    };
-
-    useEffect(() => {
-        if (showNotifMenu) {
-            fetchNotifHistory();
-        }
-    }, [showNotifMenu]);
+    const [showHistoryModal, setShowHistoryModal] = useState(false);
 
     useEffect(() => {
         const handleResize = () => {
@@ -181,38 +165,33 @@ export default function Layout({ theme, setTheme, notifications, removeNotificat
                                                 <X size={16} />
                                             </button>
                                         </div>
-                                        <div className="max-h-80 overflow-y-auto">
-                                            <div className="px-4 py-2 bg-gray-50 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] border-b border-gray-100">Récentes</div>
-                                            {notifications.length === 0 ? (
-                                                <div className="px-5 py-8 text-sm text-gray-400 text-center font-medium">Aucune notification</div>
+                                        <div className="max-h-[22rem] overflow-y-auto">
+                                            <div className="px-4 py-2 bg-gray-50 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] border-b border-gray-100">Derniers événements (3 max)</div>
+                                            {notifHistory.length === 0 ? (
+                                                <div className="px-5 py-8 text-sm text-gray-400 text-center font-medium">Aucun événement</div>
                                             ) : (
-                                                notifications.map(n => (
-                                                    <div key={n.id} className="px-5 py-3.5 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors">
+                                                notifHistory.slice(0, 3).map((n, idx) => (
+                                                    <div key={`n-${idx}`} className="px-5 py-3.5 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors">
                                                         <div className="flex items-start gap-3">
-                                                            <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${n.category === 'error' ? 'bg-red-500' : 'bg-bank-500'}`}></div>
+                                                            <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${n.category === 'error' ? 'bg-red-500' : n.category === 'success' ? 'bg-green-500' : n.category === 'warning' ? 'bg-yellow-500' : 'bg-bank-500'}`}></div>
                                                             <div>
-                                                                <p className="text-sm text-gray-800 font-semibold leading-snug">{n.message}</p>
+                                                                <p className="text-sm text-gray-800 font-semibold leading-snug">{n.title || 'Notification'}</p>
+                                                                <p className="text-[11px] text-gray-500 mt-0.5">{n.message}</p>
                                                                 <p className="text-[10px] text-gray-400 mt-1 font-medium">{n.time}</p>
                                                             </div>
                                                         </div>
                                                     </div>
                                                 ))
                                             )}
-
-                                            <div className="px-4 py-2 bg-gray-50 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] border-y border-gray-100">Historique</div>
-                                            {notifHistory.length === 0 ? (
-                                                <div className="px-5 py-4 text-xs text-gray-400 text-center italic">Historique vide</div>
-                                            ) : (
-                                                notifHistory.map((h, i) => (
-                                                    <div key={`hist-${i}`} className="px-5 py-2.5 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors opacity-60">
-                                                        <div className="flex items-center gap-3">
-                                                            <span className="text-[10px] font-mono text-gray-400 w-14">{h.time}</span>
-                                                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${h.category === 'error' ? 'bg-red-300' : 'bg-gray-300'}`}></span>
-                                                            <p className="text-xs text-gray-600 truncate font-medium">{h.message}</p>
-                                                        </div>
-                                                    </div>
-                                                ))
-                                            )}
+                                        </div>
+                                        <div className="border-t border-gray-100 bg-gray-50 p-2">
+                                            <button
+                                                onClick={() => { setShowNotifMenu(false); setShowHistoryModal(true); }}
+                                                className="w-full py-2.5 text-xs font-bold text-gray-600 hover:text-bank-600 hover:bg-white rounded-lg transition-colors flex items-center justify-center gap-2"
+                                            >
+                                                <Clock size={14} />
+                                                Voir tout l'historique de la session
+                                            </button>
                                         </div>
                                     </div>
                                 )}
@@ -285,6 +264,60 @@ export default function Layout({ theme, setTheme, notifications, removeNotificat
                         <div className="bg-gray-50 px-6 py-4 flex gap-3 border-t border-gray-100">
                             <button onClick={() => setShowLogout(false)} className="flex-1 px-4 py-2.5 bg-white text-gray-700 border border-gray-200 rounded-xl hover:bg-gray-50 transition-all font-bold text-sm">Annuler</button>
                             <button onClick={handleLogout} className="flex-1 px-4 py-2.5 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-xl font-black text-sm shadow-lg shadow-red-200 hover:-translate-y-0.5 transition-all">Déconnexion</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Modals are placed below main wrapper */}
+
+            {showHistoryModal && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+                        <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                            <div className="flex items-center gap-3 text-gray-900">
+                                <Clock size={24} className="text-bank-600" />
+                                <h2 className="text-xl font-bold">Historique de la session</h2>
+                            </div>
+                            <button
+                                onClick={() => setShowHistoryModal(false)}
+                                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-full transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-2">
+                            {notifHistory.length === 0 ? (
+                                <div className="py-20 text-center text-gray-400 flex flex-col items-center">
+                                    <Bell size={48} className="mb-4 opacity-20" />
+                                    <p className="text-lg font-medium">Aucun événement enregistré</p>
+                                    <p className="text-sm mt-1">Les notifications reçues apparaîtront ici.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-1">
+                                    {notifHistory.map((n, idx) => (
+                                        <div key={idx} className="flex gap-4 p-4 hover:bg-gray-50 rounded-2xl transition-colors items-start">
+                                            <div className="w-16 flex-shrink-0 text-right pt-0.5">
+                                                <span className="text-xs font-mono font-medium text-gray-400">{n.time}</span>
+                                            </div>
+                                            <div className="mt-1.5 flex-shrink-0">
+                                                <div className={`w-2.5 h-2.5 rounded-full ring-4 ring-white shadow-sm ${n.category === 'error' ? 'bg-red-500' : n.category === 'success' ? 'bg-green-500' : n.category === 'warning' ? 'bg-yellow-500' : 'bg-bank-500'}`}></div>
+                                            </div>
+                                            <div className="flex-1 pb-4 border-b border-gray-100 last:border-0 relative top-[-4px]">
+                                                <p className="text-[15px] font-bold text-gray-900">{n.title || 'Notification'}</p>
+                                                <p className="text-[14px] text-gray-600 mt-1 leading-relaxed">{n.message}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end">
+                            <button
+                                onClick={() => setShowHistoryModal(false)}
+                                className="w-full sm:w-auto px-6 py-2.5 bg-gray-900 text-white font-bold rounded-xl hover:bg-gray-800 transition-colors"
+                            >
+                                Fermer
+                            </button>
                         </div>
                     </div>
                 </div>

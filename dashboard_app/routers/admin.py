@@ -1,4 +1,7 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -10,9 +13,14 @@ from schemas.user import UserRead, UserCreate, UserUpdatePassword, UserUpdateRol
 from routers.auth import TokenPayload
 from dependencies import require_admin, require_super_admin
 from settings import settings
+from services.connection_manager import connection_manager
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
+
+# ---------------------------------------------------------------------------
+# User management
+# ---------------------------------------------------------------------------
 
 @router.get("/users", response_model=list[UserRead])
 async def list_users_api(
@@ -45,11 +53,16 @@ async def delete_existing_user(
     """Delete a user — super_admin only."""
     if username == settings.super_admin_username:
         raise HTTPException(status_code=403, detail="Cannot delete the super admin account")
-    if username == current.sub: # TokenPayload uses 'sub' for username
+    if username == current.sub:
         raise HTTPException(status_code=403, detail="Cannot delete your own account")
     user = await get_user_by_username(db, username)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    # Disconnect before deletion so the user is ejected in real-time
+    await connection_manager.force_disconnect_user(
+        username,
+        reason="Your account has been deleted."
+    )
     await delete_user(db, user)
 
 
@@ -65,6 +78,11 @@ async def reset_password(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     await update_password(db, user, body.new_password)
+    # Force-disconnect so the user must log in again with the new password
+    await connection_manager.force_disconnect_user(
+        username,
+        reason="Your password has been reset by an administrator."
+    )
     return {"status": "success"}
 
 
@@ -82,6 +100,12 @@ async def change_role(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     await update_role(db, user, body.new_role)
+    # Notify the user about their new role via WebSocket (no forced disconnect)
+    await connection_manager.send_to_user(username, {
+        "event": "ROLE_CHANGED",
+        "payload": {"new_role": body.new_role},
+        "timestamp": datetime.utcnow().isoformat(),
+    })
     return {"status": "success", "new_role": body.new_role}
 
 
@@ -120,3 +144,42 @@ async def rename_self(
         raise HTTPException(status_code=409, detail=f"Username '{body.new_username}' already taken")
     await rename_user(db, user, body.new_username)
     return {"status": "success", "new_username": body.new_username}
+
+
+# ---------------------------------------------------------------------------
+# Broadcast — Phase 2 WebSocket
+# ---------------------------------------------------------------------------
+
+class BroadcastRequest(BaseModel):
+    message: str
+    title: str = "Notification"
+    category: str = "info"   # info | success | warning | error
+    target: str = "all"      # "all" | specific username
+
+
+@router.post("/broadcast")
+async def broadcast_message(
+    body: BroadcastRequest,
+    current: TokenPayload = Depends(require_admin),
+):
+    """Send a real-time notification to all users or a specific one."""
+    payload = {
+        "event": "NOTIFICATION",
+        "payload": {
+            "message": body.message,
+            "title": body.title,
+            "category": body.category,
+            "from": current.sub,
+        },
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+    if body.target == "all":
+        # Use broadcast_except to avoid sending back to the admin's own WS sessions.
+        # The admin already gets confirmation via the REST response / frontend toast.
+        # Sending to the admin's own sessions can crash flaky dual-proxy connections
+        # (e.g. HF Spaces) and trigger cascade disconnects.
+        await connection_manager.broadcast_except(current.sub, payload)
+    else:
+        await connection_manager.send_to_user(body.target, payload)
+
+    return {"status": "success", "sent_to": body.target}

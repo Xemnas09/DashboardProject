@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Key, Trash2, Edit2, ShieldAlert, X, Shield, Lock, User as UserIcon } from 'lucide-react';
+import { Navigate } from 'react-router-dom';
+import { Users, UserPlus, Key, Trash2, Edit2, ShieldAlert, X, Shield, Lock, User as UserIcon, Send, Bell } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtime } from '../contexts/RealtimeContext';
 import { customFetch } from '../utils/session';
@@ -27,6 +28,15 @@ export default function AdminUsers({ addNotification }) {
     const [newRole, setNewRole] = useState('user');
     const [newUsername, setNewUsername] = useState('');
 
+    // Broadcast state
+    const [broadcast, setBroadcast] = useState({
+        target: 'all',
+        title: 'Notification',
+        message: '',
+        category: 'info',
+    });
+    const [isSending, setIsSending] = useState(false);
+
     const fetchUsers = async () => {
         try {
             const res = await customFetch('/api/admin/users');
@@ -44,6 +54,29 @@ export default function AdminUsers({ addNotification }) {
     useEffect(() => {
         fetchUsers();
     }, []);
+
+    const handleBroadcast = async (e) => {
+        e.preventDefault();
+        if (!broadcast.message.trim()) return;
+        setIsSending(true);
+        try {
+            const res = await customFetch('/api/admin/broadcast', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(broadcast),
+            });
+            if (res.ok) {
+                addNotification(`Message envoyé à « ${broadcast.target === 'all' ? 'tous les utilisateurs' : broadcast.target} »`, 'success');
+                setBroadcast(b => ({ ...b, message: '', title: 'Notification' }));
+            } else {
+                addNotification('Échec de l\'envoi du message.', 'error');
+            }
+        } catch {
+            addNotification('Erreur réseau.', 'error');
+        } finally {
+            setIsSending(false);
+        }
+    };
 
     const handleCreateUser = async (e) => {
         e.preventDefault();
@@ -163,6 +196,11 @@ export default function AdminUsers({ addNotification }) {
     };
 
     const isSuperAdmin = currentUser?.role === 'super_admin';
+    const isAdmin = currentUser?.role === 'admin' || isSuperAdmin;
+
+    if (!isAdmin) {
+        return <Navigate to="/dashboard" replace />;
+    }
 
     if (loading) {
         return (
@@ -309,6 +347,104 @@ export default function AdminUsers({ addNotification }) {
                     </table>
                 </div>
             </div>
+
+            {/* ── Broadcast Panel ─────────────────────────────────────────── */}
+            {isSuperAdmin && (
+                <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div className="px-8 py-5 border-b border-gray-100 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-violet-50 border border-violet-100 flex items-center justify-center text-violet-500">
+                            <Bell size={18} />
+                        </div>
+                        <div>
+                            <h2 className="text-base font-black text-gray-900">Diffusion de message</h2>
+                            <p className="text-xs text-gray-400 font-medium mt-0.5">Envoyer une notification en temps réel aux utilisateurs connectés</p>
+                        </div>
+                    </div>
+                    <form onSubmit={handleBroadcast} className="p-8">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                            {/* Recipient */}
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Destinataire</label>
+                                <select
+                                    value={broadcast.target}
+                                    onChange={e => setBroadcast(b => ({ ...b, target: e.target.value }))}
+                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-400 transition-all"
+                                >
+                                    <option value="all">👥 Tous les utilisateurs</option>
+                                    {onlineUsers.map(u => (
+                                        <option key={u.username} value={u.username}>🟢 {u.username}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            {/* Category */}
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Catégorie</label>
+                                <select
+                                    value={broadcast.category}
+                                    onChange={e => setBroadcast(b => ({ ...b, category: e.target.value }))}
+                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-400 transition-all"
+                                >
+                                    <option value="info">ℹ️ Info</option>
+                                    <option value="success">✅ Succès</option>
+                                    <option value="warning">⚠️ Avertissement</option>
+                                    <option value="error">❌ Erreur</option>
+                                </select>
+                            </div>
+                            {/* Title */}
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Titre</label>
+                                <input
+                                    type="text"
+                                    value={broadcast.title}
+                                    onChange={e => setBroadcast(b => ({ ...b, title: e.target.value }))}
+                                    placeholder="Titre de la notification"
+                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm font-semibold text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-400 transition-all"
+                                />
+                            </div>
+                            {/* Send button (aligned with bottom of title field on desktop) */}
+                            <div className="hidden md:flex items-end">
+                                <button
+                                    type="submit"
+                                    disabled={isSending || !broadcast.message.trim()}
+                                    className="w-full px-6 py-3 bg-gradient-to-r from-violet-600 to-violet-500 text-white rounded-2xl shadow-lg shadow-violet-200 hover:shadow-violet-300 hover:-translate-y-0.5 transition-all font-black text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:translate-y-0 disabled:shadow-none"
+                                >
+                                    {isSending ? (
+                                        <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /><span>Envoi...</span></>
+                                    ) : (
+                                        <><Send size={16} /><span>Envoyer</span></>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                        {/* Message textarea */}
+                        <div className="mt-5 flex flex-col gap-1.5">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Message</label>
+                            <textarea
+                                value={broadcast.message}
+                                onChange={e => setBroadcast(b => ({ ...b, message: e.target.value }))}
+                                placeholder="Saisissez votre message ici..."
+                                rows={3}
+                                required
+                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm font-medium text-gray-800 placeholder:text-gray-300 focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-400 transition-all resize-none"
+                            />
+                        </div>
+                        {/* Mobile send button */}
+                        <div className="mt-4 md:hidden">
+                            <button
+                                type="submit"
+                                disabled={isSending || !broadcast.message.trim()}
+                                className="w-full px-6 py-3 bg-gradient-to-r from-violet-600 to-violet-500 text-white rounded-2xl shadow-lg shadow-violet-200 hover:shadow-violet-300 hover:-translate-y-0.5 transition-all font-black text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:translate-y-0 disabled:shadow-none"
+                            >
+                                {isSending ? (
+                                    <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /><span>Envoi...</span></>
+                                ) : (
+                                    <><Send size={16} /><span>Envoyer la notification</span></>
+                                )}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            )}
 
             {/* Modal Components */}
             {/* Create User Modal */}

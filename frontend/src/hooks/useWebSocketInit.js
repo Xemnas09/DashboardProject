@@ -17,7 +17,7 @@ export function useWebSocketInit() {
     const pingTimerRef = useRef(null)
     const shouldReconnect = useRef(true)
     const reconnectTimeoutRef = useRef(null)
-
+    const isConnecting = useRef(false)
     const handleMessage = useCallback((raw) => {
         let parsed
         try { parsed = JSON.parse(raw) } catch { return }
@@ -80,6 +80,12 @@ export function useWebSocketInit() {
                     if (stored) {
                         const updated = { ...JSON.parse(stored), role: payload.new_role }
                         updateUser(updated)
+                        addNotification({
+                            title: 'Changement de Rôle',
+                            message: `Votre rôle a été modifié en : ${payload.new_role}`,
+                            category: 'info',
+                            from: 'system'
+                        })
                     }
                 } catch { }
                 break
@@ -90,24 +96,33 @@ export function useWebSocketInit() {
     }, [setOnlineUsers, addNotification, updateUser, navigate])
 
     const connect = useCallback(async () => {
-        if (!currentUser || !shouldReconnect.current) return
+        if (!currentUser || !shouldReconnect.current || isConnecting.current) return
+
+        isConnecting.current = true
 
         try {
             const { customFetch } = await import('../utils/session')
             const res = await customFetch('/api/auth/ws-token')
-            if (!res.ok) return
+            if (!res.ok) {
+                isConnecting.current = false
+                return
+            }
             const { token } = await res.json()
 
             const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
             const url = `${protocol}://${window.location.host}/ws?token=${token}`
 
             // Avoid edge-case where the user navigates away before the fetch completes
-            if (!shouldReconnect.current) return;
+            if (!shouldReconnect.current) {
+                isConnecting.current = false
+                return
+            }
 
             const ws = new WebSocket(url)
             wsRef.current = ws
 
             ws.onopen = () => {
+                isConnecting.current = false
                 console.log('[WS] Connected')
                 reconnectAttempts.current = 0
                 pingTimerRef.current = setInterval(() => {
@@ -120,6 +135,7 @@ export function useWebSocketInit() {
             ws.onmessage = (e) => handleMessage(e.data)
 
             ws.onclose = () => {
+                isConnecting.current = false
                 console.log('[WS] Disconnected')
                 clearInterval(pingTimerRef.current)
                 setOnlineUsers([])
@@ -139,9 +155,13 @@ export function useWebSocketInit() {
                 reconnectTimeoutRef.current = setTimeout(connect, delay)
             }
 
-            ws.onerror = () => ws.close()
+            ws.onerror = () => {
+                isConnecting.current = false
+                ws.close()
+            }
 
         } catch (err) {
+            isConnecting.current = false
             console.error('[WS] Connection failed:', err)
         }
     }, [currentUser, handleMessage, setOnlineUsers])
