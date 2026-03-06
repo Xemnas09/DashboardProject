@@ -48,15 +48,18 @@ def _set_auth_cookies(response: Response, username: str, role: str, cache_id: st
         timedelta(days=settings.refresh_token_expire_days),
     )
 
+    # Pour les iframes (comme Hugging Face Spaces), les navigateurs exigent
+    # obligatoirement SameSite="none" et Secure=True pour autoriser les cookies.
     is_prod = settings.environment == "production"
     samesite = "none" if is_prod else "lax"
+    secure = is_prod
 
     response.set_cookie(
         key="access_token",
         value=access_token,
         httponly=True,
         samesite=samesite,
-        secure=is_prod,
+        secure=secure,
         max_age=settings.access_token_expire_minutes * 60,
         path="/",
     )
@@ -65,10 +68,11 @@ def _set_auth_cookies(response: Response, username: str, role: str, cache_id: st
         value=refresh_token,
         httponly=True,
         samesite=samesite,
-        secure=is_prod,
+        secure=secure,
         max_age=settings.refresh_token_expire_days * 86400,
         path="/api/auth/refresh",
     )
+    return access_token, refresh_token
 
 
 @router.post("/login")
@@ -99,18 +103,23 @@ async def login(
         )
 
     cache_id = str(uuid.uuid4())
-    _set_auth_cookies(response, username, user.role, cache_id)
+    access_token, refresh_token = _set_auth_cookies(response, username, user.role, cache_id)
 
     notification_store.clear(username)
     notification_store.add(username, "Connexion réussie", "success")
 
     logger.info(f"User logged in: {username}")
-    return {"status": "success"}
+    return {"status": "success", "access_token": access_token}
 
 
 @router.post("/logout")
 async def logout(request: Request, response: Response):
     token = request.cookies.get("access_token")
+    if not token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ")[1]
+
     if token:
         try:
             payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
@@ -125,17 +134,27 @@ async def logout(request: Request, response: Response):
             if cache_id:
                 from main import cache_manager
                 await cache_manager.delete(cache_id)
-            logger.info(f"User logged out: {payload.get('sub')}")
-            from services.connection_manager import connection_manager
-            await connection_manager.force_disconnect_user(payload.get('sub'), "Déconnexion.")
+            
+            username = payload.get("sub")
+            role = payload.get("role")
+            logger.info(f"User logged out: {username}")
+            
+            # For super_admin: force-disconnect ALL their WebSocket sessions so the
+            # single-session restriction doesn't block them from logging back in.
+            # For regular accounts (admin/user): don't disconnect other sessions —
+            # this allows shared accounts to work (multiple people, one login).
+            if role == "super_admin":
+                from services.connection_manager import connection_manager
+                await connection_manager.force_disconnect_user(username, "Déconnexion.")
         except JWTError:
             pass
 
     is_prod = settings.environment == "production"
     samesite = "none" if is_prod else "lax"
+    secure = is_prod
 
-    response.delete_cookie("access_token", path="/", samesite=samesite, secure=is_prod)
-    response.delete_cookie("refresh_token", path="/api/auth/refresh", samesite=samesite, secure=is_prod)
+    response.delete_cookie("access_token", path="/", samesite=samesite, secure=secure)
+    response.delete_cookie("refresh_token", path="/api/auth/refresh", samesite=samesite, secure=secure)
     return {"status": "success"}
 
 
@@ -172,18 +191,19 @@ async def refresh_token(request: Request, response: Response):
 
     is_prod = settings.environment == "production"
     samesite = "none" if is_prod else "lax"
+    secure = is_prod
 
     response.set_cookie(
         key="access_token",
         value=access_token,
         httponly=True,
         samesite=samesite,
-        secure=is_prod,
+        secure=secure,
         max_age=settings.access_token_expire_minutes * 60,
         path="/",
     )
 
-    return {"status": "success", "message": "Token rafraîchi"}
+    return {"status": "success", "message": "Token rafraîchi", "access_token": access_token}
 
 
 @router.get("/api/cache/status")

@@ -8,6 +8,7 @@ import 'ag-grid-community/styles/ag-theme-quartz.css';
 ModuleRegistry.registerModules([AllCommunityModule]);
 import { BarChart3, Settings2, Download, Table as TableIcon, AlertCircle, Database as DatabaseIcon, Filter, X as XIcon, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { customFetch } from '../utils/session';
 
 export default function Reports({ addNotification }) {
     const [columnsInfo, setColumnsInfo] = useState([]);
@@ -93,7 +94,7 @@ export default function Reports({ addNotification }) {
         }
 
         try {
-            const res = await fetch('/api/chart-data/interpret', {
+            const res = await customFetch('/api/chart-data/interpret', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     chart_type: chartType, x_column: chartX, y_column: chartY,
@@ -117,7 +118,7 @@ export default function Reports({ addNotification }) {
         if (!chartX) return;
         setLlmRecLoading(true); setLlmRecError(''); setLlmRecommendations([]);
         try {
-            const res = await fetch('/api/chart-data/recommend', {
+            const res = await customFetch('/api/chart-data/recommend', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     x_column: chartX, x_type: getFriendlyType(xColType),
@@ -175,7 +176,7 @@ export default function Reports({ addNotification }) {
     const fetchColumnsInfo = async () => {
         try {
             setLoading(true);
-            const res = await fetch('/api/reports/columns', { credentials: 'include' });
+            const res = await customFetch('/api/reports/columns');
             if (res.ok) {
                 const data = await res.json();
                 setColumnsInfo(data.columns_info || []);
@@ -208,7 +209,7 @@ export default function Reports({ addNotification }) {
         setLlmInterpretation('');
 
         try {
-            const res = await fetch('/api/chart-data', {
+            const res = await customFetch('/api/chart-data', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -412,7 +413,7 @@ export default function Reports({ addNotification }) {
         setPivotData(null);
 
         try {
-            const res = await fetch('/api/pivot-data', {
+            const res = await customFetch('/api/pivot-data', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

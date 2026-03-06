@@ -10,6 +10,8 @@ import Database from './pages/Database';
 import Reports from './pages/Reports';
 import AdminUsers from './pages/AdminUsers';
 
+import { customFetch } from './utils/session';
+
 function ProtectedRoute({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(null);
   const [retryCount, setRetryCount] = useState(0);
@@ -22,7 +24,7 @@ function ProtectedRoute({ children }) {
 
     const checkAuth = async (attempt = 1) => {
       try {
-        const res = await fetch('/api/status', { credentials: 'include' });
+        const res = await customFetch('/api/status');
         if (res.ok) {
           const data = await res.json();
           if (data.status === 'success') {

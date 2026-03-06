@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useMemo } from 'react'
-import { getStoredUser, storeUser, clearStoredUser } from '../utils/session'
+import { getStoredUser, storeUser, clearStoredUser, clearToken } from '../utils/session'
 
 const AuthContext = createContext(null)
 
@@ -13,6 +13,7 @@ export function AuthProvider({ children }) {
             storeUser(userData.username, userData.role)
         } else {
             clearStoredUser()
+            clearToken()
         }
     }, [])
 

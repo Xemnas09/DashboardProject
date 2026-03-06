@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Database, BarChart3, Settings, LogOut, Menu, User, Bell, Shield, ChevronRight, X } from 'lucide-react';
 import { useAuth } from './contexts/AuthContext';
-import { getDisplayName } from './utils/session';
+import { getDisplayName, customFetch, clearToken } from './utils/session';
 
 export default function Layout({ theme, setTheme, notifications, removeNotification }) {
     // ✅ Synchronous — currentUser available on first render via AuthContext
@@ -22,7 +22,7 @@ export default function Layout({ theme, setTheme, notifications, removeNotificat
 
     const fetchNotifHistory = async () => {
         try {
-            const res = await fetch('/api/notifications/history', { credentials: 'include' });
+            const res = await customFetch('/api/notifications/history');
             if (res.ok) {
                 const data = await res.json();
                 setNotifHistory(data.history || []);
@@ -50,13 +50,20 @@ export default function Layout({ theme, setTheme, notifications, removeNotificat
 
     const handleLogout = async () => {
         try {
-            await fetch('/logout', { method: 'POST', credentials: 'include' });
-            updateUser(null);  // ✅ Clears AuthContext + sessionStorage
-            navigate('/login');
+            await customFetch('/logout', { method: 'POST' });
         } catch (e) {
             console.error(e);
-            updateUser(null);
-            navigate('/login');
+        } finally {
+            // Clear all local auth state BEFORE reloading.
+            // sessionStorage keeps user data across React navigate() calls;
+            // without this, AuthContext re-reads it after the reload and
+            // thinks the user is still logged in.
+            sessionStorage.removeItem('dv_user');
+            clearToken();
+            // Force a full page reload to close ALL WebSocket connections
+            // (HF Spaces creates 2 simultaneous WS sessions through different proxies;
+            // only a real browser reload closes both).
+            window.location.replace('/login');
         }
     };
 

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { UploadCloud, CheckCircle2, TrendingUp, Users, Database as DatabaseIcon, BarChart3, FileSpreadsheet, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { getDisplayName } from '../utils/session';
+import { getDisplayName, customFetch } from '../utils/session';
 import OnlineUsers from '../components/OnlineUsers';
 
 export default function Dashboard({ addNotification }) {
@@ -59,7 +59,7 @@ export default function Dashboard({ addNotification }) {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-            const res = await fetch('/api/upload', {
+            const res = await customFetch('/api/upload', {
                 method: 'POST',
                 body: formData,
                 signal: controller.signal,
@@ -92,7 +92,7 @@ export default function Dashboard({ addNotification }) {
     const submitSheet = async () => {
         setIsUploading(true);
         try {
-            const res = await fetch('/api/upload/select-sheet', {
+            const res = await customFetch('/api/upload/select-sheet', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ sheet_name: selectedSheet }),

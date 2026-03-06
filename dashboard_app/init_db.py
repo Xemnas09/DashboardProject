@@ -163,7 +163,7 @@ def main():
     args = parser.parse_args()
 
     # Create engine and session factory
-    engine = create_async_engine(settings.async_database_url, echo=False)
+    from database import engine
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async def run():
@@ -177,6 +177,21 @@ def main():
             await update_password_cmd(session_factory, args.update_password)
         else:
             await init(session_factory)
+        # ──────────────────────────────────────────────────────────────────
+        # IMPORTANT: DEALLOCATE ALL before returning connections to PgBouncer.
+        # Without this, stale named prepared statements from init_db.py remain
+        # on the backend PostgreSQL connection. When FastAPI starts and reuses
+        # that same backend connection, the first request will fail with
+        # DuplicatePreparedStatementError (only on first attempt).
+        # ──────────────────────────────────────────────────────────────────
+        from settings import settings as _s
+        if _s.database_url.startswith("postgres"):
+            try:
+                async with engine.connect() as conn:
+                    await conn.execute(text("DEALLOCATE ALL"))
+                    await conn.commit()
+            except Exception:
+                pass  # Best-effort — don't crash startup over cleanup
         await engine.dispose()
 
     asyncio.run(run())

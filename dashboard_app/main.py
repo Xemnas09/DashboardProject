@@ -155,7 +155,14 @@ async def log_requests(request: Request, call_next):
     duration_ms = (time.perf_counter() - start) * 1000
 
     user = "anonymous"
-    token = request.cookies.get("access_token")
+    token = None
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+    
+    if not token:
+        token = request.cookies.get("access_token")
+
     if token:
         try:
             payload = jwt.decode(

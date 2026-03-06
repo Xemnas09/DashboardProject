@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Lock, User, ArrowRight, Shield, Sparkles } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
+import { customFetch, storeToken } from '../utils/session';
+
 export default function Login({ addNotification }) {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -36,8 +38,11 @@ export default function Login({ addNotification }) {
             const data = await res.json();
 
             if (res.ok && data.status === 'success') {
+                // Save token BEFORE making the status request
+                storeToken(data.access_token);
+
                 // Fetch user info once and store synchronously before navigating
-                const statusRes = await fetch('/api/status', { credentials: 'include' });
+                const statusRes = await customFetch('/api/status');
                 if (statusRes.ok) {
                     const statusData = await statusRes.json();
                     updateUser({ username: statusData.user, role: statusData.role });
@@ -46,8 +51,9 @@ export default function Login({ addNotification }) {
                 addNotification("Connexion réussie", "success");
                 navigate('/dashboard');
             } else {
-                setError(data.message || 'Identifiant ou mot de passe incorrect');
-                addNotification(data.message || "Identifiant ou mot de passe incorrect", "error");
+                const errorMessage = data.detail || data.message || 'Identifiant ou mot de passe incorrect';
+                setError(errorMessage);
+                addNotification(errorMessage, "error");
             }
         } catch (err) {
             console.error(err);

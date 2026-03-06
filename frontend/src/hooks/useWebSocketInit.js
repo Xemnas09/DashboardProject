@@ -16,6 +16,7 @@ export function useWebSocketInit() {
     const reconnectAttempts = useRef(0)
     const pingTimerRef = useRef(null)
     const shouldReconnect = useRef(true)
+    const reconnectTimeoutRef = useRef(null)
 
     const handleMessage = useCallback((raw) => {
         let parsed
@@ -89,15 +90,20 @@ export function useWebSocketInit() {
     }, [setOnlineUsers, addNotification, updateUser, navigate])
 
     const connect = useCallback(async () => {
-        if (!currentUser) return
+        if (!currentUser || !shouldReconnect.current) return
 
         try {
-            const res = await fetch('/api/auth/ws-token', { credentials: 'include' })
+            const { customFetch } = await import('../utils/session')
+            const res = await customFetch('/api/auth/ws-token')
             if (!res.ok) return
             const { token } = await res.json()
 
             const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
             const url = `${protocol}://${window.location.host}/ws?token=${token}`
+
+            // Avoid edge-case where the user navigates away before the fetch completes
+            if (!shouldReconnect.current) return;
+
             const ws = new WebSocket(url)
             wsRef.current = ws
 
@@ -126,7 +132,11 @@ export function useWebSocketInit() {
                 )
                 reconnectAttempts.current += 1
                 console.log(`[WS] Reconnecting in ${delay}ms...`)
-                setTimeout(connect, delay)
+
+                if (reconnectTimeoutRef.current) {
+                    clearTimeout(reconnectTimeoutRef.current)
+                }
+                reconnectTimeoutRef.current = setTimeout(connect, delay)
             }
 
             ws.onerror = () => ws.close()
@@ -136,12 +146,35 @@ export function useWebSocketInit() {
         }
     }, [currentUser, handleMessage, setOnlineUsers])
 
+    // ── Logout watcher ────────────────────────────────────────────────────────
+    // When the user logs out (currentUser → null), immediately close the
+    // WebSocket BEFORE React's normal effect cleanup fires (which only runs on
+    // component unmount / navigate away). Without this, the backend may not
+    // register the disconnect in time → admin's "OnlineUsers" doesn't refresh.
+    useEffect(() => {
+        if (!currentUser) {
+            // Stop any pending reconnect timer immediately
+            shouldReconnect.current = false
+            if (reconnectTimeoutRef.current) {
+                clearTimeout(reconnectTimeoutRef.current)
+            }
+            // Close the WebSocket now — this triggers WebSocketDisconnect on
+            // the server which broadcasts USER_OFFLINE to other users.
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                wsRef.current.close()
+            }
+        }
+    }, [currentUser])
+
     useEffect(() => {
         shouldReconnect.current = true
         connect()
         return () => {
             shouldReconnect.current = false
             clearInterval(pingTimerRef.current)
+            if (reconnectTimeoutRef.current) {
+                clearTimeout(reconnectTimeoutRef.current)
+            }
             wsRef.current?.close()
         }
     }, [connect])

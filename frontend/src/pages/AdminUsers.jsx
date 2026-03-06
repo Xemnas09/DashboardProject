@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Users, UserPlus, Key, Trash2, Edit2, ShieldAlert, X, Shield, Lock, User as UserIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useRealtime } from '../contexts/RealtimeContext';
+import { customFetch } from '../utils/session';
 
 export default function AdminUsers({ addNotification }) {
     const [users, setUsers] = useState([]);
@@ -28,7 +29,7 @@ export default function AdminUsers({ addNotification }) {
 
     const fetchUsers = async () => {
         try {
-            const res = await fetch('/api/admin/users', { credentials: 'include' });
+            const res = await customFetch('/api/admin/users');
             if (res.ok) {
                 const data = await res.json();
                 setUsers(data);
@@ -47,7 +48,7 @@ export default function AdminUsers({ addNotification }) {
     const handleCreateUser = async (e) => {
         e.preventDefault();
         try {
-            const res = await fetch('/api/admin/users', {
+            const res = await customFetch('/api/admin/users', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(newUser),
@@ -76,7 +77,7 @@ export default function AdminUsers({ addNotification }) {
         if (!selectedUser) return;
         setIsDeleting(true);
         try {
-            const res = await fetch(`/api/admin/users/${selectedUser.username}`, {
+            const res = await customFetch(`/api/admin/users/${selectedUser.username}`, {
                 method: 'DELETE',
                 credentials: 'include'
             });
@@ -98,7 +99,7 @@ export default function AdminUsers({ addNotification }) {
     const handleUpdatePassword = async (e) => {
         e.preventDefault();
         try {
-            const res = await fetch(`/api/admin/users/${selectedUser.username}/password`, {
+            const res = await customFetch(`/api/admin/users/${selectedUser.username}/password`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ new_password: newPassword }),
@@ -120,7 +121,7 @@ export default function AdminUsers({ addNotification }) {
     const handleUpdateRole = async (e) => {
         e.preventDefault();
         try {
-            const res = await fetch(`/api/admin/users/${selectedUser.username}/role`, {
+            const res = await customFetch(`/api/admin/users/${selectedUser.username}/role`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ new_role: newRole }),
@@ -142,7 +143,7 @@ export default function AdminUsers({ addNotification }) {
     const handleRename = async (e) => {
         e.preventDefault();
         try {
-            const res = await fetch(`/api/admin/users/${selectedUser.username}/rename`, {
+            const res = await customFetch(`/api/admin/users/${selectedUser.username}/rename`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ new_username: newUsername }),

@@ -1,9 +1,7 @@
 import asyncio
-import logging
 from datetime import datetime
 from fastapi import WebSocket
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 class ConnectionManager:

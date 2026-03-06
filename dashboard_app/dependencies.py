@@ -36,7 +36,14 @@ async def get_current_user(
     Reads the `access_token` HttpOnly cookie, verifies signature + expiry,
     and returns the decoded payload as a TokenPayload.
     """
-    token = request.cookies.get("access_token")
+    token = None
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+    
+    if not token:
+        token = request.cookies.get("access_token")
+
     if not token:
         raise UnauthorizedException()
 

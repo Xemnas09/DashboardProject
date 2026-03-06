@@ -1,13 +1,12 @@
-import logging
 from datetime import datetime
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from jose import JWTError, jwt
+from loguru import logger
 
 from services.connection_manager import connection_manager
 from settings import settings
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
 
 
 def _verify_ws_token(token: str) -> str | None:
@@ -81,17 +80,33 @@ async def websocket_endpoint(websocket: WebSocket, token: str = ""):
     finally:
         # 6. Nettoyage à la déconnexion
         await connection_manager.disconnect(websocket, username)
+        
         async def _handle_disconnect():
+            import asyncio
+            # On attend 1s pour masquer le F5 court
+            await asyncio.sleep(1.0)
+            
+            # Vérifier l'état final
             if not connection_manager.is_user_online(username):
-                # 0 onglets restants, on attend 1s (masque le rafraîchissement F5 court)
-                import asyncio
-                await asyncio.sleep(1.0)
-                if not connection_manager.is_user_online(username):
-                    await connection_manager.broadcast_except(username, {
-                        "event": "USER_OFFLINE",
-                        "payload": {"username": username},
-                        "timestamp": _now(),
-                    })
+                # Plus aucune session active
+                await connection_manager.broadcast_except(username, {
+                    "event": "USER_OFFLINE",
+                    "payload": {"username": username},
+                    "timestamp": _now(),
+                })
+            else:
+                # Il reste des sessions (ex: 2 tabs fermés sur 3 pour un compte partagé)
+                # On met à jour le compteur pour les autres
+                await connection_manager.broadcast_except(username, {
+                    "event": "USER_ONLINE",
+                    "payload": {
+                        "username": username,
+                        "session_count": connection_manager.session_count(username),
+                        "status": "active",
+                        "last_seen": _now(),
+                    },
+                    "timestamp": _now(),
+                })
 
         import asyncio
         asyncio.create_task(_handle_disconnect())

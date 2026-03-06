@@ -8,6 +8,7 @@ ModuleRegistry.registerModules([AllCommunityModule]);
 import { Trash2, AlertCircle, Settings2, FileType2, Database as DatabaseIcon, Info, Calculator, Plus, Sparkles, Check, ChevronDown, Download, Layers, AlertTriangle, Settings, Search, ArrowUpDown, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import CardView from '../components/CardView';
+import { customFetch } from '../utils/session';
 
 export default function Database({ addNotification }) {
     const [dataPreview, setDataPreview] = useState(null);
@@ -86,7 +87,7 @@ export default function Database({ addNotification }) {
     const fetchDataPreview = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`/api/database?full_data=true`, { credentials: 'include' });
+            const res = await customFetch(`/api/database?full_data=true`);
             if (res.ok) {
                 const data = await res.json();
                 setDataPreview(data.data_preview);
@@ -101,7 +102,7 @@ export default function Database({ addNotification }) {
 
     const fetchColumnsInfo = async () => {
         try {
-            const res = await fetch('/api/reports/columns', { credentials: 'include' });
+            const res = await customFetch('/api/reports/columns');
             if (res.ok) {
                 const data = await res.json();
                 setColumnsInfo(data.columns_info || []);
@@ -132,7 +133,7 @@ export default function Database({ addNotification }) {
         }
 
         try {
-            const res = await fetch('/api/database/recast', {
+            const res = await customFetch('/api/database/recast', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ modifications }),
@@ -164,7 +165,7 @@ export default function Database({ addNotification }) {
     const handleDelete = async () => {
         setIsDeleting(true);
         try {
-            const res = await fetch('/clear_data', {
+            const res = await customFetch('/clear_data', {
                 method: 'POST',
                 credentials: 'include',
             });
@@ -266,7 +267,7 @@ export default function Database({ addNotification }) {
         }
         setAnomalyLoading(true);
         try {
-            const res = await fetch('/api/anomalies', {
+            const res = await customFetch('/api/anomalies', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -785,7 +786,7 @@ export default function Database({ addNotification }) {
                                     setFormulaLoading(true);
                                     setFormulaError('');
                                     try {
-                                        const res = await fetch('/api/calculated-field', {
+                                        const res = await customFetch('/api/calculated-field', {
                                             method: 'POST',
                                             headers: { 'Content-Type': 'application/json' },
                                             body: JSON.stringify({ name: formulaName, formula: formulaExpr }),
