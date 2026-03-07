@@ -48,6 +48,38 @@ async def reports_columns(user: TokenPayload = Depends(get_current_user)):
 
 
 # ---------------------------------------------------------------------------
+# GET /api/reports/unique-values
+# ---------------------------------------------------------------------------
+@router.get("/api/reports/unique-values")
+async def unique_values(column: str, user: TokenPayload = Depends(get_current_user)):
+    from main import cache_manager
+    entry = await cache_manager.get(user.cache_id)
+    if not entry:
+        raise SessionExpiredException()
+    
+    df = _get_df(entry)
+    if column not in df.columns:
+        raise ValidationException(f"Colonne '{column}' introuvable")
+    
+    # Get unique values, sorted, limited to 1000 for safety
+    unique_vals = df[column].unique().drop_nulls().sort().head(1000).to_list()
+    
+    # Sanitize for JSON (handle NaN, Inf)
+    def sanitize(v):
+        if isinstance(v, float):
+            if math.isnan(v) or math.isinf(v):
+                return None
+        return v
+
+    return {
+        "status": "success",
+        "column": column,
+        "values": [sanitize(v) for v in unique_vals],
+        "total_unique": df[column].n_unique()
+    }
+
+
+# ---------------------------------------------------------------------------
 # POST /api/chart-data
 # ---------------------------------------------------------------------------
 @router.post("/api/chart-data")

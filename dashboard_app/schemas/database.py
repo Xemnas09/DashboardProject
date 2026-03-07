@@ -11,6 +11,7 @@ class RecastRequest(BaseModel):
     modifications: list[RecastModification]
 
 
-class CalculatedFieldRequest(BaseModel):
+class ExpressionRequest(BaseModel):
     name: str
-    formula: str
+    expression: str
+    force: bool = False

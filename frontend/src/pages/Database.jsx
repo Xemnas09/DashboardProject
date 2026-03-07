@@ -94,11 +94,11 @@ const TYPE_LABELS = {
 
 // ─── STABLE SUB-COMPONENTS ────────────────────────
 
-const Modal = ({ isOpen, onClose, title, icon: Icon, children, infoBlock }) => {
+const Modal = ({ isOpen, onClose, title, icon: Icon, children, infoBlock, maxWidth = "max-w-2xl" }) => {
     if (!isOpen) return null;
     return (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[100] flex items-center justify-center p-4 md:p-12 overflow-y-auto">
-            <div className="bg-white rounded-[2rem] shadow-2xl max-w-2xl w-full flex flex-col h-fit max-h-[90vh] animate-modal relative overflow-hidden">
+            <div className={`bg-white rounded-[2rem] shadow-2xl ${maxWidth} w-full flex flex-col h-fit max-h-[90vh] animate-modal relative overflow-hidden`}>
                 <div className="h-16 px-8 flex items-center justify-between border-b border-gray-100 shrink-0">
                     <div className="flex items-center gap-3">
                         {Icon && (
@@ -205,8 +205,8 @@ const Header = ({ rowCount, loadedRows, activeToolTab, onOpenToolTab, onOpenStat
                                     <span className="text-[11px] font-bold uppercase tracking-wider">Variables</span>
                                 </button>
                                 <button
-                                    onClick={() => onOpenToolTab('formula')}
-                                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${activeToolTab === 'formula' ? 'bg-bank-50 text-bank-700' : 'hover:bg-gray-50 text-gray-700'}`}
+                                    onClick={() => onOpenToolTab('expression')}
+                                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${activeToolTab === 'expression' ? 'bg-bank-50 text-bank-700' : 'hover:bg-gray-50 text-gray-700'}`}
                                 >
                                     <Calculator className="w-4 h-4" />
                                     <span className="text-[11px] font-bold uppercase tracking-wider">Calculs</span>
@@ -564,100 +564,249 @@ const AnomaliesModal = ({ isOpen, onClose, columns, selectedCols, onToggleCol, m
     );
 };
 
-const CalculatedFieldsModal = ({ isOpen, onClose, columns, formulaName, setFormulaName, formulaExpr, setFormulaExpr, onReset, onAdd, isLoading, error }) => {
+const CalculatedFieldsModal = ({ isOpen, onClose, columns, onAdd, isLoading, error }) => {
+    const [expressionName, setExpressionName] = useState('');
+    const [expressionText, setExpressionText] = useState('');
+    const [varSearch, setVarSearch] = useState('');
+    const [activeTab, setActiveTab] = useState('vars');
+    const textareaRef = useRef(null);
+
+    // Reset local state when modal opens
+    useEffect(() => {
+        if (isOpen) {
+            setExpressionName('');
+            setExpressionText('');
+            setVarSearch('');
+        }
+    }, [isOpen]);
+
     if (!isOpen) return null;
+
+    const handleReset = () => {
+        setExpressionName('');
+        setExpressionText('');
+        setVarSearch('');
+    };
+
+    const handleAdd = () => {
+        onAdd(expressionName, expressionText);
+    };
+
+    const insertAtCursor = (text) => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const value = textarea.value;
+
+        const newValue = value.substring(0, start) + text + value.substring(end);
+        setExpressionText(newValue);
+
+        // Reset cursor position after React update
+        setTimeout(() => {
+            textarea.focus();
+            textarea.setSelectionRange(start + text.length, start + text.length);
+        }, 0);
+    };
+
+    const filteredColumns = Array.isArray(columns)
+        ? columns.filter(col =>
+            col.title.toLowerCase().includes(varSearch.toLowerCase()) ||
+            col.field.toLowerCase().includes(varSearch.toLowerCase())
+        )
+        : [];
+
+    const FUNCTIONS = [
+        { name: 'ABS(x)', desc: 'Valeur absolue', format: 'ABS(' },
+        { name: 'ROUND(x, n)', desc: 'Arrondir à n décimales', format: 'ROUND(' },
+        { name: 'SQRT(x)', desc: 'Racine carrée', format: 'SQRT(' },
+        { name: 'LOG(x, b)', desc: 'Logarithme (base b)', format: 'LOG(' },
+        { name: 'LN(x)', desc: 'Logarithme népérien', format: 'LN(' },
+        { name: 'EXP(x)', desc: 'Exponentielle', format: 'EXP(' },
+    ];
+
     return (
         <Modal
             isOpen={isOpen}
             onClose={onClose}
-            title="Champs Calculés"
+            title="Assistant de Calcul Expert"
             icon={Calculator}
+            maxWidth="max-w-5xl"
             infoBlock={{
-                title: "Qu'est-ce qu'un champ calculé ?",
-                content: "Un champ calculé est une nouvelle colonne créée à partir d'une formule mathématique appliquée sur vos colonnes existantes. Il est calculé à la volée et n'est pas sauvegardé dans la base source.",
-                example: "si vous avez les colonnes 'Prix HT' et 'TVA', vous pouvez créer un champ calculé 'Prix TTC' avec la formule : Prix_HT * (1 + TVA / 100)",
-                warning: "Les champs calculés ne peuvent utiliser que des colonnes de type numérique (INT64, FLOAT64)."
+                title: "Conception de variables calculées",
+                content: "Créez de nouvelles dimensions d'analyse en appliquant des formules mathématiques sur vos données existantes. Utilisez la recherche pour trouver rapidement vos variables.",
+                example: "Marge brute : (f['Ventes'] - f['Couts']) / f['Ventes']",
+                warning: "Seules les colonnes numériques (INT, FLOAT) peuvent être utilisées dans les calculs arithmétiques."
             }}
         >
-            <div className="space-y-6">
-                {error && <div className="p-4 bg-rose-50 text-rose-600 text-[11px] font-bold rounded-xl border border-rose-100">{error}</div>}
-                <div className="space-y-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Nom de la colonne</label>
-                    <input
-                        type="text"
-                        value={formulaName}
-                        onChange={(e) => setFormulaName(e.target.value)}
-                        placeholder="Ex: Revenu_Net, Marge_Brute..."
-                        className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-xs font-semibold focus:ring-2 focus:ring-bank-500 outline-none"
-                    />
-                </div>
-
-                <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Formule Polars (Python)</label>
-                        <div className="bg-bank-50 px-2 py-0.5 rounded text-[9px] font-black text-bank-600">ABS(x), ROUND(x), SQRT(x)</div>
-                    </div>
-                    <div className="relative">
-                        <textarea
-                            value={formulaExpr}
-                            onChange={(e) => setFormulaExpr(e.target.value)}
-                            placeholder="f['col1'] * f['col2'] + 100"
-                            className="w-full h-32 bg-gray-900 p-4 text-emerald-400 font-mono text-[13px] rounded-2xl resize-none outline-none focus:ring-2 focus:ring-bank-500"
-                        />
-                        <div className="absolute top-4 right-4 text-[9px] font-black text-slate-700 bg-black/40 px-2 py-1 rounded">PYTHON-POLARS</div>
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Variables Disponibles</label>
-                        <div className="max-h-40 overflow-y-auto custom-scrollbar bg-gray-50 rounded-xl p-2 border border-gray-100 space-y-1">
-                            {Array.isArray(columns) && columns.length > 0 ? (
-                                columns.map(col => (
-                                    <button
-                                        key={col.field}
-                                        onClick={() => setFormulaExpr(prev => prev + `f['${col.field}']`)}
-                                        className="w-full text-left px-3 py-2 hover:bg-white hover:shadow-sm rounded-lg text-[10px] font-bold text-gray-600 truncate transition-all flex items-center justify-between group"
-                                    >
-                                        {col.title}
-                                        <Plus className="w-3 h-3 opacity-0 group-hover:opacity-100" />
-                                    </button>
-                                ))
-                            ) : (
-                                <div className="p-4 text-[10px] text-gray-400 text-center uppercase tracking-widest">Aucune variable</div>
-                            )}
+            <div className="flex flex-col gap-8">
+                {/* --- Top: Assistant Panel (Horizontal) --- */}
+                <div className="w-full bg-gray-50/50 border border-gray-100 rounded-[1.5rem] overflow-hidden shadow-sm flex flex-col">
+                    <div className="flex flex-col md:flex-row border-b border-gray-100 bg-white items-center px-4">
+                        <div className="flex gap-2 py-2">
+                            <button
+                                onClick={() => setActiveTab('vars')}
+                                className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'vars' ? 'text-bank-600 bg-bank-50' : 'text-gray-400 hover:bg-gray-50'}`}
+                            >
+                                Variables ({filteredColumns.length})
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('funcs')}
+                                className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'funcs' ? 'text-bank-600 bg-bank-50' : 'text-gray-400 hover:bg-gray-50'}`}
+                            >
+                                Fonctions
+                            </button>
                         </div>
+
+                        {activeTab === 'vars' && (
+                            <div className="flex-1 md:ml-8 w-full md:w-auto py-2">
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                                    <input
+                                        type="text"
+                                        value={varSearch}
+                                        onChange={(e) => setVarSearch(e.target.value)}
+                                        placeholder="Filtrer les champs..."
+                                        className="w-full bg-gray-50 border border-gray-100 rounded-xl py-2 pl-9 pr-4 text-[11px] font-bold text-gray-900 focus:ring-2 focus:ring-bank-500 outline-none transition-all"
+                                    />
+                                </div>
+                            </div>
+                        )}
                     </div>
-                    <div className="space-y-2">
-                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Opérateurs</label>
-                        <div className="grid grid-cols-4 gap-2">
+
+                    <div className="p-4 overflow-y-auto max-h-48 custom-scrollbar">
+                        {activeTab === 'vars' ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                                {filteredColumns.length > 0 ? (
+                                    filteredColumns.map(col => (
+                                        <button
+                                            key={col.field}
+                                            onClick={() => insertAtCursor(`f['${col.field}']`)}
+                                            className="flex items-center justify-between p-3 bg-white border border-gray-100/50 rounded-xl hover:border-bank-200 hover:shadow-sm group transition-all text-left"
+                                        >
+                                            <div className="flex flex-col min-w-0">
+                                                <span className="text-[10px] font-black text-gray-700 truncate">{col.title}</span>
+                                                <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">{col.field}</span>
+                                            </div>
+                                            <Plus className="w-3.5 h-3.5 text-bank-400 opacity-0 group-hover:opacity-100 transition-all shrink-0" />
+                                        </button>
+                                    ))
+                                ) : (
+                                    <div className="col-span-full py-8 text-center space-y-2">
+                                        <Layers className="w-5 h-5 text-gray-200 mx-auto" />
+                                        <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Aucun champ trouvé</p>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                {FUNCTIONS.map(f => (
+                                    <button
+                                        key={f.name}
+                                        onClick={() => insertAtCursor(f.format)}
+                                        className="flex flex-col p-3 bg-white border border-gray-100/50 rounded-xl hover:border-violet-200 hover:bg-violet-50/10 group transition-all text-left"
+                                    >
+                                        <div className="flex items-center justify-between w-full mb-1">
+                                            <span className="text-[11px] font-black text-violet-600 font-mono">{f.name}</span>
+                                            <Plus className="w-3.5 h-3.5 text-violet-400 opacity-0 group-hover:opacity-100 transition-all shrink-0" />
+                                        </div>
+                                        <span className="text-[9px] font-medium text-gray-500 leading-tight">{f.desc}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="px-4 py-3 bg-white border-t border-gray-100 flex items-center justify-between">
+                        <div className="flex items-center gap-1">
                             {['+', '-', '*', '/', '(', ')', '**'].map(op => (
                                 <button
                                     key={op}
-                                    onClick={() => setFormulaExpr(prev => prev + ' ' + op + ' ')}
-                                    className="h-10 flex items-center justify-center bg-white border border-gray-200 rounded-xl text-xs font-black hover:border-bank-500 hover:text-bank-600 transition-all active:scale-90"
+                                    onClick={() => insertAtCursor(op.length === 1 ? ' ' + op + ' ' : op)}
+                                    className="h-8 px-3 flex items-center justify-center bg-gray-50 border border-gray-100 rounded-lg text-[11px] font-black text-gray-600 hover:bg-gray-900 hover:text-white transition-all active:scale-90"
                                 >
                                     {op}
                                 </button>
                             ))}
                         </div>
+                        <div className="hidden sm:flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Syntaxe Polars Active</span>
+                        </div>
                     </div>
                 </div>
 
-                <div className="pt-4 border-t border-gray-100 flex gap-3">
-                    <button
-                        onClick={onReset}
-                        className="flex-1 py-4 bg-gray-50 text-gray-400 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-gray-100 transition-all"
-                    >
-                        Réinitialiser
-                    </button>
-                    <button
-                        onClick={onAdd}
-                        disabled={isLoading || !formulaName || !formulaExpr}
-                        className="flex-[2] py-4 bg-bank-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-xl shadow-bank-200 hover:bg-bank-700 transition-all active:scale-95"
-                    >
-                        Créer le Champ Expert
-                    </button>
+                {/* --- Bottom: Editor Panel (Full Width) --- */}
+                <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="md:col-span-1 space-y-2">
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                <Type className="w-3 h-3" /> Nom de la variable
+                            </label>
+                            <input
+                                type="text"
+                                value={expressionName}
+                                onChange={(e) => setExpressionName(e.target.value)}
+                                placeholder="ROI, Marge..."
+                                className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-4 px-5 text-[13px] font-bold text-gray-900 focus:ring-2 focus:ring-bank-500 outline-none transition-all"
+                            />
+                        </div>
+                        <div className="md:col-span-2 space-y-2">
+                            <div className="flex justify-between items-center">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                    <Sparkles className="w-3 h-3" /> Expression Mathématique
+                                </label>
+                            </div>
+                            <div className="relative group/editor">
+                                <textarea
+                                    ref={textareaRef}
+                                    value={expressionText}
+                                    onChange={(e) => setExpressionText(e.target.value)}
+                                    placeholder="Entrez votre calcul, ex: f['BP'] * 1.2"
+                                    className="w-full h-40 bg-slate-950 p-6 text-emerald-400 font-mono text-[14px] leading-relaxed rounded-2xl resize-none outline-none focus:ring-2 focus:ring-bank-500 shadow-inner group-hover/editor:shadow-bank-100/20 transition-all custom-scrollbar"
+                                />
+                                <div className="absolute bottom-4 right-4 flex items-center gap-2">
+                                    <span className="text-[9px] font-black text-emerald-500/30 uppercase tracking-widest font-mono">Expression Editor</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {error && (
+                        <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl animate-in fade-in slide-in-from-top-2">
+                            <div className="flex gap-3">
+                                <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+                                <div className="space-y-1">
+                                    <p className="text-[11px] font-black text-rose-900 uppercase">Erreur détectée</p>
+                                    <p className="text-[11px] font-medium text-rose-600 leading-tight">{error}</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="flex gap-3">
+                        <button
+                            onClick={handleReset}
+                            className="px-6 py-4 bg-gray-50 text-gray-400 rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-gray-100 hover:text-gray-600 transition-all active:scale-95"
+                        >
+                            <RotateCcw className="w-4 h-4" />
+                        </button>
+                        <button
+                            onClick={handleAdd}
+                            disabled={isLoading || !expressionName || !expressionText}
+                            className="flex-1 py-4 bg-gradient-to-r from-bank-600 to-bank-700 text-white rounded-2xl font-black text-[11px] uppercase tracking-[0.15em] shadow-xl shadow-bank-200 hover:shadow-bank-300 transition-all active:scale-[0.98] disabled:opacity-30 flex items-center justify-center gap-3 group"
+                        >
+                            {isLoading ? (
+                                <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                            ) : (
+                                <>
+                                    <Calculator className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                                    <span>Générer Variable Expert</span>
+                                </>
+                            )}
+                        </button>
+                    </div>
                 </div>
             </div>
         </Modal>
@@ -729,6 +878,42 @@ const PDFExportModal = ({ isOpen, onClose, columns, selectedCols, onToggleCol, o
                 </button>
             </div>
         </Modal>
+    );
+};
+
+
+const MathWarningModal = ({ isOpen, onClose, warning, onConfirm, isLoading }) => {
+    if (!isOpen || !warning) return null;
+
+    return (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[200] flex items-center justify-center p-6 text-center animate-in fade-in">
+            <div className="bg-white rounded-[2rem] shadow-2xl max-w-md w-full p-10 animate-modal border border-white/20">
+                <div className="w-20 h-20 bg-amber-50 text-amber-500 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-inner">
+                    <AlertTriangle className="w-10 h-10" />
+                </div>
+                <h3 className="text-2xl font-black text-slate-900 mb-3 uppercase tracking-tight">Risque Mathématique</h3>
+                <p className="text-[13px] font-medium text-slate-600 leading-relaxed mb-6">
+                    <span className="font-black text-amber-600">{warning.affected_rows.toLocaleString()} lignes</span> sur {warning.total_rows.toLocaleString()} produiront des erreurs (division par zéro, etc.).
+                </p>
+                <div className="bg-gray-50 rounded-2xl p-4 text-left border border-gray-100 mb-8">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Impact technique</p>
+                    <p className="text-[11px] font-medium text-gray-600 leading-tight">
+                        Les valeurs problématiques seront remplacées par <code className="bg-white px-1.5 py-0.5 rounded border border-gray-200 text-bank-600 font-bold">null</code> pour préserver l'intégrité de la base.
+                    </p>
+                </div>
+                <div className="flex flex-col gap-3">
+                    <button
+                        onClick={() => onConfirm(warning.payload.name, warning.payload.expression, true)}
+                        disabled={isLoading}
+                        className="w-full py-5 bg-bank-600 hover:bg-bank-700 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl shadow-bank-100 disabled:opacity-50 flex items-center justify-center gap-3"
+                    >
+                        {isLoading && <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>}
+                        <span>Créer quand même</span>
+                    </button>
+                    <button onClick={onClose} disabled={isLoading} className="w-full py-5 bg-slate-50 hover:bg-slate-100 text-slate-400 rounded-2xl font-black text-xs uppercase tracking-widest transition-all">Annuler</button>
+                </div>
+            </div>
+        </div>
     );
 };
 
@@ -1089,10 +1274,9 @@ export default function Database({ addNotification }) {
     const [columnsInfo, setColumnsInfo] = useState([]);
     const [isSavingTypes, setIsSavingTypes] = useState(false);
 
-    const [formulaName, setFormulaName] = useState('');
-    const [formulaExpr, setFormulaExpr] = useState('');
-    const [formulaError, setFormulaError] = useState('');
-    const [formulaLoading, setFormulaLoading] = useState(false);
+    const [expressionError, setExpressionError] = useState('');
+    const [expressionLoading, setExpressionLoading] = useState(false);
+    const [mathWarning, setMathWarning] = useState(null); // { affected_rows, total_rows, message, payload }
 
     const [isPDFExportModalOpen, setIsPDFExportModalOpen] = useState(false);
     const [isStatsModalOpen, setIsStatsModalOpen] = useState(false);
@@ -1287,30 +1471,36 @@ export default function Database({ addNotification }) {
         addNotification("Interface réinitialisée.", "info");
     };
 
-    const handleAddCalculatedField = async () => {
-        setFormulaLoading(true);
-        setFormulaError('');
+    const handleAddExpression = async (name, expression, force = false) => {
+        setExpressionLoading(true);
+        setExpressionError('');
         try {
-            const res = await customFetch('/api/database/formula', {
+            const res = await customFetch('/api/database/expression', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: formulaName, expression: formulaExpr }),
+                body: JSON.stringify({ name, expression, force }),
                 credentials: 'include',
             });
             const data = await res.json();
             if (res.ok) {
-                addNotification("Champ calculé ajouté avec succès !", "success");
-                setFormulaName('');
-                setFormulaExpr('');
+                addNotification("Variable expert créée avec succès !", "success");
                 setActiveToolTab(null);
+                setMathWarning(null);
                 fetchDataPreview();
+            } else if (data.status === 'warning' && data.error_type === 'MATH_WARNING') {
+                setMathWarning({
+                    affected_rows: data.affected_rows,
+                    total_rows: data.total_rows,
+                    message: data.message,
+                    payload: { name, expression }
+                });
             } else {
-                setFormulaError(data.message || "Erreur lors de la création du champ.");
+                setExpressionError(data.message || "Erreur lors de la création du champ.");
             }
         } catch (e) {
-            setFormulaError("Impossible de contacter le serveur.");
+            setExpressionError("Impossible de contacter le serveur.");
         } finally {
-            setFormulaLoading(false);
+            setExpressionLoading(false);
         }
     };
 
@@ -1589,17 +1779,12 @@ export default function Database({ addNotification }) {
                 />
 
                 <CalculatedFieldsModal
-                    isOpen={activeToolTab === 'formula'}
+                    isOpen={activeToolTab === 'expression'}
                     onClose={() => setActiveToolTab(null)}
                     columns={dataPreview?.columns}
-                    formulaName={formulaName}
-                    setFormulaName={setFormulaName}
-                    formulaExpr={formulaExpr}
-                    setFormulaExpr={setFormulaExpr}
-                    onReset={() => { setFormulaName(''); setFormulaExpr(''); }}
-                    onAdd={handleAddCalculatedField}
-                    isLoading={formulaLoading}
-                    error={formulaError}
+                    onAdd={handleAddExpression}
+                    isLoading={expressionLoading}
+                    error={expressionError}
                 />
 
                 <PDFExportModal
@@ -1620,6 +1805,14 @@ export default function Database({ addNotification }) {
                     isOpen={isStatsModalOpen}
                     onClose={() => setIsStatsModalOpen(false)}
                     columns={dataPreview?.columns || []}
+                />
+
+                <MathWarningModal
+                    isOpen={!!mathWarning}
+                    onClose={() => setMathWarning(null)}
+                    warning={mathWarning}
+                    onConfirm={handleAddExpression}
+                    isLoading={expressionLoading}
                 />
 
             </div>

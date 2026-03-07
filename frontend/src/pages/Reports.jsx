@@ -6,9 +6,298 @@ import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-quartz.css';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
-import { BarChart3, Settings2, Download, Table as TableIcon, AlertCircle, Database as DatabaseIcon, Filter, X as XIcon, Sparkles } from 'lucide-react';
+import { BarChart3, Settings2, Download, Table as TableIcon, AlertCircle, Database as DatabaseIcon, Filter, X as XIcon, Sparkles, GripVertical, Plus, X, Search, Check, ChevronDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import { customFetch } from '../features/auth/session';
+
+// @dnd-kit imports
+import {
+    DndContext,
+    DragOverlay,
+    closestCorners,
+    PointerSensor,
+    useSensor,
+    useSensors,
+    useDroppable,
+} from '@dnd-kit/core';
+import {
+    SortableContext,
+    verticalListSortingStrategy,
+    useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+const ZONES = {
+    AVAILABLE: 'available',
+    ROWS: 'rows',
+    COLUMNS: 'columns',
+    VALUES: 'values',
+    FILTERS: 'filters',
+};
+
+function FieldChip({ id, zone, dtype, aggregation, onAggChange, onRemove }) {
+    const [isRemoving, setIsRemoving] = React.useState(false);
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging,
+    } = useSortable({ id });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.4 : 1,
+    };
+
+    const DTYPE_CHIP_STYLE = {
+        continuous: 'bg-blue-50 border-blue-100 text-blue-700',
+        discrete: 'bg-violet-50 border-violet-100 text-violet-700',
+        categorical: 'bg-amber-50 border-amber-100 text-amber-700',
+        boolean: 'bg-green-50 border-green-100 text-green-700',
+        identifier: 'bg-gray-50 border-gray-200 text-gray-500',
+        unknown: 'bg-gray-50 border-gray-200 text-gray-500',
+    };
+
+    // Map dtype to internal category
+    const getTypeCategory = (dt) => {
+        if (!dt) return 'unknown';
+        const low = dt.toLowerCase();
+        if (low.includes('int') || low.includes('float') || low.includes('decimal')) return 'continuous';
+        if (low.includes('bool')) return 'boolean';
+        if (low.includes('date') || low.includes('time')) return 'discrete';
+        if (low.includes('string') || low.includes('utf8') || low.includes('object')) return 'categorical';
+        return 'unknown';
+    };
+
+    const ZONE_CHIP_SOLID = {
+        [ZONES.ROWS]: 'bg-blue-600 border-blue-600 text-white',
+        [ZONES.COLUMNS]: 'bg-amber-500 border-amber-500 text-white',
+        [ZONES.VALUES]: 'bg-emerald-600 border-emerald-600 text-white',
+        [ZONES.FILTERS]: 'bg-red-500 border-red-500 text-white',
+    };
+
+    const chipBase = "flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold shadow-sm select-none transition-all duration-150 animate-in zoom-in-95 fade-in";
+
+    if (zone === ZONES.AVAILABLE) {
+        return (
+            <div
+                ref={setNodeRef}
+                style={style}
+                {...attributes}
+                {...listeners}
+                className={`${chipBase} rounded-full cursor-grab active:cursor-grabbing hover:shadow-md hover:-translate-y-0.5 ${DTYPE_CHIP_STYLE[getTypeCategory(dtype)]} ${isRemoving ? 'opacity-0 scale-95 duration-150' : ''}`}
+            >
+                <GripVertical size={12} className="opacity-40" />
+                <span>{id}</span>
+            </div>
+        );
+    }
+
+    return (
+        <div
+            ref={setNodeRef}
+            style={style}
+            className={`${chipBase} py-2.5 shadow-md hover:brightness-110 group ${ZONE_CHIP_SOLID[zone]} ${isRemoving ? 'opacity-0 scale-95 duration-150' : ''}`}
+        >
+            <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
+                <GripVertical size={12} className="opacity-50" />
+            </div>
+            <span className="truncate flex-1">{id}</span>
+
+            {zone === ZONES.VALUES && (
+                <select
+                    value={aggregation}
+                    onChange={e => onAggChange(id, e.target.value)}
+                    onClick={e => e.stopPropagation()}
+                    className="bg-white/20 text-inherit text-[10px] font-black rounded-lg px-2 py-1 border border-white/20 outline-none hover:bg-white/30 cursor-pointer"
+                >
+                    <option value="sum">Σ Somme</option>
+                    <option value="mean">μ Moyenne</option>
+                    <option value="count"># Nombre</option>
+                    <option value="min">↓ Min</option>
+                    <option value="max">↑ Max</option>
+                </select>
+            )}
+
+            <button
+                onClick={(e) => {
+                    e.stopPropagation();
+                    setIsRemoving(true);
+                    setTimeout(() => onRemove(id), 150);
+                }}
+                className="w-5 h-5 rounded-full bg-white/20 opacity-0 group-hover:opacity-100 hover:bg-white/40 flex items-center justify-center transition-all duration-150"
+            >
+                <X size={10} />
+            </button>
+        </div>
+    );
+}
+
+function FilterSelector({ field, activeFilters, onSave, onClose }) {
+    const [values, setValues] = useState([]);
+    const [selected, setSelected] = useState(activeFilters[field] || []);
+    const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState('');
+    const [totalUnique, setTotalUnique] = useState(0);
+
+    useEffect(() => {
+        const fetchValues = async () => {
+            try {
+                const res = await customFetch(`/api/reports/unique-values?column=${encodeURIComponent(field)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setValues(data.values);
+                    setTotalUnique(data.total_unique);
+                }
+            } catch (e) {
+                console.error(e);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchValues();
+    }, [field]);
+
+    const filteredValues = values.filter(v =>
+        String(v).toLowerCase().includes(search.toLowerCase())
+    );
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-950/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+                <div className="px-6 py-4 bg-gray-950 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-red-500/20 flex items-center justify-center">
+                            <Filter className="w-4 h-4 text-red-500" />
+                        </div>
+                        <div>
+                            <p className="text-white font-black text-sm tracking-wide">Filtrer: {field}</p>
+                            <p className="text-white/40 text-[10px] uppercase font-bold tracking-widest">Sélectionner les valeurs</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="text-white/40 hover:text-white transition-colors">
+                        <X size={20} />
+                    </button>
+                </div>
+
+                <div className="p-6 space-y-4">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="Rechercher des valeurs..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-red-500 transition-all outline-none"
+                        />
+                    </div>
+
+                    <div className="max-h-[300px] overflow-y-auto pr-2 space-y-1 custom-scrollbar">
+                        {loading ? (
+                            <div className="py-10 flex flex-col items-center justify-center gap-3">
+                                <div className="w-6 h-6 border-2 border-red-500/20 border-t-red-500 rounded-full animate-spin" />
+                                <p className="text-[10px] font-black uppercase text-gray-400">Chargement...</p>
+                            </div>
+                        ) : filteredValues.length > 0 ? (
+                            filteredValues.map(v => {
+                                const isSelected = selected.includes(v);
+                                return (
+                                    <button
+                                        key={v}
+                                        onClick={() => {
+                                            setSelected(prev =>
+                                                isSelected ? prev.filter(x => x !== v) : [...prev, v]
+                                            );
+                                        }}
+                                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-150 ${isSelected ? 'bg-red-50 text-red-700' : 'hover:bg-gray-50 text-gray-600'
+                                            }`}
+                                    >
+                                        <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-red-500 border-red-500' : 'border-gray-200'
+                                            }`}>
+                                            {isSelected && <Check size={12} className="text-white" />}
+                                        </div>
+                                        <span className="text-sm font-bold truncate">{v === null ? '(Vide)' : String(v)}</span>
+                                    </button>
+                                );
+                            })
+                        ) : (
+                            <p className="py-10 text-center text-xs text-gray-400 font-medium italic">Aucune valeur trouvée</p>
+                        )}
+                    </div>
+
+                    {totalUnique > 1000 && (
+                        <p className="text-[9px] text-amber-600 font-bold uppercase text-center bg-amber-50 py-2 rounded-lg ring-1 ring-amber-200">
+                            ⚠️ Trop de valeurs ({totalUnique}). Seules les 1000 premières sont affichées.
+                        </p>
+                    )}
+
+                    <div className="pt-2 flex gap-3">
+                        <button
+                            onClick={() => setSelected([])}
+                            className="flex-1 py-3 bg-gray-50 text-gray-500 font-black text-[10px] uppercase tracking-widest rounded-2xl hover:bg-gray-100 transition-all"
+                        >
+                            Désélectionner tout
+                        </button>
+                        <button
+                            onClick={() => onSave(selected)}
+                            className="flex-1 py-3 bg-red-500 text-white font-black text-[10px] uppercase tracking-widest rounded-2xl shadow-lg shadow-red-100 hover:shadow-xl hover:-translate-y-0.5 transition-all"
+                        >
+                            Appliquer
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function DropZone({ id, label, children, isEmpty }) {
+    const { isOver, setNodeRef } = useDroppable({ id });
+
+    const ZONE_CONFIG = {
+        [ZONES.ROWS]: { idle: 'bg-blue-50/30 border-blue-200', hover: 'bg-blue-100/60 border-blue-400 shadow-blue-100', text: 'text-blue-800', dot: 'bg-blue-500', badge: 'bg-blue-100 text-blue-700' },
+        [ZONES.COLUMNS]: { idle: 'bg-amber-50/30 border-amber-200', hover: 'bg-amber-100/60 border-amber-400 shadow-amber-100', text: 'text-amber-800', dot: 'bg-amber-500', badge: 'bg-amber-100 text-amber-700' },
+        [ZONES.VALUES]: { idle: 'bg-emerald-50/30 border-emerald-200', hover: 'bg-emerald-100/60 border-emerald-400 shadow-emerald-100', text: 'text-emerald-800', dot: 'bg-emerald-500', badge: 'bg-emerald-100 text-emerald-700' },
+        [ZONES.FILTERS]: { idle: 'bg-red-50/30 border-red-200', hover: 'bg-red-100/60 border-red-400 shadow-red-100', text: 'text-red-800', dot: 'bg-red-400', badge: 'bg-red-100 text-red-700' },
+    };
+    const cfg = ZONE_CONFIG[id];
+    const fieldCount = children.length;
+
+    return (
+        <div
+            ref={setNodeRef}
+            className={`rounded-2xl border-2 p-4 min-h-[110px] transition-all duration-200 ${isOver ? 'border-solid scale-[1.02] shadow-lg ' + cfg.hover : 'border-dashed ' + cfg.idle}`}
+        >
+            <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                    <div className={`w-1.5 h-5 rounded-full ${cfg.dot}`} />
+                    <p className={`text-[10px] font-black uppercase tracking-widest ${cfg.text}`}>{label}</p>
+                </div>
+                {fieldCount > 0 && (
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${cfg.badge}`}>{fieldCount}</span>
+                )}
+            </div>
+
+            <SortableContext items={children.map(c => c.key)} strategy={verticalListSortingStrategy}>
+                <div className="space-y-2">
+                    {children}
+                    {isEmpty && (
+                        <div className={`flex flex-col items-center justify-center py-5 gap-1.5`}>
+                            <div className={`w-8 h-8 rounded-xl border-2 border-dashed flex items-center justify-center opacity-30 ${cfg.dot.replace('bg-', 'border-').replace('text-', 'border-')}`}>
+                                <Plus size={14} className={cfg.text} />
+                            </div>
+                            <p className={`text-[10px] italic opacity-40 ${cfg.text}`}>Glissez des champs ici</p>
+                        </div>
+                    )}
+                </div>
+            </SortableContext>
+        </div>
+    );
+}
 
 export default function Reports({ addNotification }) {
     const [columnsInfo, setColumnsInfo] = useState([]);
@@ -51,10 +340,25 @@ export default function Reports({ addNotification }) {
     const [manualTitle, setManualTitle] = useState('');
     const echartsRef = useRef(null);
 
-    // Pivot States
-    const [pivotRows, setPivotRows] = useState([]);
-    const [pivotCols, setPivotCols] = useState([]);
-    const [pivotValues, setPivotValues] = useState([]); // List of { col, agg }
+    // Pivot States (Unified DnD Model)
+    const [fieldZones, setFieldZones] = useState({
+        [ZONES.AVAILABLE]: [],
+        [ZONES.ROWS]: [],
+        [ZONES.COLUMNS]: [],
+        [ZONES.VALUES]: [],
+        [ZONES.FILTERS]: [],
+    });
+    const [aggregations, setAggregations] = useState({});
+    const [activeId, setActiveId] = useState(null);
+
+    // Derived values for backward compatibility
+    const pivotRows = fieldZones[ZONES.ROWS];
+    const pivotCols = fieldZones[ZONES.COLUMNS];
+    const pivotValues = fieldZones[ZONES.VALUES].map(col => ({
+        col,
+        agg: aggregations[col] || 'sum'
+    }));
+
     const [pivotData, setPivotData] = useState(null);
     const [pivotLoading, setPivotLoading] = useState(false);
     const [pivotError, setPivotError] = useState('');
@@ -62,6 +366,14 @@ export default function Reports({ addNotification }) {
     const generateChartRef = useRef(null);
     const generatePivotRef = useRef(null);
     const isFirstRender = useRef(true);
+
+    const sensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: { distance: 5 }
+        })
+    );
+
+    const [filterModalField, setFilterModalField] = useState(null);
 
     const [totalRows, setTotalRows] = useState(0);
 
@@ -148,24 +460,116 @@ export default function Reports({ addNotification }) {
         if (pivotData && generatePivotRef.current) generatePivotRef.current();
     }, [globalFilters]);
 
-    const toggleField = (colName, colDtype) => {
-        // Exclusive selection: remove from wherever it is
-        const inRows = pivotRows.includes(colName);
-        const inCols = pivotCols.includes(colName);
-        const inVals = pivotValues.some(v => v.col === colName);
+    const findZone = (fieldName) => {
+        return Object.entries(fieldZones).find(([, fields]) =>
+            fields.includes(fieldName)
+        )?.[0] ?? null;
+    };
 
-        if (inRows || inCols || inVals) {
-            setPivotRows(prev => prev.filter(x => x !== colName));
-            setPivotCols(prev => prev.filter(x => x !== colName));
-            setPivotValues(prev => prev.filter(x => x.col !== colName));
-        } else {
-            // Add based on type
-            const dtype = colDtype ? colDtype.toLowerCase() : '';
-            const isCat = dtype.includes('string') || dtype.includes('utf8') || dtype.includes('object') || dtype.includes('date') || dtype.includes('categorical');
-            if (isCat) setPivotRows(prev => [...prev, colName]);
-            else setPivotValues(prev => [...prev, { col: colName, agg: 'sum' }]);
+    const handleDragStart = ({ active }) => setActiveId(active.id);
+
+    const handleDragEnd = (event) => {
+        const { active, over } = event;
+        setActiveId(null);
+        if (!over) return;
+
+        const sourceZone = findZone(active.id);
+        let targetZone = over.id;
+
+        // If dropped over a field instead of a zone container, find that field's zone
+        if (!Object.values(ZONES).includes(targetZone)) {
+            targetZone = findZone(targetZone);
+        }
+
+        if (!sourceZone || !targetZone) return;
+        if (sourceZone === targetZone) return; // Order not specifically handled yet
+
+        setFieldZones(prev => {
+            const next = { ...prev };
+            next[sourceZone] = next[sourceZone].filter(id => id !== active.id);
+            next[targetZone] = [...next[targetZone], active.id];
+            return next;
+        });
+
+        // Add default aggregation if entering VALUES
+        if (targetZone === ZONES.VALUES) {
+            setAggregations(prev => ({
+                ...prev,
+                [active.id]: prev[active.id] || 'sum'
+            }));
+        }
+        // Cleanup aggregation if leaving VALUES
+        if (sourceZone === ZONES.VALUES && targetZone !== ZONES.VALUES) {
+            setAggregations(prev => {
+                const next = { ...prev };
+                delete next[active.id];
+                return next;
+            });
         }
     };
+
+    const removeField = (fieldName) => {
+        const zone = findZone(fieldName);
+        if (!zone) return;
+        setFieldZones(prev => ({
+            ...prev,
+            [zone]: prev[zone].filter(f => f !== fieldName),
+            [ZONES.AVAILABLE]: [...new Set([...prev[ZONES.AVAILABLE], fieldName])]
+        }));
+        setAggregations(prev => {
+            const next = { ...prev };
+            delete next[fieldName];
+            return next;
+        });
+    };
+
+    const resetAll = () => {
+        setFieldZones({
+            [ZONES.AVAILABLE]: columnsInfo.map(c => c.name),
+            [ZONES.ROWS]: [],
+            [ZONES.COLUMNS]: [],
+            [ZONES.VALUES]: [],
+            [ZONES.FILTERS]: [],
+        });
+        setAggregations({});
+        setPivotData(null);
+    };
+
+    const toggleField = (colName, colDtype) => {
+        const currentZone = findZone(colName);
+        if (currentZone && currentZone !== ZONES.AVAILABLE) {
+            removeField(colName);
+            return;
+        }
+
+        // Logic to move from AVAILABLE to a best-guess zone
+        const dtype = colDtype ? colDtype.toLowerCase() : '';
+        const isCat = dtype.includes('string') || dtype.includes('utf8') || dtype.includes('object') || dtype.includes('date') || dtype.includes('categorical');
+        const targetZone = isCat ? ZONES.ROWS : ZONES.VALUES;
+
+        setFieldZones(prev => ({
+            ...prev,
+            [ZONES.AVAILABLE]: prev[ZONES.AVAILABLE].filter(f => f !== colName),
+            [targetZone]: [...prev[targetZone], colName]
+        }));
+        if (targetZone === ZONES.VALUES) {
+            setAggregations(prev => ({ ...prev, [colName]: 'sum' }));
+        }
+    };
+
+    useEffect(() => {
+        if (columnsInfo.length > 0) {
+            setFieldZones(prev => {
+                const allAssigned = Object.entries(prev)
+                    .filter(([zone]) => zone !== ZONES.AVAILABLE)
+                    .flatMap(([, fields]) => fields);
+                const available = columnsInfo
+                    .map(c => c.name)
+                    .filter(name => !allAssigned.includes(name));
+                return { ...prev, [ZONES.AVAILABLE]: available };
+            });
+        }
+    }, [columnsInfo]);
 
     useEffect(() => {
         fetchColumnsInfo();
@@ -471,8 +875,12 @@ export default function Reports({ addNotification }) {
             filter: true,
             sortable: true,
             resizable: true,
+            valueFormatter: (params) => {
+                if (params.data?.isTotalRow && i === 0) return 'TOTAL';
+                return params.value;
+            },
             cellClassRules: {
-                'bg-bank-50 font-bold text-bank-900 border-t-2 border-bank-200': (params) => params.data?.isTotalRow,
+                'bg-bank-50 font-black text-bank-900 border-t-2 border-bank-200': (params) => params.data?.isTotalRow,
                 'bg-gray-50/30 text-bank-700 font-bold border-l border-gray-100': (params) => i >= pivotRows.length && !params.data?.isTotalRow
             }
         }));
@@ -716,187 +1124,175 @@ export default function Reports({ addNotification }) {
                         </div>
                     </div>
 
-                    {/* Right: Excel-Style Field List Panel */}
-                    <div className="w-full lg:w-[350px] space-y-4">
-                        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 flex flex-col overflow-hidden sticky top-6">
-                            <div className="p-4 bg-gray-900 text-white flex items-center justify-between">
-                                <span className="font-black text-[10px] uppercase tracking-[0.2em]">Champs du TCD</span>
-                                <Settings2 className="w-4 h-4 opacity-50" />
-                            </div>
-
-                            {/* Field List Container */}
-                            <div className="p-4 border-b border-gray-100 max-h-[300px] overflow-y-auto bg-gray-50/30">
-                                <p className="text-[10px] font-bold text-gray-400 uppercase mb-3 tracking-widest px-1">Choisir les champs :</p>
-                                <div className="space-y-1">
-                                    {columnsInfo.map(col => {
-                                        const isAssigned = pivotRows.includes(col.name) || pivotCols.includes(col.name) || pivotValues.some(v => v.col === col.name);
-                                        return (
-                                            <div
-                                                key={col.name}
-                                                onClick={() => toggleField(col.name, col.dtype)}
-                                                className={`group flex items-center px-3 py-2.5 rounded-xl border cursor-pointer transition-all duration-200 ${isAssigned
-                                                    ? 'bg-bank-600 border-bank-600 text-white shadow-lg shadow-bank-100'
-                                                    : 'bg-white border-gray-100 hover:border-bank-200 text-gray-700 hover:bg-gray-50'
-                                                    }`}
-                                            >
-                                                <div className={`w-5 h-5 rounded-lg border mr-3 flex items-center justify-center transition-all ${isAssigned ? 'bg-white border-white text-bank-600' : 'bg-gray-50 border-gray-200 group-hover:border-bank-300 shadow-inner'}`}>
-                                                    {isAssigned && <div className="w-2 h-2 bg-bank-600 rounded-sm"></div>}
-                                                </div>
-                                                <span className={`text-sm font-bold truncate flex-1 ${isAssigned ? 'text-white' : 'text-gray-900'}`}>{col.name}</span>
-                                                <span className={`text-[9px] font-black uppercase tracking-tighter px-2 py-0.5 rounded-md ${isAssigned ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-400'}`}>
-                                                    {getFriendlyType(col.dtype).split(' ')[0]}
-                                                </span>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-
-                            {/* Quadrants (Drag zones simplified as Areas) */}
-                            <div className="p-4 space-y-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                    {/* Rows Zone */}
-                                    <div className="border border-gray-100 rounded-2xl p-4 bg-blue-50/30">
-                                        <div className="flex items-center gap-2 mb-3">
-                                            <div className="w-1.5 h-6 bg-blue-500 rounded-full"></div>
-                                            <p className="text-[10px] font-black text-blue-900 uppercase tracking-widest">Lignes</p>
+                    {/* Right: Pivot Builder Panel (Sticky) */}
+                    <div className="w-full lg:w-[450px] space-y-4">
+                        <DndContext
+                            sensors={sensors}
+                            collisionDetection={closestCorners}
+                            onDragStart={handleDragStart}
+                            onDragEnd={handleDragEnd}
+                        >
+                            <div className="bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden sticky top-6">
+                                {/* Panel Header */}
+                                <div className="px-5 py-4 bg-gray-950 flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center">
+                                            <TableIcon className="w-4 h-4 text-white" />
                                         </div>
-                                        <div className="min-h-[80px] space-y-2">
-                                            {pivotRows.length > 0 ? pivotRows.map(r => (
-                                                <div key={r} className="flex items-center bg-white border border-blue-100 px-3 py-2 rounded-xl text-[12px] font-bold text-blue-900 shadow-sm animate-in zoom-in duration-200">
-                                                    <span className="flex-1 truncate">{r}</span>
-                                                    <button onClick={() => setPivotRows(prev => prev.filter(x => x !== r))} className="ml-2 w-5 h-5 flex items-center justify-center bg-blue-50 text-blue-400 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors">×</button>
-                                                </div>
-                                            )) : <div className="text-[10px] text-blue-300 italic py-6 text-center">Déposer les lignes ici</div>}
-                                            <select
-                                                defaultValue=""
-                                                onChange={e => {
-                                                    if (e.target.value) {
-                                                        const val = e.target.value;
-                                                        setPivotCols(prev => prev.filter(x => x !== val));
-                                                        setPivotValues(prev => prev.filter(x => x.col !== val));
-                                                        setPivotRows(prev => [...new Set([...prev, val])]);
-                                                        e.target.value = "";
-                                                    }
-                                                }}
-                                                className="w-full bg-white border border-blue-100/50 rounded-lg text-[10px] font-bold text-blue-600 outline-none p-2 shadow-sm focus:border-blue-300"
-                                            >
-                                                <option value="">+ Ajouter...</option>
-                                                {columnsInfo.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
-                                            </select>
+                                        <div>
+                                            <p className="text-white font-black text-sm tracking-wide">Constructeur de TCD</p>
+                                            <p className="text-white/40 text-[10px] font-medium">Glissez les champs dans les zones</p>
                                         </div>
                                     </div>
-                                    {/* Columns Zone */}
-                                    <div className="border border-gray-100 rounded-2xl p-4 bg-amber-50/30">
-                                        <div className="flex items-center gap-2 mb-3">
-                                            <div className="w-1.5 h-6 bg-amber-500 rounded-full"></div>
-                                            <p className="text-[10px] font-black text-amber-900 uppercase tracking-widest">Colonnes</p>
-                                        </div>
-                                        <div className="min-h-[80px] space-y-2">
-                                            {pivotCols.length > 0 ? pivotCols.map(c => (
-                                                <div key={c} className="flex items-center bg-white border border-amber-100 px-3 py-2 rounded-xl text-[12px] font-bold text-amber-900 shadow-sm animate-in zoom-in duration-200">
-                                                    <span className="flex-1 truncate">{c}</span>
-                                                    <button onClick={() => setPivotCols(prev => prev.filter(x => x !== c))} className="ml-2 w-5 h-5 flex items-center justify-center bg-amber-50 text-amber-400 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors">×</button>
-                                                </div>
-                                            )) : <div className="text-[10px] text-amber-300 italic py-6 text-center">Déposer les colonnes ici</div>}
-                                            <select
-                                                defaultValue=""
-                                                onChange={e => {
-                                                    if (e.target.value) {
-                                                        const val = e.target.value;
-                                                        setPivotRows(prev => prev.filter(x => x !== val));
-                                                        setPivotValues(prev => prev.filter(x => x.col !== val));
-                                                        setPivotCols(prev => [...new Set([...prev, val])]);
-                                                        e.target.value = "";
-                                                    }
-                                                }}
-                                                className="w-full bg-white border border-amber-100/50 rounded-lg text-[10px] font-bold text-amber-600 outline-none p-2 shadow-sm focus:border-amber-300"
-                                            >
-                                                <option value="">+ Ajouter...</option>
-                                                {columnsInfo.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
-                                            </select>
-                                        </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                                        <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Mode Excel</span>
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
-                                    {/* Values Zone */}
-                                    <div className="border border-gray-100 rounded-2xl p-4 bg-emerald-50/30">
-                                        <div className="flex items-center gap-2 mb-3">
-                                            <div className="w-1.5 h-6 bg-emerald-500 rounded-full"></div>
-                                            <p className="text-[10px] font-black text-emerald-900 uppercase tracking-widest">Valeurs</p>
-                                        </div>
-                                        <div className="min-h-[80px] space-y-3">
-                                            {pivotValues.length > 0 ? pivotValues.map((v, idx) => (
-                                                <div key={v.col} className="bg-white border border-emerald-100 p-3 rounded-xl shadow-sm animate-in zoom-in duration-200">
-                                                    <div className="flex items-center mb-2">
-                                                        <span className="flex-1 truncate text-[12px] font-black text-emerald-900">{v.col}</span>
-                                                        <button onClick={() => setPivotValues(prev => prev.filter(x => x.col !== v.col))} className="ml-2 w-5 h-5 flex items-center justify-center bg-red-50 text-red-400 rounded-full hover:bg-red-500 hover:text-white transition-all">×</button>
-                                                    </div>
-                                                    <select
-                                                        value={v.agg}
-                                                        onChange={e => {
-                                                            const newVals = [...pivotValues];
-                                                            newVals[idx].agg = e.target.value;
-                                                            setPivotValues(newVals);
-                                                        }}
-                                                        className="w-full bg-emerald-50 text-[10px] font-black uppercase text-emerald-700 rounded-lg px-2 py-1.5 outline-none border border-emerald-100"
-                                                    >
-                                                        <option value="sum">Σ Somme</option>
-                                                        <option value="mean">μ Moyenne</option>
-                                                        <option value="count"># Nombre</option>
-                                                        <option value="min">↓ Min</option>
-                                                        <option value="max">↑ Max</option>
-                                                    </select>
-                                                </div>
-                                            )) : <div className="text-[10px] text-emerald-300 italic py-6 text-center">Déposer les valeurs ici</div>}
-                                            {pivotValues.length < 5 && (
-                                                <select
-                                                    defaultValue=""
-                                                    onChange={e => {
-                                                        if (e.target.value) {
-                                                            const val = e.target.value;
-                                                            setPivotRows(prev => prev.filter(x => x !== val));
-                                                            setPivotCols(prev => prev.filter(x => x !== val));
-                                                            setPivotValues(prev => [...prev, { col: val, agg: 'sum' }]);
-                                                            e.target.value = "";
-                                                        }
-                                                    }}
-                                                    className="w-full bg-white border border-emerald-100/50 rounded-lg text-[10px] font-bold text-emerald-600 outline-none p-2 shadow-sm focus:border-emerald-300"
-                                                >
-                                                    <option value="">+ Valeur...</option>
-                                                    {columnsInfo.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
-                                                </select>
+                                {/* Available Fields Zone */}
+                                <div className="p-5 border-b border-gray-100 bg-gray-50/20">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-4 flex items-center gap-2">
+                                        <span className="w-4 h-px bg-gray-200 inline-block" />
+                                        Champs disponibles
+                                        <span className="w-4 h-px bg-gray-200 inline-block" />
+                                    </p>
+                                    <SortableContext
+                                        items={fieldZones[ZONES.AVAILABLE]}
+                                        strategy={verticalListSortingStrategy}
+                                    >
+                                        <div className="flex flex-wrap gap-2 min-h-[50px]">
+                                            {fieldZones[ZONES.AVAILABLE].map(fieldName => {
+                                                const col = columnsInfo.find(c => c.name === fieldName);
+                                                return (
+                                                    <FieldChip
+                                                        key={fieldName}
+                                                        id={fieldName}
+                                                        zone={ZONES.AVAILABLE}
+                                                        dtype={col?.dtype}
+                                                    />
+                                                );
+                                            })}
+                                            {fieldZones[ZONES.AVAILABLE].length === 0 && (
+                                                <div className="w-full text-center py-4 text-[10px] text-gray-300 italic">Tous les champs sont assignés</div>
                                             )}
                                         </div>
+                                    </SortableContext>
+                                </div>
+
+                                {/* Quadrants Grid */}
+                                <div className="p-6 space-y-6">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <DropZone id={ZONES.ROWS} label="Lignes" isEmpty={fieldZones[ZONES.ROWS].length === 0}>
+                                            {fieldZones[ZONES.ROWS].map(f => (
+                                                <FieldChip key={f} id={f} zone={ZONES.ROWS} onRemove={removeField} />
+                                            ))}
+                                        </DropZone>
+                                        <DropZone id={ZONES.COLUMNS} label="Colonnes" isEmpty={fieldZones[ZONES.COLUMNS].length === 0}>
+                                            {fieldZones[ZONES.COLUMNS].map(f => (
+                                                <FieldChip key={f} id={f} zone={ZONES.COLUMNS} onRemove={removeField} />
+                                            ))}
+                                        </DropZone>
                                     </div>
-                                    {/* Action Zone (Simplified) */}
-                                    <div className="flex flex-col gap-3">
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <DropZone id={ZONES.VALUES} label="Valeurs (Σ)" isEmpty={fieldZones[ZONES.VALUES].length === 0}>
+                                            {fieldZones[ZONES.VALUES].map(f => (
+                                                <FieldChip
+                                                    key={f}
+                                                    id={f}
+                                                    zone={ZONES.VALUES}
+                                                    aggregation={aggregations[f] || 'sum'}
+                                                    onAggChange={(col, agg) => setAggregations(prev => ({ ...prev, [col]: agg }))}
+                                                    onRemove={removeField}
+                                                />
+                                            ))}
+                                        </DropZone>
+                                        <DropZone id={ZONES.FILTERS} label="Filtres" isEmpty={fieldZones[ZONES.FILTERS].length === 0}>
+                                            {fieldZones[ZONES.FILTERS].map(f => (
+                                                <div key={f} onClick={() => setFilterModalField(f)} className="cursor-pointer group">
+                                                    <FieldChip
+                                                        id={f}
+                                                        zone={ZONES.FILTERS}
+                                                        onRemove={removeField}
+                                                    />
+                                                    {globalFilters[f] && (
+                                                        <div className="mt-1 px-2 py-0.5 bg-red-50 rounded-lg text-[9px] font-black text-red-600 uppercase flex items-center justify-between">
+                                                            <span className="truncate max-w-[120px]">
+                                                                {globalFilters[f].length} sélections
+                                                            </span>
+                                                            <ChevronDown size={10} />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </DropZone>
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div className="space-y-4 pt-2">
                                         <button
                                             onClick={generatePivot}
-                                            disabled={pivotLoading}
-                                            className="flex-1 w-full bg-gradient-to-br from-gray-800 to-gray-950 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 flex flex-col items-center justify-center gap-2"
+                                            disabled={pivotLoading || fieldZones[ZONES.ROWS].length === 0 || fieldZones[ZONES.VALUES].length === 0}
+                                            className="w-full py-4 bg-gradient-to-r from-gray-900 to-gray-800 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl shadow-xl hover:shadow-2xl hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 flex items-center justify-center gap-3"
                                         >
-                                            <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
-                                                <TableIcon className="w-5 h-5 text-bank-400" />
-                                            </div>
-                                            {pivotLoading ? "Génération..." : "Générer TCD"}
+                                            {pivotLoading ? (
+                                                <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /><span>Génération...</span></>
+                                            ) : (
+                                                <><TableIcon size={16} /><span>Générer le TCD</span></>
+                                            )}
                                         </button>
                                         <button
-                                            onClick={() => { setPivotRows([]); setPivotCols([]); setPivotValues([]); setPivotData(null); }}
-                                            className="p-3 rounded-xl border border-red-100 bg-red-50/50 text-red-600 text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all shadow-sm"
+                                            onClick={resetAll}
+                                            className="w-full py-2.5 rounded-xl border border-red-100 text-red-500 text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white hover:border-red-500 transition-all duration-200"
                                         >
-                                            Vider Tout
+                                            Vider tout
                                         </button>
                                     </div>
                                 </div>
+
+                                {/* Panel Footer */}
+                                <div className="p-3 bg-gray-50/80 border-t border-gray-100 flex items-center justify-center">
+                                    <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">TCD • Mode Excel</div>
+                                </div>
                             </div>
 
-                            {/* Panel Footer */}
-                            <div className="p-3 bg-gray-50/80 border-t border-gray-100 flex items-center justify-center">
-                                <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">TCD • Mode Excel</div>
-                            </div>
-                        </div>
+                            {/* Drag Overlay with Portal */}
+                            {createPortal(
+                                <DragOverlay
+                                    dropAnimation={{
+                                        duration: 150,
+                                        easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+                                    }}
+                                >
+                                    {activeId ? (
+                                        <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-bank-600 text-white text-xs font-bold shadow-2xl rotate-2 scale-110 pointer-events-none z-[999]">
+                                            <GripVertical size={12} className="opacity-50" />
+                                            {activeId}
+                                        </div>
+                                    ) : null}
+                                </DragOverlay>,
+                                document.body
+                            )}
+                        </DndContext>
+
+                        {/* Filter Modal */}
+                        {filterModalField && (
+                            <FilterSelector
+                                field={filterModalField}
+                                activeFilters={globalFilters}
+                                onClose={() => setFilterModalField(null)}
+                                onSave={(selectedValues) => {
+                                    setGlobalFilters(prev => {
+                                        const next = { ...prev };
+                                        if (selectedValues.length === 0) delete next[filterModalField];
+                                        else next[filterModalField] = selectedValues;
+                                        return next;
+                                    });
+                                    setFilterModalField(null);
+                                }}
+                            />
+                        )}
 
                         {pivotError && (
                             <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3 animate-in fade-in slide-in-from-right-4 duration-300">

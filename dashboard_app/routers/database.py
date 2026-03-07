@@ -9,11 +9,11 @@ from fastapi import APIRouter, Request, Depends
 from loguru import logger
 
 from api.auth.schemas import TokenPayload
-from schemas.database import RecastRequest, CalculatedFieldRequest
+from schemas.database import RecastRequest, ExpressionRequest
 from core.dependencies import get_current_user, limiter
 from core.exceptions import ValidationException, NotFoundException, SessionExpiredException
 from services.file_processor import process_file_preview, read_cached_df, apply_filters
-from services.formula_parser import parse_formula
+from services.expression_parser import parse_expression
 from services.notifications import notification_store
 
 router = APIRouter(tags=["Database"])
@@ -183,13 +183,13 @@ async def database_recast(
 
 
 # ---------------------------------------------------------------------------
-# POST /api/calculated-field
+# POST /api/database/expression
 # ---------------------------------------------------------------------------
-@router.post("/api/calculated-field")
+@router.post("/api/database/expression")
 @limiter.limit("20/minute")
-async def calculated_field(
+async def create_expression(
     request: Request,
-    body: CalculatedFieldRequest,
+    body: ExpressionRequest,
     user: TokenPayload = Depends(get_current_user),
 ):
     from services.data_cache import cache_manager
@@ -198,12 +198,12 @@ async def calculated_field(
         raise SessionExpiredException()
 
     new_col_name = body.name.strip()
-    formula = body.formula.strip()
+    expression = body.expression.strip()
 
     if not new_col_name:
         raise ValidationException("Nom du champ requis")
-    if not formula:
-        raise ValidationException("Formule requise")
+    if not expression:
+        raise ValidationException("Expression requise")
 
     df = _get_df(entry)
 
@@ -211,10 +211,45 @@ async def calculated_field(
         raise ValidationException(f'La colonne "{new_col_name}" existe déjà')
 
     try:
-        expr = parse_formula(formula, df.columns)
-        df = df.with_columns(expr.alias(new_col_name))
-    except ValueError as ve:
-        raise ValidationException(f"Erreur de formule: {str(ve)}")
+        expr = parse_expression(expression, df.columns)
+        new_series = df.select(expr.alias("__temp__")).get_column("__temp__")
+        
+        # --- Mathematical Safety Check ---
+        if not body.force:
+            # Check for NaN or Inf (common for div by zero or domain errors)
+            null_count = new_series.is_null().sum()
+            nan_count = new_series.is_nan().sum() if new_series.dtype.is_float() else 0
+            inf_count = new_series.is_infinite().sum() if new_series.dtype.is_float() else 0
+            
+            total_issues = nan_count + inf_count
+            
+            if total_issues > 0:
+                from fastapi.responses import JSONResponse
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "warning",
+                        "error_type": "MATH_WARNING",
+                        "affected_rows": int(total_issues),
+                        "total_rows": len(df),
+                        "message": f"{total_issues} lignes produiront des erreurs mathématiques (NaN/Inf).",
+                        "details": "Cela arrive généralement lors de divisions par zéro ou d'opérations hors domaine (SQRT négatif, LOG(0))."
+                    }
+                )
+
+        # If force=True or no issues, proceed
+        if body.force:
+            # Replace NaN/Inf with null for consistency
+            if new_series.dtype.is_float():
+                new_series = new_series.fill_nan(None)
+                # Polars doesn't have a direct fill_inf, but we can use when/then
+                new_series = pl.when(new_series.is_infinite()).then(None).otherwise(new_series)
+
+        df = df.with_columns(new_series.alias(new_col_name))
+        
+    except Exception as e:
+        logger.error(f"Error parsing expression: {e}")
+        raise ValidationException(f"Erreur de syntaxe ou de calcul: {str(e)}")
 
     # Save back to file
     filepath = entry.filepath
