@@ -1,10 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Database, BarChart3, Settings, LogOut, Menu, User, Bell, Shield, ChevronRight, X, Clock } from 'lucide-react';
-import { useAuth } from './contexts/AuthContext';
-import { useRealtime } from './contexts/RealtimeContext';
-import { getDisplayName, customFetch, clearToken } from './utils/session';
+import { useAuth } from '../features/auth/AuthContext';
+import { useRealtime } from '../features/realtime/RealtimeContext';
+import { getDisplayName, customFetch, clearToken } from '../features/auth/session';
 
+/**
+ * Main application layout component.
+ * Renders the responsive sidebar navigation, top header with notification bell,
+ * and handles UI modals for theming and logout. Contains an `<Outlet />` for
+ * rendering nested route pages.
+ * 
+ * @param {Object} props - Component props.
+ * @param {string} props.theme - The current layout color theme.
+ * @param {Function} props.setTheme - Callback to update the layout color theme.
+ */
 export default function Layout({ theme, setTheme }) {
     // ✅ Synchronous — currentUser available on first render via AuthContext
     const { currentUser, updateUser } = useAuth();

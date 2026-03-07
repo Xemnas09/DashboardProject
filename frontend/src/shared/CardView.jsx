@@ -1,6 +1,21 @@
 import React, { useState, useMemo } from 'react';
 import { Search, ChevronDown, ChevronRight, AlertTriangle, Info, Plus, ArrowUpDown, Filter } from 'lucide-react';
 
+/**
+ * A mobile-friendly card layout for displaying tabular database records.
+ * Supports searching, sorting over the dataset, and visual indicators for data anomalies.
+ * 
+ * @param {Object} props - Component properties.
+ * @param {Array<Object>} props.rows - Array of data records to display.
+ * @param {Array<Object>} props.columns - Column definitions matching the data fields.
+ * @param {Object} props.anomalies - Object containing anomaly reports for specific rows.
+ * @param {string} props.searchQuery - Current search filter text.
+ * @param {string} props.sortCol - The column field name currently used for sorting.
+ * @param {number} props.visibleCount - Number of cards currently visible (for pagination).
+ * @param {Function} props.onLoadMore - Callback to load more records.
+ * @param {boolean} props.isLoading - Whether the data is currently loading (shows skeletons).
+ * @returns {React.ReactElement} The CardView component.
+ */
 export default function CardView({
     rows,
     columns,

@@ -19,15 +19,15 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 # Load settings
 import os, sys
 sys.path.insert(0, os.path.dirname(__file__))
-from settings import settings
-from models.user import User
+from core.settings import settings
+from api.users.models import User
 from models.revoked_token import RevokedToken  # ensure table is created
-from database import Base
-from crud.user import (
+from core.database import Base
+from api.users.crud import (
     get_user_by_username, create_user, get_all_users,
     delete_user, update_password, hash_password
 )
-from schemas.user import UserCreate
+from api.users.schemas import UserCreate
 
 # Colors for terminal output
 GREEN = "\033[92m"
@@ -47,10 +47,19 @@ async def init(session_factory):
     """Create all tables and seed default users."""
     engine = session_factory.kw["bind"]
 
-    header("Creating tables...")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    ok("Tables created (or already exist)")
+    header("Applying database migrations...")
+    # Using Alembic explicitly ensures `revoked_tokens` and version history is strictly applied
+    from alembic.config import Config
+    from alembic import command
+    
+    alembic_cfg = Config("alembic.ini")
+    
+    # Run migrations synchronously inside the async init function
+    def run_migrations():
+        command.upgrade(alembic_cfg, "head")
+        
+    await asyncio.to_thread(run_migrations)
+    ok("Database schema up to date (Alembic upgraded to head)")
 
     header("Seeding default users...")
     async with session_factory() as db:
@@ -163,7 +172,7 @@ def main():
     args = parser.parse_args()
 
     # Create engine and session factory
-    from database import engine
+    from core.database import engine
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async def run():
@@ -184,7 +193,7 @@ def main():
         # that same backend connection, the first request will fail with
         # DuplicatePreparedStatementError (only on first attempt).
         # ──────────────────────────────────────────────────────────────────
-        from settings import settings as _s
+        from core.settings import settings as _s
         if _s.database_url.startswith("postgres"):
             try:
                 async with engine.connect() as conn:

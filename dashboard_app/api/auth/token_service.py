@@ -1,11 +1,14 @@
 """
-Token revocation service with in-memory cache for performance.
+Token Revocation Service.
 
-Flow:
-  - On startup: load all non-expired revoked JTIs from DB into cache
-  - On revocation: persist to DB + update cache immediately
-  - On every authenticated request: check cache only (no DB query)
-  - Every hour: clean up expired entries from DB and cache
+Maintains an in-memory cache of revoked JWT IDs (JTIs) to intercept
+revoked sessions instantly on every authenticated request without hitting 
+the database (O(1) lookup).
+
+Lifecycle:
+  - Startup: Populates cache with all unexpired revoked tokens from DB.
+  - Revocation: Immediately invalidates the token in DB and cache.
+  - Periodic Cleanup: Removes expired entries from DB and cache to free memory.
 """
 
 import logging
@@ -13,7 +16,7 @@ from datetime import datetime
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database import AsyncSessionLocal
+from core.database import AsyncSessionLocal
 from models.revoked_token import RevokedToken
 
 logger = logging.getLogger(__name__)
@@ -28,7 +31,13 @@ def is_token_revoked(jti: str) -> bool:
 
 
 async def revoke_token(jti: str, expires_at: datetime) -> None:
-    """Persist revoked token to DB and update cache immediately."""
+    """
+    Persists a revoked token to the database and updates the fast-lookup cache.
+    
+    Args:
+        jti (str): The unique JWT ID to block.
+        expires_at (datetime): The absolute UTC time when the token naturally expires.
+    """
     REVOKED_JTI_CACHE.add(jti)
     async with AsyncSessionLocal() as db:
         # Avoid duplicate if already revoked
@@ -37,25 +46,26 @@ async def revoke_token(jti: str, expires_at: datetime) -> None:
         )
         if existing.scalar_one_or_none():
             return
+        
         db.add(RevokedToken(jti=jti, expires_at=expires_at))
         await db.commit()
+        
     logger.debug(f"[TokenService] Revoked token jti={jti}")
 
 
 async def revoke_user_tokens(username: str, user_jtis: list[tuple[str, datetime]]) -> None:
     """
-    Revoke all active tokens for a user.
-    Called when role changes or password is reset.
+    Revokes a batch of active tokens associated with a specific user.
+    Called dynamically when a user's role changes or their password is reset.
 
     Args:
-        username: for logging
-        user_jtis: list of (jti, expires_at) tuples — extracted from active sessions
+        username (str): The username of the affected account (used for logging).
+        user_jtis (list[tuple[str, datetime]]): A list containing tuples of (JTI, expiration time).
     """
     for jti, expires_at in user_jtis:
         await revoke_token(jti, expires_at)
-    logger.info(
-        f"[TokenService] Revoked {len(user_jtis)} token(s) for user '{username}'"
-    )
+        
+    logger.info(f"[TokenService] Revoked {len(user_jtis)} token(s) for user '{username}'")
 
 
 async def load_revoked_tokens() -> None:

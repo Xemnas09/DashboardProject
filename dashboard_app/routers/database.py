@@ -8,15 +8,21 @@ import polars as pl
 from fastapi import APIRouter, Request, Depends
 from loguru import logger
 
-from schemas.auth import TokenPayload
+from api.auth.schemas import TokenPayload
 from schemas.database import RecastRequest, CalculatedFieldRequest
-from dependencies import get_current_user, limiter
-from exceptions import ValidationException, NotFoundException, SessionExpiredException
+from core.dependencies import get_current_user, limiter
+from core.exceptions import ValidationException, NotFoundException, SessionExpiredException
 from services.file_processor import process_file_preview, read_cached_df, apply_filters
 from services.formula_parser import parse_formula
 from services.notifications import notification_store
 
 router = APIRouter(tags=["Database"])
+_stats_cache = None
+
+
+def reset_stats_cache():
+    global _stats_cache
+    _stats_cache = None
 
 
 def _get_df(entry):
@@ -165,6 +171,7 @@ async def database_recast(
         schema_overrides=entry.schema_overrides,
     )
     await cache_manager.set(user.cache_id, entry)
+    reset_stats_cache()
 
     msg = f"{len(modifications)} variables re-typées"
     if warnings:
@@ -228,6 +235,7 @@ async def calculated_field(
         schema_overrides=entry.schema_overrides,
     )
     await cache_manager.set(user.cache_id, entry)
+    reset_stats_cache()
 
     notif = notification_store.add(user.sub, f'Champ calculé "{new_col_name}" créé', "success")
 
@@ -295,3 +303,138 @@ async def detect_anomalies(
         "anomalies": anomalies,
         "llm_summary": llm_summary
     }
+
+
+# ---------------------------------------------------------------------------
+# GET /api/database/stats
+# ---------------------------------------------------------------------------
+@router.get("/api/database/stats")
+async def get_column_stats(user: TokenPayload = Depends(get_current_user)):
+    global _stats_cache
+    if _stats_cache is not None:
+        return {"status": "success", "stats": _stats_cache}
+
+    from services.data_cache import cache_manager
+    entry = await cache_manager.get(user.cache_id)
+    if not entry:
+        return {"status": "success", "stats": {}}
+
+    df = _get_df(entry)
+    stats = {}
+    total_rows = len(df)
+
+    for i, col in enumerate(df.columns):
+        series = df[col]
+        null_count = int(series.null_count())
+        null_pct = round((null_count / total_rows) * 100, 1) if total_rows > 0 else 0
+        unique_count = int(series.n_unique())
+        
+        # 1. Determine Type
+        col_type = "categorical"
+        if i == 0 and series.dtype.is_numeric() and unique_count == total_rows:
+            col_type = "identifier"
+        elif series.dtype == pl.Boolean:
+            col_type = "boolean"
+        elif series.dtype.is_numeric():
+            if unique_count < 15:
+                col_type = "discrete"
+            else:
+                col_type = "continuous"
+        elif unique_count == 2:
+            # Check if it looks boolean (e.g. 0/1 or Yes/No)
+            col_type = "boolean"
+        
+        # 2. Base metrics
+        metrics = {
+            "count": total_rows,
+            "nulls": null_count,
+            "null_pct": null_pct,
+            "uniques": unique_count,
+        }
+        
+        dist_data = []
+
+        if col_type == "identifier":
+            metrics.update({
+                "min": float(series.min()) if series.dtype.is_numeric() else str(series.min()),
+                "max": float(series.max()) if series.dtype.is_numeric() else str(series.max()),
+            })
+            # No dist needed for ID as per prompt
+
+        elif col_type == "boolean":
+            # Cast strings/numbers to boolean for count
+            # We assume it matches the boolean logic
+            if series.dtype == pl.Boolean:
+                true_count = int(series.sum()) if series.dtype == pl.Boolean else 0
+            else:
+                # Basic heuristic
+                s_lower = series.cast(pl.String).str.to_lowercase()
+                true_count = int(s_lower.is_in(["1", "true", "yes", "oui", "vrai"]).sum())
+            
+            non_null_count = total_rows - null_count
+            false_count = non_null_count - true_count
+            
+            metrics.update({
+                "true_count": true_count,
+                "true_pct": round((true_count / non_null_count * 100), 1) if non_null_count > 0 else 0,
+                "false_count": false_count,
+                "false_pct": round((false_count / non_null_count * 100), 1) if non_null_count > 0 else 0,
+            })
+
+        elif col_type == "continuous":
+            metrics.update({
+                "min": float(series.min()) if series.min() is not None else 0.0,
+                "max": float(series.max()) if series.max() is not None else 0.0,
+                "mean": float(series.mean()) if series.mean() is not None else 0.0,
+                "median": float(series.median()) if series.median() is not None else 0.0,
+                "std": float(series.std()) if series.std() is not None else 0.0,
+                "q1": float(series.quantile(0.25)) if series.quantile(0.25) is not None else 0.0,
+                "q3": float(series.quantile(0.75)) if series.quantile(0.75) is not None else 0.0,
+            })
+            
+            # Histogram
+            clean_series = series.drop_nulls()
+            if not clean_series.is_empty() and series.min() != series.max():
+                h_min, h_max = float(series.min()), float(series.max())
+                step = (h_max - h_min) / 20
+                bin_df = clean_series.to_frame().with_columns(
+                    ((pl.col(col) - h_min) / step).floor().cast(pl.Int32).clip(0, 19).alias("bin_idx")
+                )
+                hist_counts = bin_df.group_by("bin_idx").len().sort("bin_idx")
+                dist_map = {int(row["bin_idx"]): int(row["len"]) for row in hist_counts.to_dicts()}
+                for b_idx in range(20):
+                    start = h_min + b_idx * step
+                    end = h_min + (b_idx + 1) * step
+                    dist_data.append({
+                        "name": f"{start:.2f}-{end:.2f}",
+                        "range": f"{start:.1f}-{end:.1f}",
+                        "count": int(dist_map.get(b_idx, 0))
+                    })
+        
+        elif col_type in ["discrete", "categorical"]:
+            mode_list = series.mode().to_list()
+            mode_val = str(mode_list[0]) if mode_list else "—"
+            metrics.update({
+                "mode": mode_val,
+            })
+            
+            # Distribution Top 10
+            counts = series.value_counts().sort(by="count", descending=True).head(10)
+            non_null_count = total_rows - null_count
+            for row in counts.to_dicts():
+                val = row[col]
+                if val is None: continue
+                dist_data.append({
+                    "value": str(val) if not isinstance(val, (int, float, bool)) else val,
+                    "count": int(row["count"]),
+                    "pct": round((int(row["count"]) / non_null_count * 100), 1) if non_null_count > 0 else 0
+                })
+
+        stats[col] = {
+            "type": col_type,
+            "metrics": metrics,
+            "distribution": dist_data
+        }
+
+    _stats_cache = stats
+    return {"status": "success", "stats": _stats_cache}

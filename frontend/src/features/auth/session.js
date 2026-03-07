@@ -4,7 +4,7 @@ const SESSION_KEY = 'dv_user'
 
 /**
  * Read user info synchronously from sessionStorage.
- * Returns null if not found or invalid.
+ * @returns {Object|null} The user object or null if not found.
  */
 export function getStoredUser() {
     try {
@@ -16,14 +16,16 @@ export function getStoredUser() {
 }
 
 /**
- * Store user info synchronously.
+ * Store user info synchronously to persist session state on page reloads.
+ * @param {string} username - The user's username.
+ * @param {string} role - The user's assigned role.
  */
 export function storeUser(username, role) {
     sessionStorage.setItem(SESSION_KEY, JSON.stringify({ username, role }))
 }
 
 /**
- * Clear user info on logout.
+ * Clears user info from sessionStorage on logout.
  */
 export function clearStoredUser() {
     sessionStorage.removeItem(SESSION_KEY)
@@ -31,23 +33,36 @@ export function clearStoredUser() {
 
 const TOKEN_KEY = 'dv_token'
 
+/**
+ * Retrieves the JWT access token.
+ * @returns {string|null} The stored token.
+ */
 export function getToken() {
     return localStorage.getItem(TOKEN_KEY)
 }
 
+/**
+ * Stores the JWT access token in localStorage.
+ * @param {string} token - The raw JWT token string.
+ */
 export function storeToken(token) {
     if (token) {
         localStorage.setItem(TOKEN_KEY, token)
     }
 }
 
+/**
+ * Clears the JWT access token.
+ */
 export function clearToken() {
     localStorage.removeItem(TOKEN_KEY)
 }
 
 /**
  * Get display name (first letter capitalized).
- * "paul" → "Paul"
+ * e.g., "paul" → "Paul"
+ * @param {Object} user - The user object containing the username.
+ * @returns {string|null} Capitalized username.
  */
 export function getDisplayName(user) {
     if (!user?.username) return null
@@ -57,7 +72,11 @@ export function getDisplayName(user) {
 
 /**
  * Custom fetch wrapper that automatically attaches the stored JWT token
- * to the Authorization header.
+ * to the Authorization header, facilitating authenticated backend calls.
+ * 
+ * @param {string|URL} url - Target URL.
+ * @param {Object} [options={}] - Standard Fetch options.
+ * @returns {Promise<Response>} Resolution of the fetch response.
  */
 export async function customFetch(url, options = {}) {
     const token = getToken()

@@ -8,7 +8,7 @@ import 'ag-grid-community/styles/ag-theme-quartz.css';
 ModuleRegistry.registerModules([AllCommunityModule]);
 import { BarChart3, Settings2, Download, Table as TableIcon, AlertCircle, Database as DatabaseIcon, Filter, X as XIcon, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { customFetch } from '../utils/session';
+import { customFetch } from '../features/auth/session';
 
 export default function Reports({ addNotification }) {
     const [columnsInfo, setColumnsInfo] = useState([]);

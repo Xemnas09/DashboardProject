@@ -1,21 +1,28 @@
 """
-Shared dependencies injected into routers via FastAPI's Depends().
-- JWT cookie extraction and verification
-- Admin role check
-- Rate limiter instance
+Core Dependency Injection Module.
+
+Provides shared dependencies designed for injection into FastAPI routes via `Depends()`.
+Core features include:
+- Rate Limiting (`limiter`)
+- JWT extraction, validation, and session parsing (`get_current_user`)
+- Memory Cache verification (`get_cache_entry`)
+- Role-Based Access Control guards (`require_admin`, `require_super_admin`)
 """
+from typing import Optional
+
 from fastapi import Request, Depends
 from jose import jwt, JWTError, ExpiredSignatureError
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-
 from sqlalchemy.ext.asyncio import AsyncSession
-from database import get_db
-from crud.user import get_user_by_username
 
-from settings import settings
-from exceptions import UnauthorizedException, SessionExpiredException
-from schemas.auth import TokenPayload
+from core.database import get_db
+from api.users.crud import get_user_by_username
+from core.settings import settings
+from core.exceptions import UnauthorizedException, SessionExpiredException
+from api.auth.schemas import TokenPayload
+from api.auth.token_service import is_token_revoked
+
 
 # ---------------------------------------------------------------------------
 # Rate limiter
@@ -24,20 +31,31 @@ limiter = Limiter(key_func=get_remote_address)
 
 
 # ---------------------------------------------------------------------------
-# JWT auth: extract access token from HttpOnly cookie
+# JWT Auth
 # ---------------------------------------------------------------------------
-from services.token_service import is_token_revoked
 
 async def get_current_user(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> TokenPayload:
     """
-    Reads the `access_token` HttpOnly cookie, verifies signature + expiry,
-    and returns the decoded payload as a TokenPayload.
+    Extracts the `access_token` from HttpOnly cookies (or Authorization header),
+    verifies its signature, checks for revocation, and retrieves the active user.
+
+    Args:
+        request (Request): The incoming HTTP request.
+        db (AsyncSession): The injected database session.
+
+    Returns:
+        TokenPayload: The validated JWT payload containing user privileges.
+
+    Raises:
+        UnauthorizedException: If the token is missing, malformed, expired,
+        revoked, or if the user account is disabled.
     """
-    token = None
+    token: Optional[str] = None
     auth_header = request.headers.get("Authorization")
+    
     if auth_header and auth_header.startswith("Bearer "):
         token = auth_header.split(" ")[1]
     
@@ -66,6 +84,9 @@ async def get_current_user(
         raise UnauthorizedException("Session révoquée. Veuillez vous reconnecter.")
 
     username = payload.get("sub")
+    if not username:
+        raise UnauthorizedException("Jeton invalide.")
+        
     user = await get_user_by_username(db, username)
     if not user or not user.is_active:
         raise UnauthorizedException("Utilisateur introuvable ou inactif.")
@@ -76,14 +97,23 @@ async def get_current_user(
 
 
 # ---------------------------------------------------------------------------
-# Cache-aware dependency: ensures cache_id from JWT maps to a live cache entry
+# Cache-aware dependency
 # ---------------------------------------------------------------------------
-async def get_cache_entry(user: TokenPayload = Depends(get_current_user)):
+
+async def get_cache_entry(user: TokenPayload = Depends(get_current_user)) -> "services.data_cache.CacheEntry": # type: ignore
     """
-    Verifies that the user's cache_id still exists in the DataCacheManager.
-    Raises 410 SESSION_EXPIRED if the data was evicted or never uploaded.
+    Ensures the user's uploaded dataset (cache) is still active in memory.
+    
+    Args:
+        user (TokenPayload): The authenticated user making the request.
+
+    Returns:
+        CacheEntry: The memory-resident dataset.
+
+    Raises:
+        SessionExpiredException: If the cache TTL has expired or data was never uploaded.
     """
-    from main import cache_manager  # late import to avoid circular
+    from services.data_cache import cache_manager  # late import to avoid circular dependencies
 
     entry = await cache_manager.get(user.cache_id)
     if entry is None:
@@ -92,11 +122,21 @@ async def get_cache_entry(user: TokenPayload = Depends(get_current_user)):
 
 
 # ---------------------------------------------------------------------------
-# Admin-only dependency
+# RBAC Guards
 # ---------------------------------------------------------------------------
+
 async def require_admin(user: TokenPayload = Depends(get_current_user)) -> TokenPayload:
     """
-    Verifies the current user has the admin or super_admin role.
+    Role-based guard ensuring the user holds at least 'admin' privileges.
+
+    Args:
+        user (TokenPayload): The authenticated user payload automatically injected.
+
+    Returns:
+        TokenPayload: The validated user payload.
+        
+    Raises:
+        UnauthorizedException: If the user lacks sufficient clearance.
     """
     if user.role not in ("admin", "super_admin"):
         raise UnauthorizedException("Accès réservé aux administrateurs.")
@@ -105,8 +145,18 @@ async def require_admin(user: TokenPayload = Depends(get_current_user)) -> Token
 
 async def require_super_admin(user: TokenPayload = Depends(get_current_user)) -> TokenPayload:
     """
-    Verifies the current user has the super_admin role.
+    Role-based guard ensuring the user holds explicit 'super_admin' privileges.
+
+    Args:
+        user (TokenPayload): The authenticated user payload automatically injected.
+
+    Returns:
+        TokenPayload: The validated user payload.
+        
+    Raises:
+        UnauthorizedException: If the user lacks sufficient clearance.
     """
     if user.role != "super_admin":
         raise UnauthorizedException("Accès réservé au super admin.")
     return user
+

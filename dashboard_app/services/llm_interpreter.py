@@ -1,8 +1,8 @@
 import time
 from loguru import logger
 import google.generativeai as genai
-from settings import settings
-from exceptions import LLMUnavailableException
+from core.settings import settings
+from core.exceptions import LLMUnavailableException
 
 class GeminiInterpreter:
     def __init__(self):
@@ -101,17 +101,18 @@ class GeminiInterpreter:
             f"Statistiques globales : {anomaly_count} anomalies trouvées, soit {anomaly_rate}% du jeu de données.\n"
             f"Colonnes principalement touchées (fréquence) : {flagged_columns_freq}\n"
             f"Top 3 des lignes les plus anormales : {top_anomalies}\n\n"
+        )
+        prompt += (
             f"Instruction : Ne donne AUCUN conseil de code ou de nettoyage, synthétise simplement la répartition et l'intensité "
-            f"des anomalies telles qu'elles apparaissent. Format JSON requis: {{\"summary\": \"ton texte...\"}}.\n"
+            f"des anomalies telles qu'elles apparaissent. Rédige un seul ou deux paragraphes en texte brut. Ne mets PAS de JSON.\n"
             f"Réponds précisément dans cette langue : {language}."
         )
 
         try:
             model = genai.GenerativeModel(self.model_name)
-            response = await model.generate_content_async(prompt, generation_config=genai.GenerationConfig(response_mime_type="application/json"))
-            import json
-            data = json.loads(response.text.strip())
-            return data.get("summary")
+            response = await model.generate_content_async(prompt)
+            raw_text = response.text.strip()
+            return raw_text
         except Exception as e:
             logger.warning(f"[Gemini API - Anomaly] Silent failure : {str(e)}")
             return None

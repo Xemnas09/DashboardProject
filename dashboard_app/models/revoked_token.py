@@ -1,7 +1,7 @@
 from datetime import datetime
 from sqlalchemy import String, DateTime, Index
 from sqlalchemy.orm import Mapped, mapped_column
-from database import Base
+from core.database import Base
 
 
 class RevokedToken(Base):

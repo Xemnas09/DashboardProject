@@ -12,10 +12,12 @@ when PgBouncer reuses backend connections across different application processes
 (e.g., between init_db.py and the FastAPI server startup).
 """
 import asyncpg
+from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import NullPool
-from settings import settings
+
+from core.settings import settings
 
 is_postgres = settings.database_url.startswith("postgres")
 is_production = settings.environment == "production"
@@ -41,11 +43,14 @@ def _make_asyncpg_url(db_url: str) -> str:
 if is_postgres:
     _asyncpg_dsn = _make_asyncpg_url(settings.database_url)
 
-    async def _async_creator():  # SQLAlchemy calls this with no args
+    async def _async_creator() -> asyncpg.Connection:  # SQLAlchemy calls this with no args
         """
         Create a raw asyncpg connection and immediately DEALLOCATE ALL prepared
         statements. This cleans up any state left by PgBouncer from previous
         processes (e.g., init_db.py) before SQLAlchemy initialises its dialect.
+        
+        Returns:
+            asyncpg.Connection: A fresh, clean connection ready for SQLAlchemy.
         """
         ssl_ctx = "require" if needs_ssl else None
         conn = await asyncpg.connect(
@@ -87,11 +92,20 @@ AsyncSessionLocal = async_sessionmaker(
 
 
 class Base(DeclarativeBase):
+    """Declarative base for all SQLAlchemy models."""
     pass
 
 
-async def get_db():
-    """FastAPI dependency — yields an async DB session."""
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """
+    FastAPI dependency that yields an isolated asynchronous database session.
+    
+    Yields:
+        AsyncSession: An active SQLAlchemy async session.
+        
+    Raises:
+        Exception: If a database operation fails, the session is rolled back automatically.
+    """
     async with AsyncSessionLocal() as session:
         try:
             yield session

@@ -1,6 +1,13 @@
-import { useAuth } from '../contexts/AuthContext'
-import { useRealtime } from '../contexts/RealtimeContext'
+import { useAuth } from '../auth/AuthContext'
+import { useRealtime } from './RealtimeContext'
 
+/**
+ * Component that displays a list of currently connected users in real-time.
+ * Only visible to admin and super_admin users.
+ * Subscribes to the RealtimeContext for the active user list.
+ * 
+ * @returns {React.ReactElement|null} The component UI, or null if unauthorized.
+ */
 export default function OnlineUsers() {
     const { currentUser } = useAuth()
     const { onlineUsers } = useRealtime()

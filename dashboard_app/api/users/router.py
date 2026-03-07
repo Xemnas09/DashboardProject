@@ -4,16 +4,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database import get_db
-from crud.user import (
+from core.database import get_db
+from api.users.crud import (
     get_all_users, get_user_by_username, create_user,
     delete_user, update_password, update_role, rename_user
 )
-from schemas.user import UserRead, UserCreate, UserUpdatePassword, UserUpdateRole, UserRename
-from routers.auth import TokenPayload
-from dependencies import require_admin, require_super_admin
-from settings import settings
-from services.connection_manager import connection_manager
+from api.users.schemas import UserRead, UserCreate, UserUpdatePassword, UserUpdateRole, UserRename
+from api.auth.schemas import TokenPayload
+from core.dependencies import require_admin, require_super_admin
+from core.settings import settings
+from api.realtime.connection_manager import connection_manager
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -49,7 +49,7 @@ async def delete_existing_user(
     username: str,
     current: TokenPayload = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db),
-):
+) -> None:
     """Delete a user — super_admin only."""
     if username == settings.super_admin_username:
         raise HTTPException(status_code=403, detail="Cannot delete the super admin account")
@@ -72,7 +72,7 @@ async def reset_password(
     body: UserUpdatePassword,
     _: TokenPayload = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, str]:
     """Reset a user's password — super_admin only."""
     user = await get_user_by_username(db, username)
     if not user:
@@ -92,7 +92,7 @@ async def change_role(
     body: UserUpdateRole,
     _: TokenPayload = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, str]:
     """Change a user's role — super_admin only."""
     if username == settings.super_admin_username:
         raise HTTPException(status_code=403, detail="Cannot change the super admin's role")
@@ -115,7 +115,7 @@ async def rename_existing_user(
     body: UserRename,
     _: TokenPayload = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, str]:
     """Rename a user — super_admin only."""
     if username == settings.super_admin_username:
         raise HTTPException(status_code=403, detail="Cannot rename the super admin account")
@@ -134,7 +134,7 @@ async def rename_self(
     body: UserRename,
     current: TokenPayload = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, str]:
     """Any authenticated user can rename themselves."""
     user = await get_user_by_username(db, current.sub)
     if not user:
@@ -161,7 +161,7 @@ class BroadcastRequest(BaseModel):
 async def broadcast_message(
     body: BroadcastRequest,
     current: TokenPayload = Depends(require_admin),
-):
+) -> dict[str, str]:
     """Send a real-time notification to all users or a specific one."""
     payload = {
         "event": "NOTIFICATION",

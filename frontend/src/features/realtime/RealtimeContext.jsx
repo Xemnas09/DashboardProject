@@ -2,6 +2,14 @@ import { createContext, useContext, useState, useCallback, useMemo, useRef } fro
 
 const RealtimeContext = createContext(null)
 
+/**
+ * Realtime context provider for maintaining WebSocket state, live user presence,
+ * and global push notifications/broadcasts from the server.
+ * Includes anti-flash and StrictMode deduplication mechanics.
+ * 
+ * @param {Object} props - React props.
+ * @param {React.ReactNode} props.children - Child elements.
+ */
 export function RealtimeProvider({ children }) {
     const [onlineUsers, setOnlineUsers] = useState([])
     const [notifications, setNotifications] = useState([])
@@ -65,6 +73,11 @@ export function RealtimeProvider({ children }) {
     )
 }
 
+/**
+ * Hook to access realtime context (notifications, online users, history).
+ * @returns {{ onlineUsers: Array, setOnlineUsers: Function, notifications: Array, notifHistory: Array, setNotifHistory: Function, addNotification: Function, removeNotification: Function }}
+ * @throws {Error} If called outside of RealtimeProvider.
+ */
 export const useRealtime = () => {
     const ctx = useContext(RealtimeContext)
     if (!ctx) throw new Error('useRealtime must be inside RealtimeProvider')

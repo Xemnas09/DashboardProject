@@ -1,22 +1,17 @@
+"""
+Database CRUD operations for the Users domain.
+Provides asynchronous functions to create, read, update, and delete users.
+"""
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from passlib.context import CryptContext
 
-from models.user import User
-from schemas.user import UserCreate
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
-def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
-
-
-def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+from api.users.models import User
+from api.users.schemas import UserCreate
+from core.security import get_password_hash as hash_password, verify_password
 
 
 async def get_user_by_username(db: AsyncSession, username: str) -> User | None:
+    """Retrieves a single user by their exact username."""
     result = await db.execute(select(User).where(User.username == username))
     return result.scalar_one_or_none()
 
@@ -27,11 +22,13 @@ async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
 
 
 async def get_all_users(db: AsyncSession) -> list[User]:
+    """Retrieves all users sorted by creation date."""
     result = await db.execute(select(User).order_by(User.created_at))
     return list(result.scalars().all())
 
 
 async def create_user(db: AsyncSession, data: UserCreate) -> User:
+    """Creates a new user and safely hashes their password."""
     user = User(
         username=data.username,
         hashed_password=hash_password(data.password),

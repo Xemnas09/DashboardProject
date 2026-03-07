@@ -7,10 +7,10 @@ import polars as pl
 from fastapi import APIRouter, Request, Depends
 from loguru import logger
 
-from schemas.auth import TokenPayload
+from api.auth.schemas import TokenPayload
 from schemas.reports import ChartDataRequest, PivotDataRequest, LLMInterpretRequest, RecommendRequest, RecommendResponse
-from dependencies import get_current_user, limiter
-from exceptions import ValidationException, NotFoundException, SessionExpiredException
+from core.dependencies import get_current_user, limiter
+from core.exceptions import ValidationException, NotFoundException, SessionExpiredException
 from services.file_processor import read_cached_df, apply_filters
 from services.llm_interpreter import llm_interpreter
 

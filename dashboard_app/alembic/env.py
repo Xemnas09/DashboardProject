@@ -6,9 +6,9 @@ import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from settings import settings
-from database import Base
-from models.user import User
+from core.settings import settings
+from core.database import Base
+from api.users.models import User
 from models.revoked_token import RevokedToken
 
 # this is the Alembic Config object, which provides

@@ -1,7 +1,11 @@
+"""
+SQLAlchemy models for the Users domain. Defines the database schema
+for representing users, their roles, and their lifecycle status.
+"""
 from datetime import datetime
 from sqlalchemy import String, Boolean, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column
-from database import Base
+from core.database import Base
 
 
 class User(Base):

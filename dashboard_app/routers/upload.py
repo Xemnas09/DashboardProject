@@ -7,11 +7,11 @@ import uuid
 from fastapi import APIRouter, Request, Response, Depends, UploadFile, File
 from loguru import logger
 
-from settings import settings
-from schemas.auth import TokenPayload
+from core.settings import settings
+from api.auth.schemas import TokenPayload
 from schemas.upload import SheetSelectRequest
-from dependencies import get_current_user, limiter
-from exceptions import ValidationException
+from core.dependencies import get_current_user, limiter
+from core.exceptions import ValidationException
 from services.file_processor import (
     validate_extension,
     save_upload_chunked,
@@ -19,14 +19,15 @@ from services.file_processor import (
 )
 from services.data_cache import CacheEntry
 from services.notifications import notification_store
+from routers.database import reset_stats_cache
 
 router = APIRouter(tags=["Upload"])
 
 
 # ---------------------------------------------------------------------------
-# POST /upload
+# POST /api/upload
 # ---------------------------------------------------------------------------
-@router.post("/upload")
+@router.post("/api/upload")
 @limiter.limit("10/minute")
 async def upload_file(
     request: Request,
@@ -45,6 +46,7 @@ async def upload_file(
 
     # Generate preview
     preview_data = process_file_preview(filepath)
+    reset_stats_cache()
 
     cache_id = user.cache_id
     from main import cache_manager
@@ -81,9 +83,9 @@ async def upload_file(
 
 
 # ---------------------------------------------------------------------------
-# POST /api/select-sheet
+# POST /api/upload/select-sheet
 # ---------------------------------------------------------------------------
-@router.post("/api/select-sheet")
+@router.post("/api/upload/select-sheet")
 async def select_sheet(
     body: SheetSelectRequest,
     user: TokenPayload = Depends(get_current_user),
@@ -97,6 +99,7 @@ async def select_sheet(
         raise ValidationException("Chemin du fichier introuvable")
 
     preview_data = process_file_preview(entry.filepath, sheet_name=body.sheet_name)
+    reset_stats_cache()
 
     entry.preview = preview_data
     entry.selected_sheet = body.sheet_name
@@ -127,6 +130,7 @@ async def clear_data(user: TokenPayload = Depends(get_current_user)):
             except OSError:
                 pass
         await cache_manager.delete(user.cache_id)
+        reset_stats_cache()
         notification_store.add(user.sub, "Données supprimées", "warning")
 
     return {"status": "success"}

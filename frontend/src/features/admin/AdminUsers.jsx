@@ -1,10 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Users, UserPlus, Key, Trash2, Edit2, ShieldAlert, X, Shield, Lock, User as UserIcon, Send, Bell } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { useRealtime } from '../contexts/RealtimeContext';
-import { customFetch } from '../utils/session';
+import { useAuth } from '../auth/AuthContext';
+import { useRealtime } from '../realtime/RealtimeContext';
+import { customFetch } from '../auth/session';
 
+/**
+ * Admin panel component for managing the user lifecycle (creation, updates, roles, deletion).
+ * Provides a UI for real-time broadcasts if the user is a super admin.
+ * Protected route logic ensures only users with the 'admin' or 'super_admin' role can access it.
+ * 
+ * @param {Object} props - Component props.
+ * @param {Function} props.addNotification - Function to trigger a global toast notification.
+ */
 export default function AdminUsers({ addNotification }) {
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);

@@ -17,8 +17,8 @@ from loguru import logger
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from settings import settings
-from exceptions import AppException
+from core.settings import settings
+from core.exceptions import AppException
 
 # ---------------------------------------------------------------------------
 # Loguru configuration
@@ -48,7 +48,7 @@ else:
 # Cache manager
 # ---------------------------------------------------------------------------
 from services.data_cache import cache_manager
-from services.token_service import load_revoked_tokens, cleanup_expired_tokens
+from api.auth.token_service import load_revoked_tokens, cleanup_expired_tokens
 
 
 # ---------------------------------------------------------------------------
@@ -120,7 +120,7 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Rate limiter
 # ---------------------------------------------------------------------------
-from dependencies import limiter  # noqa: E402
+from core.dependencies import limiter  # noqa: E402
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -191,16 +191,9 @@ async def log_requests(request: Request, call_next):
 # ---------------------------------------------------------------------------
 # Register routers
 # ---------------------------------------------------------------------------
-from routers import auth, upload, database, reports, notifications, admin  # noqa: E402
-from routers.websocket import router as ws_router  # noqa: E402
+from api.router import api_router  # noqa: E402
 
-app.include_router(auth.router)
-app.include_router(upload.router)
-app.include_router(database.router)
-app.include_router(reports.router)
-app.include_router(notifications.router)
-app.include_router(admin.router)
-app.include_router(ws_router)
+app.include_router(api_router)
 
 
 # ---------------------------------------------------------------------------

@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     gemini_api_key: str | None = None
 
     # Filesystem uploads
-    upload_folder: str = "uploads/"
+    upload_folder: str = str(Path(__file__).parent.parent / "uploads")
     max_upload_size_mb: int = 50
 
     # Cache

@@ -3,8 +3,8 @@ Notifications router: /api/notifications/read, /api/notifications/history
 """
 from fastapi import APIRouter, Depends
 
-from schemas.auth import TokenPayload
-from dependencies import get_current_user
+from api.auth.schemas import TokenPayload
+from core.dependencies import get_current_user
 from services.notifications import notification_store
 
 router = APIRouter(tags=["Notifications"])

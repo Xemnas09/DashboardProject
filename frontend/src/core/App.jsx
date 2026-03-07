@@ -1,18 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { RealtimeProvider, useRealtime } from './contexts/RealtimeContext';
-import WSInitializer from './components/WSInitializer';
+import { AuthProvider, useAuth } from '../features/auth/AuthContext';
+import { RealtimeProvider, useRealtime } from '../features/realtime/RealtimeContext';
+import WSInitializer from '../features/realtime/WSInitializer';
 import Layout from './Layout';
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import Database from './pages/Database';
-import Reports from './pages/Reports';
-import AdminUsers from './pages/AdminUsers';
+import Login from '../features/auth/Login';
+import Dashboard from '../pages/Dashboard';
+import Database from '../pages/Database';
+import Reports from '../pages/Reports';
+import AdminUsers from '../features/admin/AdminUsers';
 
-import { customFetch } from './utils/session';
+import { customFetch } from '../features/auth/session';
 
-
+/**
+ * A protected route wrapper that prevents unauthorized access.
+ * Performs a verification ping to `/api/status` on mount to ensure
+ * the backend session is active, then conditionally renders the child
+ * components or redirects to the login page.
+ * 
+ * @param {Object} props - Component props.
+ * @param {React.ReactNode} props.children - The protected content to render.
+ */
 function ProtectedRoute({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(null);
   const [retryCount, setRetryCount] = useState(0);
@@ -74,6 +82,10 @@ function ProtectedRoute({ children }) {
   return isAuthenticated ? children : <Navigate to="/login" replace />;
 }
 
+/**
+ * The top-level application wrapper establishing global context providers.
+ * Merges authentication and real-time state before initializing the router.
+ */
 export default function AppRoot() {
   return (
     <AuthProvider>
@@ -84,6 +96,11 @@ export default function AppRoot() {
   );
 }
 
+/**
+ * Main application component.
+ * Configures the router, routes map, theme synchronization, and the global
+ * realtime toast notification overlay.
+ */
 function App() {
   const [theme, setTheme] = useState(localStorage.getItem('bank-theme') || 'default');
   const { notifications, addNotification, removeNotification } = useRealtime();

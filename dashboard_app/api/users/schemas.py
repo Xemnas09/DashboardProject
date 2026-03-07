@@ -1,3 +1,7 @@
+"""
+Pydantic schemas for the Users domain. Specifies strict validation 
+rules for input serialization and output formatting of user entities.
+"""
 from datetime import datetime
 from pydantic import BaseModel, field_validator
 

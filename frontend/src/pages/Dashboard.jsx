@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UploadCloud, CheckCircle2, TrendingUp, Users, Database as DatabaseIcon, BarChart3, FileSpreadsheet, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import { getDisplayName, customFetch } from '../utils/session';
-import OnlineUsers from '../components/OnlineUsers';
+import { useAuth } from '../features/auth/AuthContext';
+import { getDisplayName, customFetch } from '../features/auth/session';
+import OnlineUsers from '../features/realtime/OnlineUsers';
 
 export default function Dashboard({ addNotification }) {
     const [isUploading, setIsUploading] = useState(false);

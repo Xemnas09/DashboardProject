@@ -1,10 +1,17 @@
+"""
+WebSocket Router.
+
+Handles incoming WebSocket connections, authenticates them using short-lived
+WS tickets, registers users with the connection manager, and routes real-time 
+messages such as pings and presence updates.
+"""
 from datetime import datetime
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from jose import JWTError, jwt
 from loguru import logger
 
-from services.connection_manager import connection_manager
-from settings import settings
+from api.realtime.connection_manager import connection_manager
+from core.settings import settings
 
 router = APIRouter()
 
@@ -27,7 +34,12 @@ def _now() -> str:
 
 
 @router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket, token: str = ""):
+async def websocket_endpoint(websocket: WebSocket, token: str = "") -> None:
+    """
+    Main WebSocket endpoint handler.
+    Authenticates the client, negotiates the connection, and manages the lifecycle
+    of the real-time tunnel. Also coordinates presence broadcasting.
+    """
     # 1. Authentification
     username = _verify_ws_token(token)
     if not username:

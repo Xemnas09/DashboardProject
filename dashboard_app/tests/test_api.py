@@ -16,14 +16,14 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from main import app, cache_manager
-from settings import settings
+from core.settings import settings
 from services.data_cache import CacheEntry
-from database import engine, Base
-from crud.user import create_user
-from schemas.user import UserCreate
+from core.database import engine, Base
+from api.users.crud import create_user
+from api.users.schemas import UserCreate
 
 # Disable rate limiter for testing
-from dependencies import limiter
+from core.dependencies import limiter
 limiter.enabled = False
 
 
@@ -38,7 +38,7 @@ async def setup_database():
         await conn.run_sync(Base.metadata.drop_all) # Start fresh for tests
         await conn.run_sync(Base.metadata.create_all)
     
-    from database import AsyncSessionLocal
+    from core.database import AsyncSessionLocal
     async with AsyncSessionLocal() as db:
         # Create admin
         await create_user(db, UserCreate(
@@ -46,6 +46,10 @@ async def setup_database():
             password="admin123", 
             role="super_admin"
         ))
+    
+    # Ensure upload directory exists for tests
+    os.makedirs(settings.upload_folder, exist_ok=True)
+    
     yield
 
 @pytest.fixture
@@ -366,7 +370,8 @@ async def test_response_shapes(client):
     """Verify response shapes match Flask originals."""
     # Login
     r = await client.post("/login", json={"username": "admin", "password": "admin123"})
-    assert r.json() == {"status": "success"}
+    assert r.json()["status"] == "success"
+    assert "access_token" in r.json()
 
     # Status
     r = await client.get("/api/status")

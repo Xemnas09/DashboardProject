@@ -1,12 +1,19 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
-import { useRealtime } from '../contexts/RealtimeContext'
+import { useAuth } from '../auth/AuthContext'
+import { useRealtime } from './RealtimeContext'
 
 const PING_INTERVAL_MS = 30_000
 const RECONNECT_BASE_MS = 1_000
 const RECONNECT_MAX_MS = 30_000
 
+/**
+ * Custom hook to initialize and manage the global WebSocket connection.
+ * Handles exponential backoff reconnection logic, keep-alive ping intervals,
+ * and integrates real-time server events (notifications, presence, force disconnects)
+ * directly into the React context state. Continually watches the `currentUser` object
+ * to close connections on logout.
+ */
 export function useWebSocketInit() {
     const { currentUser, updateUser } = useAuth()
     const { setOnlineUsers, addNotification } = useRealtime()
@@ -101,7 +108,7 @@ export function useWebSocketInit() {
         isConnecting.current = true
 
         try {
-            const { customFetch } = await import('../utils/session')
+            const { customFetch } = await import('../auth/session')
             const res = await customFetch('/api/auth/ws-token')
             if (!res.ok) {
                 isConnecting.current = false

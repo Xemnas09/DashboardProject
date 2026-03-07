@@ -8,8 +8,8 @@ from pathlib import Path
 import polars as pl
 from loguru import logger
 
-from settings import settings
-from exceptions import FileTooLargeException, InvalidFileTypeException
+from core.settings import settings
+from core.exceptions import FileTooLargeException, InvalidFileTypeException
 
 
 # ---------------------------------------------------------------------------
