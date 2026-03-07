@@ -1,0 +1,6 @@
+id,name,gender,is_active
+1,Alice,Femme,Oui
+2,Bob,Homme,Non
+3,Charlie,Homme,Oui
+4,Daisy,Femme,Oui
+5,Eve,Femme,Non

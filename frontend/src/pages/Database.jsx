@@ -4,11 +4,37 @@ import { ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-quartz.css';
 import {
-    Trash2, AlertCircle, Settings2, FileType2, Database as DatabaseIcon,
-    Info, Calculator, Plus, Sparkles, Check, ChevronDown, Download,
-    Layers, AlertTriangle, Settings, Search, ArrowUpDown, X, RotateCcw,
-    Menu, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight,
-    BarChart3, TrendingUp
+    Database as DatabaseIcon,
+    Type,
+    ShieldCheck,
+    Calculator,
+    FileDown,
+    Trash2,
+    ChevronLeft,
+    ChevronRight,
+    Search,
+    X,
+    Info,
+    Check,
+    Download,
+    ChevronDown,
+    BarChart3,
+    TrendingUp,
+    Filter,
+    Plus,
+    RotateCcw,
+    Sparkles,
+    Layers,
+    AlertTriangle,
+    AlertCircle,
+    ArrowUpDown,
+    Menu,
+    ChevronsLeft,
+    ChevronsRight,
+    Settings2,
+    Settings,
+    FileType2,
+    Save
 } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
 import { Link } from 'react-router-dom';
@@ -133,131 +159,105 @@ const Header = ({ rowCount, loadedRows, activeToolTab, onOpenToolTab, onOpenStat
 
     return (
         <header className="h-16 flex items-center justify-between px-6 bg-white border-b border-gray-100 z-30 shrink-0">
-            <div className="flex items-center gap-4">
-                <div className="p-2.5 bg-bank-600 rounded-2xl text-white shadow-xl shadow-bank-100">
-                    <DatabaseIcon className="w-5 h-5" />
-                </div>
-                <div className="flex flex-col">
-                    <h1 className="text-sm font-black text-gray-900 uppercase tracking-tight">
-                        Explorateur de Données
-                    </h1>
-                    <div className="flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
-                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                            {rowCount?.toLocaleString() || 0} lignes synchronisées
-                        </span>
+            <div className="flex items-center justify-between w-full">
+                {/* Brand & Stats */}
+                <div className="flex items-center gap-4">
+                    <div className="p-2.5 bg-bank-600 rounded-2xl text-white shadow-xl shadow-bank-100">
+                        <DatabaseIcon className="w-5 h-5" />
+                    </div>
+                    <div className="flex flex-col">
+                        <h1 className="text-sm font-black text-gray-900 uppercase tracking-tight">
+                            Explorateur de Données
+                        </h1>
+                        <div className="flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                {rowCount?.toLocaleString() || 0} lignes synchronisées
+                            </span>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <div className="flex items-center gap-3">
-                <div className="hidden md:flex items-center gap-2 mr-2">
-                    <button
-                        onClick={() => onOpenToolTab('anomalies')}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeToolTab === 'anomalies' ? 'bg-bank-900 text-white shadow-lg' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`}
-                    >
-                        <Sparkles className="w-4 h-4" />
-                        ANOMALIES
-                    </button>
-                    <button
-                        onClick={() => onOpenToolTab('types')}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeToolTab === 'types' ? 'bg-bank-900 text-white shadow-lg' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`}
-                    >
-                        <Settings2 className="w-4 h-4" />
-                        VARIABLES
-                    </button>
-                    <button
-                        onClick={() => onOpenToolTab('formula')}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeToolTab === 'formula' ? 'bg-bank-900 text-white shadow-lg' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`}
-                    >
-                        <Calculator className="w-4 h-4" />
-                        CALCULS
-                    </button>
-                </div>
+                {/* Tools & Actions */}
+                <div className="flex items-center gap-4">
+                    {/* Advanced Tools Group */}
+                    <div className="flex items-center gap-1.5 bg-gray-50/50 p-1 rounded-2xl border border-gray-100">
+                        <div className="relative group/tools">
+                            <button className="flex items-center gap-2 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-gray-900 rounded-xl transition-all">
+                                <Settings2 className="w-4 h-4" />
+                                <span className="hidden sm:inline">Outils Avancés</span>
+                                <ChevronDown className="w-3 h-3 opacity-50 hidden sm:inline" />
+                            </button>
 
+                            <div className="absolute top-full mt-2 right-0 md:right-auto md:left-0 w-48 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 opacity-0 invisible group-hover/tools:opacity-100 group-hover/tools:visible transition-all z-50 animate-in fade-in slide-in-from-top-2">
+                                <button
+                                    onClick={() => onOpenToolTab('anomalies')}
+                                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${activeToolTab === 'anomalies' ? 'bg-bank-50 text-bank-700' : 'hover:bg-gray-50 text-gray-700'}`}
+                                >
+                                    <Sparkles className="w-4 h-4" />
+                                    <span className="text-[11px] font-bold uppercase tracking-wider">Anomalies</span>
+                                </button>
+                                <button
+                                    onClick={() => onOpenToolTab('types')}
+                                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${activeToolTab === 'types' ? 'bg-bank-50 text-bank-700' : 'hover:bg-gray-50 text-gray-700'}`}
+                                >
+                                    <Settings2 className="w-4 h-4" />
+                                    <span className="text-[11px] font-bold uppercase tracking-wider">Variables</span>
+                                </button>
+                                <button
+                                    onClick={() => onOpenToolTab('formula')}
+                                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${activeToolTab === 'formula' ? 'bg-bank-50 text-bank-700' : 'hover:bg-gray-50 text-gray-700'}`}
+                                >
+                                    <Calculator className="w-4 h-4" />
+                                    <span className="text-[11px] font-bold uppercase tracking-wider">Calculs</span>
+                                </button>
+                            </div>
+                        </div>
 
-                <div className="flex items-center gap-2 mr-2 border-l border-gray-100 pl-4 ml-2">
-                    <button
-                        onClick={onOpenStats}
-                        className="flex items-center gap-2 px-4 py-2 bg-white border border-bank-100 text-bank-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-bank-50 transition-all shadow-sm group relative"
-                    >
-                        <BarChart3 className="w-4 h-4" />
-                        <span>Statistiques</span>
-                        <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full animate-pulse"></div>
-                    </button>
-                </div>
+                        <div className="w-px h-6 bg-gray-200 mx-1 hidden sm:block"></div>
 
-                <div className="flex items-center gap-1 border-l border-gray-100 pl-3">
-                    <div className="relative" ref={exportRef}>
                         <button
-                            onClick={() => setIsExportOpen(!isExportOpen)}
-                            className="flex items-center gap-2 px-4 py-2 bg-bank-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-bank-700 transition-all group relative shadow-lg shadow-bank-100"
-                            title="Exporter les données"
+                            onClick={onOpenStats}
+                            className="flex items-center gap-2 px-3 py-2 text-violet-600 hover:bg-violet-50 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
                         >
-                            <Download className="w-4 h-4" />
-                            <span>Export</span>
-
-                            {/* Educational Tooltip on Hover */}
-                            <div className="absolute top-full mt-3 right-0 w-64 p-5 bg-slate-900 text-white rounded-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none shadow-2xl text-left normal-case tracking-normal border border-white/10 translate-y-2 group-hover:translate-y-0">
-                                <div className="flex items-center gap-2 mb-2 text-bank-400">
-                                    <Download className="w-4 h-4" />
-                                    <span className="font-black text-xs uppercase tracking-widest">Exporter les données</span>
-                                </div>
-                                <p className="text-[10px] font-medium opacity-80 mb-3 leading-relaxed">Téléchargez les données actuellement affichées dans le tableau.</p>
-                                <ul className="space-y-1.5 text-[9px] font-bold">
-                                    <li className="flex gap-2"><span>-</span> <span>CSV : compatible Excel, Pandas, Sheets</span></li>
-                                    <li className="flex gap-2"><span>-</span> <span>Excel : format .xlsx avec mise en forme</span></li>
-                                    <li className="flex gap-2"><span>-</span> <span>PDF : rapport prêt à imprimer</span></li>
-                                </ul>
-                                <div className="mt-3 pt-2 border-t border-white/10 text-[8px] italic opacity-60">Note : seules les données filtrées et chargées sont exportées.</div>
-                            </div>
+                            <BarChart3 className="w-4 h-4" />
+                            <span className="hidden sm:inline">Statistiques</span>
                         </button>
-
-                        {isExportOpen && (
-                            <div className="absolute top-full mt-2 right-0 w-56 bg-white rounded-2xl shadow-2xl border border-gray-100 py-2 z-50 animate-modal">
-                                <button
-                                    onClick={() => { onExport('csv'); setIsExportOpen(false); }}
-                                    className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-all group"
-                                >
-                                    <div className="text-[11px] font-black text-gray-900 uppercase tracking-tight">CSV</div>
-                                    <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{loadedRows} lignes chargées</div>
-                                </button>
-                                <button
-                                    onClick={() => { onExport('xlsx'); setIsExportOpen(false); }}
-                                    className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-all group"
-                                >
-                                    <div className="text-[11px] font-black text-gray-900 uppercase tracking-tight">Excel (.xlsx)</div>
-                                    <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{loadedRows} lignes chargées</div>
-                                </button>
-                                <button
-                                    onClick={() => { onExport('pdf'); setIsExportOpen(false); }}
-                                    className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-all group"
-                                >
-                                    <div className="text-[11px] font-black text-gray-900 uppercase tracking-tight">PDF</div>
-                                    <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{loadedRows} lignes chargées</div>
-                                </button>
-                                <div className="mx-2 mt-2 p-3 bg-amber-50 rounded-xl border border-amber-100">
-                                    <p className="text-[9px] font-bold text-amber-800 leading-tight">
-                                        💡 Pour tout exporter, augmentez la taille de page.
-                                    </p>
-                                </div>
-                            </div>
-                        )}
                     </div>
-                    <button
-                        onClick={onDelete}
-                        className="p-2 text-gray-300 hover:text-rose-500 transition-colors"
-                        title="Supprimer les données"
-                    >
-                        <Trash2 className="w-5 h-5" />
-                    </button>
-                    <button
-                        onClick={onReset}
-                        className="p-2 text-gray-300 hover:text-bank-600 transition-colors"
-                        title="Réinitialiser l'interface"
-                    >
-                        <RotateCcw className="w-5 h-5" />
-                    </button>
+
+                    {/* Export & Delete Group */}
+                    <div className="flex items-center gap-1 border-l border-gray-100 pl-3 ml-1">
+                        <div className="relative" ref={exportRef}>
+                            <button
+                                onClick={() => setIsExportOpen(!isExportOpen)}
+                                className="flex items-center gap-2 px-4 py-2 bg-bank-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-bank-700 transition-all group relative shadow-lg shadow-bank-100"
+                            >
+                                <Download className="w-4 h-4" />
+                                <span>Export</span>
+                            </button>
+
+                            {isExportOpen && (
+                                <div className="absolute top-full mt-2 right-0 w-56 bg-white rounded-2xl shadow-2xl border border-gray-100 py-2 z-50 animate-modal">
+                                    <button onClick={() => { onExport('csv'); setIsExportOpen(false); }} className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-all">
+                                        <div className="text-[11px] font-black text-gray-900 uppercase tracking-tight">CSV</div>
+                                    </button>
+                                    <button onClick={() => { onExport('xlsx'); setIsExportOpen(false); }} className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-all">
+                                        <div className="text-[11px] font-black text-gray-900 uppercase tracking-tight">Excel (.xlsx)</div>
+                                    </button>
+                                    <button onClick={() => { onExport('pdf'); setIsExportOpen(false); }} className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-all">
+                                        <div className="text-[11px] font-black text-gray-900 uppercase tracking-tight">PDF</div>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                        <button
+                            onClick={onDelete}
+                            className="p-2 text-gray-400 hover:text-rose-500 transition-colors"
+                            title="Supprimer les données"
+                        >
+                            <Trash2 className="w-5 h-5" />
+                        </button>
+                    </div>
                 </div>
             </div>
         </header>
@@ -852,11 +852,11 @@ const getCategoricalOption = (topValues) => ({
     series: [{ type: 'bar', data: topValues.map(v => v.count), itemStyle: { color: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: '#c4b5fd' }, { offset: 1, color: '#7c3aed' }] }, borderRadius: [0, 4, 4, 0] }, label: { show: true, position: 'right', fontSize: 10, color: '#6b7280', formatter: (p) => p.value.toLocaleString('fr-FR') } }]
 });
 
-const getBooleanOption = (trueCount, falseCount) => ({
+const getBooleanOption = (trueCount, falseCount, labelTrue = 'Vrai', labelFalse = 'Faux') => ({
     backgroundColor: 'transparent',
     tooltip: { trigger: 'item', backgroundColor: '#1f2937', borderColor: '#1f2937', textStyle: { color: '#fff' }, formatter: (p) => `<b>${p.name}</b><br/>${p.value.toLocaleString('fr-FR')} — ${p.percent}%` },
     legend: { bottom: 5, left: 'center', textStyle: { color: '#6b7280', fontSize: 11 } },
-    series: [{ type: 'pie', radius: ['45%', '72%'], center: ['50%', '45%'], data: [{ value: trueCount, name: 'Vrai', itemStyle: { color: '#7c3aed' } }, { value: falseCount, name: 'Faux', itemStyle: { color: '#e9d5ff' } }], label: { show: true, formatter: '{b}\n{d}%', fontSize: 11, color: '#374151' }, emphasis: { itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(124, 58, 237, 0.3)' } } }]
+    series: [{ type: 'pie', radius: ['45%', '72%'], center: ['50%', '45%'], data: [{ value: trueCount, name: labelTrue, itemStyle: { color: '#7c3aed' } }, { value: falseCount, name: labelFalse, itemStyle: { color: '#e9d5ff' } }], label: { show: true, formatter: '{b}\n{d}%', fontSize: 11, color: '#374151' }, emphasis: { itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(124, 58, 237, 0.3)' } } }]
 });
 
 const StatisticsModal = ({ isOpen, onClose, columns }) => {
@@ -876,7 +876,7 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
     const fetchStats = async () => {
         setLoading(true);
         try {
-            const res = await customFetch('/api/database/stats');
+            const res = await customFetch(`/api/database/stats`);
             if (res.ok) {
                 const data = await res.json();
                 setStats(data.stats);
@@ -998,8 +998,8 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
                                 {currentColStats.type === 'boolean' && (
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                         <StatCard label="Total lignes" value={currentColStats.metrics.count} />
-                                        <StatCard label="Vrai" value={currentColStats.metrics.true_count} subtitle={`${currentColStats.metrics.true_pct}%`} accent={true} />
-                                        <StatCard label="Faux" value={currentColStats.metrics.false_count} subtitle={`${currentColStats.metrics.false_pct}%`} />
+                                        <StatCard label={currentColStats.metrics.label_true || "Vrai"} value={currentColStats.metrics.true_count} subtitle={`${currentColStats.metrics.true_pct}%`} accent={true} />
+                                        <StatCard label={currentColStats.metrics.label_false || "Faux"} value={currentColStats.metrics.false_count} subtitle={`${currentColStats.metrics.false_pct}%`} />
                                         <StatCard label="Valeurs nulles" value={currentColStats.metrics.nulls} />
                                     </div>
                                 )}
@@ -1044,7 +1044,12 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
                                     {currentColStats.type === 'boolean' && (
                                         <div className="h-80 w-full relative">
                                             <ReactECharts
-                                                option={getBooleanOption(currentColStats.metrics.true_count || 0, currentColStats.metrics.false_count || 0)}
+                                                option={getBooleanOption(
+                                                    currentColStats.metrics.true_count || 0,
+                                                    currentColStats.metrics.false_count || 0,
+                                                    currentColStats.metrics.label_true,
+                                                    currentColStats.metrics.label_false
+                                                )}
                                                 style={{ height: '100%', width: '100%' }}
                                             />
                                         </div>
@@ -1100,6 +1105,7 @@ export default function Database({ addNotification }) {
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
     const gridRef = useRef(null);
 
     useEffect(() => {

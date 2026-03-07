@@ -182,28 +182,17 @@ def read_cached_df(filepath: str, selected_sheet: str | None, overrides: dict | 
 # Filter helper
 # ---------------------------------------------------------------------------
 def apply_filters(df: pl.DataFrame, filters: dict) -> pl.DataFrame:
-    """Applies a dictionary of filters to a Polars DataFrame."""
+    """
+    Applies simple equality filters to a Polars DataFrame.
+    Expected format: { "col_name": "value" }
+    """
     if not filters:
         return df
-
-    for col, value in filters.items():
-        if col not in df.columns:
-            continue
-
-        dtype = df[col].dtype
-        try:
-            if isinstance(value, list):
-                if dtype.is_numeric():
-                    value = [float(v) for v in value]
-                df = df.filter(pl.col(col).is_in(value))
-            elif value is not None:
-                if dtype.is_numeric():
-                    df = df.filter(pl.col(col) == float(value))
-                elif dtype == pl.Boolean:
-                    df = df.filter(pl.col(col) == (str(value).lower() == 'true'))
-                else:
-                    df = df.filter(pl.col(col) == value)
-        except Exception:
-            continue
-
+    
+    for col, val in filters.items():
+        if col in df.columns:
+            if df[col].dtype == pl.Boolean:
+                val = str(val).lower() in ['true', '1', 'yes', 'oui']
+            df = df.filter(pl.col(col) == val)
+            
     return df

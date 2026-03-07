@@ -48,12 +48,7 @@ async def database_view(
 
     df = _get_df(entry)
 
-    # Optional filtering via header
-    header_filters = request.headers.get('X-Apply-Filters') == 'true'
-    if header_filters:
-        # Could be extended to read filters from a per-user store
-        pass
-
+    # 2. Prepare Preview
     data_preview = {
         'columns': [{'field': c, 'title': c} for c in df.columns],
         'columns_info': [{
@@ -309,8 +304,11 @@ async def detect_anomalies(
 # GET /api/database/stats
 # ---------------------------------------------------------------------------
 @router.get("/api/database/stats")
-async def get_column_stats(user: TokenPayload = Depends(get_current_user)):
+async def get_column_stats(
+    user: TokenPayload = Depends(get_current_user)
+):
     global _stats_cache
+    
     if _stats_cache is not None:
         return {"status": "success", "stats": _stats_cache}
 
@@ -320,6 +318,7 @@ async def get_column_stats(user: TokenPayload = Depends(get_current_user)):
         return {"status": "success", "stats": {}}
 
     df = _get_df(entry)
+
     stats = {}
     total_rows = len(df)
 
@@ -330,18 +329,19 @@ async def get_column_stats(user: TokenPayload = Depends(get_current_user)):
         unique_count = int(series.n_unique())
         
         # 1. Determine Type
+        non_null_unique = int(series.drop_nulls().n_unique())
         col_type = "categorical"
+        
         if i == 0 and series.dtype.is_numeric() and unique_count == total_rows:
             col_type = "identifier"
         elif series.dtype == pl.Boolean:
             col_type = "boolean"
         elif series.dtype.is_numeric():
-            if unique_count < 15:
+            if non_null_unique < 15:
                 col_type = "discrete"
             else:
                 col_type = "continuous"
-        elif unique_count == 2:
-            # Check if it looks boolean (e.g. 0/1 or Yes/No)
+        elif non_null_unique == 2:
             col_type = "boolean"
         
         # 2. Base metrics
@@ -362,19 +362,35 @@ async def get_column_stats(user: TokenPayload = Depends(get_current_user)):
             # No dist needed for ID as per prompt
 
         elif col_type == "boolean":
-            # Cast strings/numbers to boolean for count
-            # We assume it matches the boolean logic
-            if series.dtype == pl.Boolean:
-                true_count = int(series.sum()) if series.dtype == pl.Boolean else 0
+            # Dynamic label detection
+            modalities = series.drop_nulls().unique().to_list()
+            if len(modalities) == 2:
+                m1, m2 = modalities[0], modalities[1]
+                pos_markers = ["1", "true", "yes", "oui", "vrai", "t", "y", "o"]
+                m1_str = str(m1).lower()
+                m2_str = str(m2).lower()
+                
+                if m1_str in pos_markers or (m2_str not in pos_markers and m1_str > m2_str):
+                    label_true, label_false = m1, m2
+                else:
+                    label_true, label_false = m2, m1
+                
+                true_count = int((series == label_true).sum())
+                false_count = int((series == label_false).sum())
+            elif len(modalities) == 1:
+                label_true = modalities[0]
+                label_false = "N/A"
+                true_count = int((series == label_true).sum())
+                false_count = 0
             else:
-                # Basic heuristic
-                s_lower = series.cast(pl.String).str.to_lowercase()
-                true_count = int(s_lower.is_in(["1", "true", "yes", "oui", "vrai"]).sum())
+                label_true, label_false = "Vrai", "Faux"
+                true_count = 0
+                false_count = 0
             
             non_null_count = total_rows - null_count
-            false_count = non_null_count - true_count
-            
             metrics.update({
+                "label_true": str(label_true),
+                "label_false": str(label_false),
                 "true_count": true_count,
                 "true_pct": round((true_count / non_null_count * 100), 1) if non_null_count > 0 else 0,
                 "false_count": false_count,
