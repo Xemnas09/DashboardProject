@@ -158,7 +158,7 @@ export default function Layout({ theme, setTheme }) {
                 {/* Main Content */}
                 <main className="flex-1 flex flex-col h-full overflow-hidden bg-transparent">
                     {/* Premium Header */}
-                    <header className="h-[64px] flex items-center justify-between px-6 bg-white/70 backdrop-blur-xl border-b border-gray-100/80 z-20">
+                    <header className="h-[64px] flex items-center justify-between px-6 bg-white/70 backdrop-blur-xl border-b border-gray-100/80 z-50">
                         <div className="flex-1"></div>
                         <div className="flex items-center gap-3">
                             {/* Notification Bell */}
