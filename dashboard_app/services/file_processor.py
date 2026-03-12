@@ -116,12 +116,21 @@ def process_file_preview(
             for col, target in schema_overrides.items():
                 if col in df.columns:
                     current_type = str(df[col].dtype)
-                    if target == 'String' and 'String' not in current_type and 'Utf8' not in current_type:
+                    # For numeric targets, apply aggressive cleaning before casting
+                    if target in ('Int64', 'Float64'):
+                        clean_expr = pl.col(col).str.replace_all(r"[^\d.,\-]", "").str.replace(",", ".")
+                        if target == 'Int64':
+                            cast_exprs.append(clean_expr.cast(pl.Float64, strict=False).cast(pl.Int64, strict=False).alias(col))
+                        else:
+                            cast_exprs.append(clean_expr.cast(pl.Float64, strict=False).alias(col))
+                    elif target == 'String' and 'String' not in current_type and 'Utf8' not in current_type:
                         cast_exprs.append(pl.col(col).cast(pl.String))
-                    elif target == 'Int64' and 'Int' not in current_type:
-                        cast_exprs.append(pl.col(col).cast(pl.Int64, strict=False))
-                    elif target == 'Float64' and 'Float' not in current_type:
-                        cast_exprs.append(pl.col(col).cast(pl.Float64, strict=False))
+                    elif target == 'Boolean':
+                        from services.type_inference import smart_cast_to_boolean
+                        cast_exprs.append(smart_cast_to_boolean(col).alias(col))
+                    elif target == 'Date':
+                        from services.type_inference import smart_cast_to_date
+                        cast_exprs.append(smart_cast_to_date(col, df).alias(col))
             if cast_exprs:
                 df = df.with_columns(cast_exprs)
 
@@ -181,12 +190,21 @@ def read_cached_df(filepath: str, selected_sheet: str | None, overrides: dict | 
             for col, target in overrides.items():
                 if col in df.columns:
                     current_type = str(df[col].dtype)
-                    if target == 'String' and 'String' not in current_type and 'Utf8' not in current_type:
+                    # Use unified smart casting logic
+                    if target in ('Int64', 'Float64'):
+                        clean_expr = pl.col(col).str.replace_all(r"[^\d.,\-]", "").str.replace(",", ".")
+                        if target == 'Int64':
+                            cast_exprs.append(clean_expr.cast(pl.Float64, strict=False).cast(pl.Int64, strict=False).alias(col))
+                        else:
+                            cast_exprs.append(clean_expr.cast(pl.Float64, strict=False).alias(col))
+                    elif target == 'String' and 'String' not in current_type and 'Utf8' not in current_type:
                         cast_exprs.append(pl.col(col).cast(pl.String))
-                    elif target == 'Int64' and 'Int' not in current_type:
-                        cast_exprs.append(pl.col(col).cast(pl.Int64, strict=False))
-                    elif target == 'Float64' and 'Float' not in current_type:
-                        cast_exprs.append(pl.col(col).cast(pl.Float64, strict=False))
+                    elif target == 'Boolean':
+                        from services.type_inference import smart_cast_to_boolean
+                        cast_exprs.append(smart_cast_to_boolean(col).alias(col))
+                    elif target == 'Date':
+                        from services.type_inference import smart_cast_to_date
+                        cast_exprs.append(smart_cast_to_date(col, df).alias(col))
             if cast_exprs:
                 df = df.with_columns(cast_exprs)
 

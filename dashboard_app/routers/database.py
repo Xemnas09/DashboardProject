@@ -106,16 +106,21 @@ async def database_recast(
         col_name = mod.column
         target_type = mod.type
         if col_name in df.columns:
-            clean_col = pl.col(col_name).cast(pl.String).str.strip_chars()
-            clean_col = clean_col.str.replace_all(r"[^\d.,\-]", "")
-            clean_col = clean_col.str.replace(r",", ".")
-
             if target_type == 'String':
                 expressions.append(pl.col(col_name).cast(pl.String))
-            elif target_type == 'Int64':
-                expressions.append(clean_col.cast(pl.Float64, strict=False).cast(pl.Int64, strict=False))
-            elif target_type == 'Float64':
-                expressions.append(clean_col.cast(pl.Float64, strict=False))
+            elif target_type in ('Int64', 'Float64'):
+                # Aggressive numeric cleaning only for numeric targets
+                clean_expr = pl.col(col_name).cast(pl.String).str.strip_chars().str.replace_all(r"[^\d.,\-]", "").str.replace(r",", ".")
+                if target_type == 'Int64':
+                    expressions.append(clean_expr.cast(pl.Float64, strict=False).cast(pl.Int64, strict=False))
+                else:
+                    expressions.append(clean_expr.cast(pl.Float64, strict=False))
+            elif target_type == 'Date':
+                from services.type_inference import smart_cast_to_date
+                expressions.append(smart_cast_to_date(col_name, df))
+            elif target_type == 'Boolean':
+                from services.type_inference import smart_cast_to_boolean
+                expressions.append(smart_cast_to_boolean(col_name))
 
     if not expressions:
         raise ValidationException("Types non supportés")

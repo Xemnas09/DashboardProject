@@ -53,8 +53,8 @@ async def upload_file(
 
     entry = CacheEntry(
         filepath=filepath,
-        filename=file.filename,     # original name for display
-        schema_overrides={},
+        filename=file.filename,
+        schema_overrides=preview_data.get('suggested_overrides', {}) if preview_data else {},
         preview=preview_data,
         selected_sheet=preview_data.get('selected_sheet') if preview_data else None,
     )
@@ -103,6 +103,10 @@ async def select_sheet(
 
     entry.preview = preview_data
     entry.selected_sheet = body.sheet_name
+    # Populate overrides from the new sheet's inference if high confidence
+    if preview_data and preview_data.get('suggested_overrides'):
+        entry.schema_overrides.update(preview_data['suggested_overrides'])
+    
     entry.pending_sheets = None
     await cache_manager.set(user.cache_id, entry)
 
