@@ -91,8 +91,26 @@ def process_file_preview(
                 df = pl.read_excel(filepath)
         else:
             raise ValueError("Format non supporté")
+            
+        from services.type_inference import infer_and_cast_schema
+        
+        # Keep track of original schema to know what was inferred
+        original_schema = {col: str(dtype) for col, dtype in zip(df.columns, df.dtypes)}
+        
+        # 1. Apply Automatic Type Inference
+        df = infer_and_cast_schema(df)
+        
+        # Compile the newly inferred overrides to return to the frontend/cache manager
+        suggested_overrides = {}
+        for col in df.columns:
+            new_type = str(df[col].dtype)
+            if new_type != original_schema[col]:
+                suggested_overrides[col] = "Date" if "Date" in new_type or "Datetime" in new_type else \
+                                           "Boolean" if "Bool" in new_type else \
+                                           "Int64" if "Int" in new_type else \
+                                           "Float64" if "Float" in new_type else "String"
 
-        # Apply manual type overrides
+        # 2. Apply explicit user overrides (takes precedence)
         if schema_overrides:
             cast_exprs = []
             for col, target in schema_overrides.items():
@@ -127,6 +145,7 @@ def process_file_preview(
             'data': safe_df.to_dicts(),
             'total_rows': df.height,
             'selected_sheet': sheet_name,
+            'suggested_overrides': suggested_overrides,
         }
 
     except Exception as e:

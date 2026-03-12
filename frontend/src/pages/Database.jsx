@@ -948,6 +948,12 @@ const TYPE_CONFIG = {
         color: 'bg-green-100 text-green-700',
         accentColor: 'bg-green-400',
         description: 'Variable booléenne'
+    },
+    date: {
+        label: 'DATE',
+        color: 'bg-teal-100 text-teal-700',
+        accentColor: 'bg-teal-400',
+        description: 'Variable temporelle'
     }
 };
 
@@ -1035,6 +1041,15 @@ const getCategoricalOption = (topValues) => ({
     xAxis: { type: 'value', axisLabel: { fontSize: 10, color: '#6b7280', formatter: (v) => v.toLocaleString('fr-FR') }, splitLine: { lineStyle: { color: '#f3f4f6' } } },
     yAxis: { type: 'category', data: topValues.map(v => String(v.value)), axisLabel: { fontSize: 11, color: '#374151' } },
     series: [{ type: 'bar', data: topValues.map(v => v.count), itemStyle: { color: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: '#c4b5fd' }, { offset: 1, color: '#7c3aed' }] }, borderRadius: [0, 4, 4, 0] }, label: { show: true, position: 'right', fontSize: 10, color: '#6b7280', formatter: (p) => p.value.toLocaleString('fr-FR') } }]
+});
+
+const getDateBarChartOption = (values) => ({
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'axis', backgroundColor: '#1f2937', borderColor: '#1f2937', textStyle: { color: '#fff' }, formatter: (params) => `Période <b>${params[0].name}</b><br/>Occurrences : <b>${params[0].value.toLocaleString('fr-FR')}</b><br/>Proportion : <b>${values[params[0].dataIndex].pct}%</b>` },
+    grid: { left: 45, right: 20, top: 30, bottom: 50 },
+    xAxis: { type: 'category', data: values.map(v => String(v.value)), axisLabel: { fontSize: 10, color: '#6b7280', rotate: 45, fontWeight: 'medium' } },
+    yAxis: { type: 'value', axisLabel: { fontSize: 10, color: '#6b7280', formatter: (v) => v.toLocaleString('fr-FR') }, splitLine: { lineStyle: { color: '#f3f4f6' } } },
+    series: [{ type: 'bar', data: values.map(v => v.count), itemStyle: { color: '#134e4a', borderRadius: [4, 4, 0, 0] }, emphasis: { itemStyle: { color: '#0f766e' } } }]
 });
 
 const getBooleanOption = (trueCount, falseCount, labelTrue = 'Vrai', labelFalse = 'Faux') => ({
@@ -1186,6 +1201,15 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
                                         <StatCard label={currentColStats.metrics.label_true || "Vrai"} value={currentColStats.metrics.true_count} subtitle={`${currentColStats.metrics.true_pct}%`} accent={true} />
                                         <StatCard label={currentColStats.metrics.label_false || "Faux"} value={currentColStats.metrics.false_count} subtitle={`${currentColStats.metrics.false_pct}%`} />
                                         <StatCard label="Valeurs nulles" value={currentColStats.metrics.nulls} />
+                                    </div>
+                                )}
+
+                                {currentColStats.type === 'date' && (
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                        <StatCard label="Total lignes" value={currentColStats.metrics.count} />
+                                        <StatCard label="Début de période" value={currentColStats.metrics.min_date} accent={true} />
+                                        <StatCard label="Fin de période" value={currentColStats.metrics.max_date} />
+                                        <StatCard label="Amplitude" value={currentColStats.metrics.duration_days} subtitle="jours" />
                                     </div>
                                 )}
 
@@ -1636,11 +1660,11 @@ export default function Database({ addNotification }) {
                     </span>
                 </div>
             ),
-            width: col.field === 'id' ? 100 : 180,
-            pinned: (col.field === 'id' || (isMobile && idx === 0)) ? 'left' : null,
+            width: col.is_identifier ? 100 : 180,
+            pinned: (col.is_identifier || (isMobile && idx === 0)) ? 'left' : null,
             cellClass: (params) => {
                 const classes = ["text-xs"];
-                if (col.field === 'id') classes.push('text-gray-400 font-medium');
+                if (col.is_identifier) classes.push('text-gray-400 font-medium');
                 else if (col.is_numeric) classes.push('justify-end font-mono text-gray-900');
                 else classes.push('text-slate-600 font-medium');
 

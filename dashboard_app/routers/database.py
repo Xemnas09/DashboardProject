@@ -48,6 +48,8 @@ async def database_view(
 
     df = _get_df(entry)
 
+    from services.column_classifier import classify_column
+
     # 2. Prepare Preview
     data_preview = {
         'columns': [{'field': c, 'title': c} for c in df.columns],
@@ -55,6 +57,7 @@ async def database_view(
             'name': c,
             'dtype': str(df[c].dtype),
             'is_numeric': df[c].dtype.is_numeric(),
+            'is_identifier': classify_column(df[c]) == "identifier",
         } for c in df.columns],
         'data': df.head(2000).to_dicts(),
         'total_rows': len(df),
@@ -357,27 +360,16 @@ async def get_column_stats(
     stats = {}
     total_rows = len(df)
 
+    from services.column_classifier import classify_column
+    
     for i, col in enumerate(df.columns):
         series = df[col]
         null_count = int(series.null_count())
         null_pct = round((null_count / total_rows) * 100, 1) if total_rows > 0 else 0
         unique_count = int(series.n_unique())
         
-        # 1. Determine Type
-        non_null_unique = int(series.drop_nulls().n_unique())
-        col_type = "categorical"
-        
-        if i == 0 and series.dtype.is_numeric() and unique_count == total_rows:
-            col_type = "identifier"
-        elif series.dtype == pl.Boolean:
-            col_type = "boolean"
-        elif series.dtype.is_numeric():
-            if non_null_unique < 15:
-                col_type = "discrete"
-            else:
-                col_type = "continuous"
-        elif non_null_unique == 2:
-            col_type = "boolean"
+        # 1. Determine Type using unified logic
+        col_type = classify_column(series)
         
         # 2. Base metrics
         metrics = {
@@ -480,6 +472,49 @@ async def get_column_stats(
                     "count": int(row["count"]),
                     "pct": round((int(row["count"]) / non_null_count * 100), 1) if non_null_count > 0 else 0
                 })
+        
+        elif col_type == "date":
+            clean_series = series.drop_nulls()
+            if not clean_series.is_empty():
+                min_date = clean_series.min()
+                max_date = clean_series.max()
+                
+                # Format for display
+                min_str = min_date.strftime("%Y-%m-%d") if hasattr(min_date, 'strftime') else str(min_date)
+                max_str = max_date.strftime("%Y-%m-%d") if hasattr(max_date, 'strftime') else str(max_date)
+                
+                # Try to calculate duration in days
+                try:
+                    duration_days = (max_date - min_date).days
+                except Exception:
+                    duration_days = "N/A"
+                
+                metrics.update({
+                    "min_date": min_str,
+                    "max_date": max_str,
+                    "duration_days": duration_days,
+                })
+
+                # Distribution: group by year or month depending on duration
+                try:
+                    if isinstance(duration_days, int):
+                        if duration_days > 1000:
+                            # Group by Year
+                            grouped = clean_series.dt.year().value_counts().sort("count", descending=True).head(15)
+                        else:
+                            # Group by Year-Month
+                            grouped = clean_series.dt.strftime("%Y-%m").value_counts().sort("count", descending=True).head(15)
+                            
+                        non_null_count = total_rows - null_count
+                        for row in grouped.to_dicts():
+                            val = row[col]
+                            dist_data.append({
+                                "value": str(val),
+                                "count": int(row["count"]),
+                                "pct": round((int(row["count"]) / non_null_count * 100), 1) if non_null_count > 0 else 0
+                            })
+                except Exception as e:
+                    logger.error(f"Failed to calculate date distribution for {col}: {e}")
 
         stats[col] = {
             "type": col_type,
