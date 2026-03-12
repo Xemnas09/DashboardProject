@@ -140,11 +140,12 @@ async def database_recast(
     }
 
 # ---------------------------------------------------------------------------
-# POST /api/database/expression
+# POST /api/database/expression (Legacy alias: /api/calculated-field)
 # ---------------------------------------------------------------------------
+@router.post("/api/calculated-field")  # Backward compatibility for tests
 @router.post("/api/database/expression")
 @limiter.limit("20/minute")
-async def create_expression(
+async def create_calculated_field(
     request: Request,
     body: ExpressionRequest,
     user: TokenPayload = Depends(get_current_user),

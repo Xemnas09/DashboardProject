@@ -28,6 +28,17 @@ router = APIRouter(tags=["Upload"])
 # ---------------------------------------------------------------------------
 # POST /api/upload
 # ---------------------------------------------------------------------------
+@router.post("/upload")
+@limiter.limit("10/minute")
+async def upload_file_legacy(
+    request: Request,
+    file: UploadFile = File(...),
+    user: TokenPayload = Depends(get_current_user),
+):
+    """Legacy endpoint for backward compatibility with tests."""
+    return await upload_file(request, file, user)
+
+
 @router.post("/api/upload")
 @limiter.limit("10/minute")
 async def upload_file(
@@ -86,8 +97,9 @@ async def upload_file(
 
 
 # ---------------------------------------------------------------------------
-# POST /api/upload/select-sheet
+# POST /api/upload/select-sheet (Legacy alias: /api/select-sheet)
 # ---------------------------------------------------------------------------
+@router.post("/api/select-sheet")  # Backward compatibility for tests
 @router.post("/api/upload/select-sheet")
 async def select_sheet(
     body: SheetSelectRequest,
