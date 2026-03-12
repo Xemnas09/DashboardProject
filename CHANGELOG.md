@@ -1,6 +1,13 @@
-# Changelog
+## [2.8.2] - 2026-03-12
 
-All notable changes to this project will be documented in this file.
+### Refactored
+- **Domain-Driven Design (DDD) Cleanup**: Refactored the `database.py` router to move complex data processing logic into a dedicated `data_service.py`.
+- **Atomic Operations**: Implemented a resilient, retry-based file saving system to prevent Windows `PermissionError` (file locking) during data retyping.
+- **Enhanced Documentation**: Added comprehensive docstrings, type-hints, and internal explanations to all core services (`file_processor.py`, `type_inference.py`, `column_classifier.py`).
+
+### Fixed
+- **Excel Import Stability**: Resolved a critical regression where multi-sheet Excel files would lock the process or fail during preview generation.
+- **Improved Date Inference**: Refined the `smart_cast_to_date` logic to handle year-only formats as actual dates by auto-appending month and day.
 
 ## [2.6.5] - 2026-03-06
 

@@ -10,7 +10,10 @@ export default function Dashboard({ addNotification }) {
     const [uploadSuccess, setUploadSuccess] = useState(false);
     const [dragActive, setDragActive] = useState(false);
     const [pendingSheets, setPendingSheets] = useState([]);
-    const [selectedSheet, setSelectedSheet] = useState('');
+    const [selectedSheet, setSelectedSheet] = useState(null);
+    const [allPreviews, setAllPreviews] = useState({});
+    const [sheetPreview, setSheetPreview] = useState(null);
+    const [isPreviewLoading, setIsPreviewLoading] = useState(false);
     const fileInputRef = useRef(null);
 
     // ✅ Synchronous read — available before first render, zero flash
@@ -70,10 +73,11 @@ export default function Dashboard({ addNotification }) {
             const result = await res.json();
 
             if (res.ok) {
-                if (result.status === 'success' && result.pending_sheets) {
-                    setPendingSheets(result.pending_sheets);
-                    if (result.pending_sheets.length > 0) setSelectedSheet(result.pending_sheets[0]);
-                    addNotification(`${result.pending_sheets.length} feuilles détectées`, 'info');
+                if (result.status === 'requires_sheet') {
+                    setPendingSheets(result.sheets);
+                    setAllPreviews(result.all_previews || {});
+                    if (result.sheets.length > 0) setSelectedSheet(result.sheets[0]);
+                    addNotification(`${result.sheets.length} feuilles détectées`, 'info');
                 } else if (result.status === 'success') {
                     setUploadSuccess(true);
                     addNotification('Fichier importé avec succès', 'success');
@@ -89,7 +93,13 @@ export default function Dashboard({ addNotification }) {
         }
     };
 
-    const submitSheet = async () => {
+    useEffect(() => {
+        if (selectedSheet && allPreviews[selectedSheet]) {
+            setSheetPreview(allPreviews[selectedSheet]);
+        }
+    }, [selectedSheet, allPreviews]);
+
+    const handleSheetSelection = async () => {
         setIsUploading(true);
         try {
             const res = await customFetch('/api/upload/select-sheet', {
@@ -102,6 +112,7 @@ export default function Dashboard({ addNotification }) {
 
             if (res.ok && result.status === 'success') {
                 setPendingSheets([]);
+                setSheetPreview(null);
                 setUploadSuccess(true);
                 addNotification('Feuille importée avec succès', 'success');
             } else {
@@ -272,8 +283,8 @@ export default function Dashboard({ addNotification }) {
             {/* Sheet Selection Modal */}
             {pendingSheets.length > 0 && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm px-4">
-                    <div className="bg-white rounded-2xl overflow-hidden shadow-2xl sm:max-w-lg sm:w-full border border-gray-100">
-                        <div className="px-6 py-4 bg-gray-950 text-white flex items-center gap-3">
+                    <div className="bg-white rounded-2xl overflow-hidden shadow-2xl sm:max-w-xl sm:w-full border border-gray-100 flex flex-col max-h-[90vh]">
+                        <div className="px-6 py-4 bg-gray-950 text-white flex items-center gap-3 flex-shrink-0">
                             <div className="w-9 h-9 rounded-xl bg-bank-600/20 flex items-center justify-center">
                                 <FileSpreadsheet className="h-5 w-5 text-bank-400" />
                             </div>
@@ -282,29 +293,82 @@ export default function Dashboard({ addNotification }) {
                                 <p className="text-[10px] text-white/40 font-bold uppercase tracking-wider">Sélectionnez la feuille à analyser</p>
                             </div>
                         </div>
-                        <div className="p-6">
-                            <select
-                                value={selectedSheet}
-                                onChange={(e) => setSelectedSheet(e.target.value)}
-                                className="w-full px-4 py-3.5 border-2 border-gray-100 rounded-xl focus:ring-0 focus:border-bank-500 font-bold text-gray-800 bg-gray-50 transition-all cursor-pointer outline-none"
-                            >
-                                {pendingSheets.map(sheet => (
-                                    <option key={sheet} value={sheet}>{sheet}</option>
-                                ))}
-                            </select>
+                        
+                        <div className="p-6 flex-1 overflow-hidden flex flex-col gap-6">
+                            <div>
+                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Choix de la feuille</p>
+                                <select
+                                    value={selectedSheet}
+                                    onChange={(e) => setSelectedSheet(e.target.value)}
+                                    className="w-full px-4 py-3.5 border-2 border-gray-100 rounded-xl focus:ring-0 focus:border-bank-500 font-bold text-gray-800 bg-gray-50 transition-all cursor-pointer outline-none"
+                                >
+                                    {pendingSheets.map(sheet => (
+                                        <option key={sheet} value={sheet}>{sheet}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="flex-1 flex flex-col min-h-0">
+                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Aperçu rapide (10 premières lignes)</p>
+                                <div className="flex-1 border border-gray-100 rounded-xl overflow-auto bg-gray-50/50 custom-scrollbar-mini">
+                                    {isPreviewLoading ? (
+                                        <div className="h-full flex flex-col items-center justify-center p-8 gap-3">
+                                            <div className="w-8 h-8 rounded-full border-2 border-bank-200 border-t-bank-600 animate-spin"></div>
+                                            <p className="text-[9px] font-black text-bank-900 uppercase tracking-widest">Chargement...</p>
+                                        </div>
+                                    ) : sheetPreview ? (
+                                        <table className="w-full text-left border-collapse">
+                                            <thead>
+                                                <tr className="bg-white border-b border-gray-100">
+                                                    {sheetPreview.columns.map(col => (
+                                                        <th key={col.field} className="px-3 py-2 text-[9px] font-black text-gray-400 uppercase tracking-wider whitespace-nowrap bg-white sticky top-0">
+                                                            {col.title}
+                                                        </th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {sheetPreview.data.map((row, i) => (
+                                                    <tr key={i} className="border-b border-gray-50/50 last:border-0 hover:bg-white/50">
+                                                        {sheetPreview.columns.map(col => (
+                                                            <td key={col.field} className="px-3 py-1.5 text-[10px] text-gray-600 font-medium whitespace-nowrap truncate max-w-[150px]">
+                                                                {row[col.field]}
+                                                            </td>
+                                                        ))}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    ) : (
+                                        <div className="h-full flex items-center justify-center p-8 text-gray-400 italic text-[10px]">
+                                            Sélectionnez une feuille pour voir un aperçu
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                         </div>
-                        <div className="bg-gray-50 px-6 py-4 flex flex-row-reverse gap-3 border-t border-gray-100">
+
+                        <div className="bg-gray-50 px-6 py-4 flex flex-row-reverse gap-3 border-t border-gray-100 flex-shrink-0">
                             <button
                                 onClick={handleSheetSelection}
-                                disabled={isUploading}
-                                className="px-5 py-2.5 bg-gradient-to-r from-gray-900 to-gray-800 text-white rounded-xl font-black text-sm shadow-lg hover:-translate-y-0.5 transition-all min-w-[120px] flex items-center justify-center"
+                                disabled={isUploading || isPreviewLoading}
+                                className="px-5 py-2.5 bg-gradient-to-r from-gray-900 to-gray-800 text-white rounded-xl font-black text-sm shadow-lg hover:-translate-y-0.5 transition-all min-w-[120px] flex items-center justify-center disabled:opacity-50 disabled:translate-y-0"
                             >
-                                {isUploading ? <span className="block w-4 h-4 rounded-full border-2 border-t-white border-r-transparent animate-spin"></span> : 'Confirmer'}
+                                {isUploading ? <span className="block w-4 h-4 rounded-full border-2 border-t-white border-r-transparent animate-spin"></span> : 'Confirmer l\'import'}
                             </button>
                             <button
-                                onClick={() => setPendingSheets([])}
+                                onClick={async () => {
+                                    setPendingSheets([]);
+                                    setSheetPreview(null);
+                                    setUploadedFile(null); // Return to upload area
+                                    try {
+                                        await customFetch('/api/clear_data', { method: 'POST' });
+                                    } catch (err) {
+                                        console.error("Cleanup failed", err);
+                                    }
+                                }}
                                 disabled={isUploading}
-                                className="px-5 py-2.5 bg-white text-gray-700 border border-gray-200 rounded-xl hover:bg-gray-50 transition-all font-bold text-sm"
+                                className="px-5 py-2.5 bg-white text-gray-700 border border-gray-200 rounded-xl hover:bg-gray-50 transition-all font-bold text-sm disabled:opacity-50"
                             >
                                 Annuler
                             </button>

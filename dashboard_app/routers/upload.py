@@ -16,6 +16,7 @@ from services.file_processor import (
     validate_extension,
     save_upload_chunked,
     process_file_preview,
+    get_sheet_previews_parallel,
 )
 from services.data_cache import CacheEntry
 from services.notifications import notification_store
@@ -61,12 +62,14 @@ async def upload_file(
 
     # Handle multi-sheet Excel
     if preview_data and preview_data.get('requires_sheet_selection'):
+        previews = get_sheet_previews_parallel(filepath)
         entry.preview = None
         entry.pending_sheets = preview_data['sheets']
         await cache_manager.set(cache_id, entry)
         return {
             "status": "requires_sheet",
             "sheets": preview_data['sheets'],
+            "all_previews": previews,
             "message": "Plusieurs feuilles détectées.",
         }
 
@@ -120,9 +123,40 @@ async def select_sheet(
 
 
 # ---------------------------------------------------------------------------
+# POST /api/upload/sheet-preview
+# ---------------------------------------------------------------------------
+@router.post("/api/upload/sheet-preview")
+async def sheet_preview(
+    body: SheetSelectRequest,
+    user: TokenPayload = Depends(get_current_user),
+):
+    from main import cache_manager
+    entry = await cache_manager.get(user.cache_id)
+    if not entry or not entry.filepath:
+        raise ValidationException("Aucun fichier en attente")
+
+    # Lightweight preview for the specific sheet
+    preview_data = process_file_preview(entry.filepath, sheet_name=body.sheet_name, row_limit=10)
+    
+    if not preview_data:
+        raise ValidationException("Impossible de générer l'aperçu de la feuille")
+
+    # Important: Don't persist yet, just return to the UI
+    return {
+        "status": "success",
+        "preview": {
+            "columns": preview_data['columns'],
+            "data": preview_data['data'],
+            "total_rows": preview_data['total_rows']
+        }
+    }
+
+
+# ---------------------------------------------------------------------------
 # POST /clear_data
 # ---------------------------------------------------------------------------
 @router.post("/clear_data")
+@router.post("/api/clear_data")  # Add alias for consistency
 async def clear_data(user: TokenPayload = Depends(get_current_user)):
     from main import cache_manager
     entry = await cache_manager.get(user.cache_id)

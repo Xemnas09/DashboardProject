@@ -392,7 +392,7 @@ const AnomalyBanner = ({ anomalyResult, isExpanded, setIsExpanded, onExport }) =
                         <div className="flex justify-between items-start mb-4">
                             <div className="flex items-center gap-2">
                                 <Sparkles className="w-4 h-4 text-bank-600" />
-                                <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Interprétation IA</h4>
+                                <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Interprétation Experte</h4>
                             </div>
                             <button
                                 onClick={(e) => { e.stopPropagation(); onExport(); }}
@@ -422,7 +422,7 @@ const VariablesModal = ({ isOpen, onClose, columnsInfo, onTypeChange, onSave, is
             icon={Settings2}
             infoBlock={{
                 title: "Pourquoi définir les types de variables ?",
-                content: "Lors de l'import, certaines colonnes peuvent être mal interprétées — une date lue comme du texte, un entier lu comme un décimal. Définir le bon type permet à l'IA d'analyser correctement vos données et aux graphiques d'être plus précis.",
+                content: "Lors de l'import, certaines colonnes peuvent être mal interprétées — une date lue comme du texte, un entier lu comme un décimal. Définir le bon type permet une analyse experte de vos données et rend les graphiques plus précis.",
                 example: "si la colonne 'Age' est importée en STRING, les calculs de moyenne ou de distribution seront impossibles. En la passant en INT64, toutes les analyses numériques deviennent disponibles.",
                 warning: "changer un type ne modifie pas vos données source, uniquement leur interprétation dans cet outil."
             }}
@@ -474,11 +474,11 @@ const AnomaliesModal = ({ isOpen, onClose, columns, selectedCols, onToggleCol, m
         <Modal
             isOpen={isOpen}
             onClose={onClose}
-            title="Analyse d'Anomalies IA"
+            title="Analyse d'Anomalies Experte"
             icon={Sparkles}
             infoBlock={{
                 title: "Qu'est-ce que la détection d'anomalies ?",
-                content: "L'IA analyse vos colonnes numériques pour identifier les valeurs inhabituelles ou suspectes — des valeurs trop élevées, trop basses, ou statistiquement incohérentes avec le reste des données.",
+                content: "Le système analyse vos colonnes numériques pour identifier les valeurs inhabituelles ou suspectes — des valeurs trop élevées, trop basses, ou statistiquement incohérentes avec le reste des données.",
                 example: "dans un dataset médical, un patient avec une tension artérielle de 400 serait immédiatement signalé comme anormal.",
                 warning: "Plus le seuil est bas, plus l'analyse est sensitive — vous détecterez plus d'anomalies mais avec plus de faux positifs."
             }}
@@ -514,7 +514,7 @@ const AnomaliesModal = ({ isOpen, onClose, columns, selectedCols, onToggleCol, m
                         >
                             <option value="iqr">Statistique : IQR (Recommandé)</option>
                             <option value="zscore">Statistique : Z-Score</option>
-                            <option value="isolation_forest">IA : Isolation Forest</option>
+                            <option value="isolation_forest">Algorithme : Isolation Forest</option>
                         </select>
                     </div>
 
@@ -1889,12 +1889,6 @@ export default function Database({ addNotification }) {
                 </div>
             )}
 
-            <button
-                onClick={() => handleOpenToolTab('anomalies')}
-                className="fixed bottom-20 right-6 w-14 h-14 bg-bank-600 text-white rounded-2xl shadow-2xl flex items-center justify-center md:hidden z-40 active:scale-90 transition-all"
-            >
-                <Sparkles className="w-6 h-6 animate-pulse" />
-            </button>
         </div>
     );
 }

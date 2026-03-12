@@ -1,6 +1,6 @@
 # Datavera
 
-Datavera is a high-performance data science dashboard application built with **FastAPI**, **React**, and **Tailwind CSS**. It features robust Role-Based Access Control (RBAC), real-time WebSocket communication, and a modern, glassmorphic UI.
+Datavera (v2.8.2) is a high-performance data science dashboard application built with **FastAPI**, **React**, and **Tailwind CSS**. It features robust Role-Based Access Control (RBAC), real-time WebSocket communication, and a modern, glassmorphic UI.
 
 ## Features
 
