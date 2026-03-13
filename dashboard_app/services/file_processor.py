@@ -160,11 +160,15 @@ def process_file_preview(
                 if col in df.columns:
                     current_type = str(df[col].dtype)
                     if target in ('Int64', 'Float64'):
-                        clean_expr = pl.col(col).str.replace_all(r"[^\d.,\-]", "").str.replace(",", ".")
-                        if target == 'Int64':
-                            cast_exprs.append(clean_expr.cast(pl.Float64, strict=False).cast(pl.Int64, strict=False).alias(col))
+                        if current_type in ('String', 'Utf8'):
+                            clean_expr = pl.col(col).str.replace_all(r"[^\d.,\-]", "").str.replace(",", ".")
+                            if target == 'Int64':
+                                cast_exprs.append(clean_expr.cast(pl.Float64, strict=False).cast(pl.Int64, strict=False).alias(col))
+                            else:
+                                cast_exprs.append(clean_expr.cast(pl.Float64, strict=False).alias(col))
                         else:
-                            cast_exprs.append(clean_expr.cast(pl.Float64, strict=False).alias(col))
+                            # Already numeric or other type, just cast directly
+                            cast_exprs.append(pl.col(col).cast(getattr(pl, target), strict=False).alias(col))
                     elif target == 'String' and 'String' not in current_type and 'Utf8' not in current_type:
                         cast_exprs.append(pl.col(col).cast(pl.String))
                     elif target == 'Boolean':
