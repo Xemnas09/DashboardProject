@@ -15,8 +15,8 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = 7
     gemini_api_key: str | None = None
 
-    # Filesystem uploads
-    upload_folder: str = str(Path(__file__).parent.parent / "uploads")
+    # Filesystem uploads (Moved outside of dashboard_app to prevent uvicorn reloads on watch)
+    upload_folder: str = str(Path(__file__).parent.parent.parent / "uploads")
     max_upload_size_mb: int = 50
 
     # Cache

@@ -158,7 +158,7 @@ export default function Layout({ theme, setTheme }) {
                 {/* Main Content */}
                 <main className="flex-1 flex flex-col h-full overflow-hidden bg-transparent">
                     {/* Premium Header */}
-                    <header className="h-[64px] flex items-center justify-between px-6 bg-white/70 backdrop-blur-xl border-b border-gray-100/80 z-50">
+                    <header className="h-[64px] flex items-center justify-between px-6 bg-white/70 backdrop-blur-xl border-b border-gray-100/80 z-20">
                         <div className="flex-1"></div>
                         <div className="flex items-center gap-3">
                             {/* Notification Bell */}
@@ -168,7 +168,7 @@ export default function Layout({ theme, setTheme }) {
                                     {unreadCount > 0 && <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white animate-pulse"></span>}
                                 </button>
                                 {showNotifMenu && (
-                                    <div className="origin-top-right absolute right-0 mt-2 w-[340px] rounded-2xl shadow-2xl bg-white ring-1 ring-black/5 z-50 overflow-hidden border border-gray-100">
+                                    <div className="origin-top-right absolute right-0 mt-2 w-[340px] rounded-2xl shadow-2xl bg-white ring-1 ring-black/5 z-[1001] overflow-hidden border border-gray-100">
                                         <div className="px-5 py-3.5 bg-gray-950 flex justify-between items-center">
                                             <h3 className="text-sm font-black text-white uppercase tracking-wider">Notifications</h3>
                                             <button onClick={() => setShowNotifMenu(false)} className="text-white/40 hover:text-white/80 transition-colors">
@@ -226,7 +226,7 @@ export default function Layout({ theme, setTheme }) {
 
             {/* Settings Modal - Premium */}
             {showSettings && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm">
+                <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-gray-900/60 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl overflow-hidden shadow-2xl sm:max-w-lg sm:w-full border border-gray-100">
                         <div className="px-6 py-4 bg-gray-950 text-white flex items-center gap-3">
                             <div className="w-9 h-9 rounded-xl bg-bank-600/20 flex items-center justify-center">
@@ -262,7 +262,7 @@ export default function Layout({ theme, setTheme }) {
 
             {/* Logout Modal - Premium */}
             {showLogout && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm">
+                <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-gray-900/60 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl overflow-hidden shadow-2xl sm:max-w-md sm:w-full border border-gray-100">
                         <div className="p-8 text-center">
                             <div className="mx-auto w-14 h-14 rounded-2xl bg-red-50 flex items-center justify-center mb-5 border border-red-100">
@@ -281,7 +281,7 @@ export default function Layout({ theme, setTheme }) {
             {/* Modals are placed below main wrapper */}
 
             {showHistoryModal && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+                <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
                     <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
                         <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
                             <div className="flex items-center gap-3 text-gray-900">

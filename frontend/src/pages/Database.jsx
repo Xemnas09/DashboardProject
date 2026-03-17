@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { AgGridReact } from 'ag-grid-react';
-import { ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
-import 'ag-grid-community/styles/ag-grid.css';
-import 'ag-grid-community/styles/ag-theme-quartz.css';
+import {
+    useReactTable,
+    getCoreRowModel,
+    getSortedRowModel,
+    getPaginationRowModel,
+    getFilteredRowModel,
+    flexRender,
+} from '@tanstack/react-table';
 import {
     Database as DatabaseIcon,
     Type,
@@ -34,9 +38,7 @@ import {
     Settings2,
     Settings,
     FileType2,
-    Save,
-    Maximize2,
-    Minimize2
+    Save
 } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
 import { Link } from 'react-router-dom';
@@ -45,33 +47,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { customFetch } from '../features/auth/session';
 
-ModuleRegistry.registerModules([AllCommunityModule]);
-
 const CUSTOM_STYLES = `
-    .ag-theme-quartz {
-        --ag-grid-size: 8px;
-        --ag-font-size: 13px;
-        --ag-header-height: 48px;
-        --ag-header-foreground-color: #64748b;
-        --ag-header-background-color: transparent;
-        --ag-row-hover-color: #f8fafc;
-        --ag-border-color: #f1f5f9;
-        --ag-border-radius: 0px;
-    }
-    .ag-header-cell-label { 
-        font-weight: 800; 
-        text-transform: uppercase; 
-        letter-spacing: 0.05em; 
-        color: #1e293b;
-    }
-    .ag-cell { 
-        display: flex; 
-        align-items: center; 
-        border-right: 1px solid #f8fafc !important; 
-    }
-    .ag-row-odd { background-color: #ffffff; }
-    .ag-row-even { background-color: #f9fafb; }
-    
     .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
@@ -86,6 +62,21 @@ const CUSTOM_STYLES = `
     .anomaly-banner { transition: max-height 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
 `;
 
+// ─── HELPERS ──────────────────────────────────────
+
+const getTypeBadge = (dtype) => {
+    const fallback = { label: dtype ? String(dtype).slice(0, 4).toUpperCase() : 'UNK', color: 'bg-gray-50 text-gray-400 border-gray-100' };
+    if (!dtype) return fallback;
+    const dt = String(dtype);
+    if (dt.includes('Int')) return { label: 'INT', color: 'bg-blue-50 text-blue-400 border-blue-100' };
+    if (dt.includes('Float')) return { label: 'DEC', color: 'bg-indigo-50 text-indigo-400 border-indigo-100' };
+    if (dt.includes('String') || dt.includes('Utf8'))
+        return { label: 'TXT', color: 'bg-amber-50 text-amber-400 border-amber-100' };
+    if (dt.includes('Bool')) return { label: 'BOOL', color: 'bg-green-50 text-green-400 border-green-100' };
+    if (dt.includes('Date')) return { label: 'DATE', color: 'bg-rose-50 text-rose-400 border-rose-100' };
+    return fallback;
+};
+
 const TYPE_LABELS = {
     'Int64': 'Nombre Entier',
     'Float64': 'Décimal / Prix',
@@ -99,7 +90,7 @@ const TYPE_LABELS = {
 const Modal = ({ isOpen, onClose, title, icon: Icon, children, infoBlock, maxWidth = "max-w-2xl" }) => {
     if (!isOpen) return null;
     return (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[100] flex items-center justify-center p-4 md:p-12 overflow-y-auto">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 md:p-12 overflow-y-auto">
             <div className={`bg-white rounded-[2rem] shadow-2xl ${maxWidth} w-full flex flex-col h-fit max-h-[90vh] animate-modal relative overflow-hidden`}>
                 <div className="h-16 px-8 flex items-center justify-between border-b border-gray-100 shrink-0">
                     <div className="flex items-center gap-3">
@@ -160,7 +151,7 @@ const Header = ({ rowCount, loadedRows, activeToolTab, onOpenToolTab, onOpenStat
     }, []);
 
     return (
-        <header className="h-16 flex items-center justify-between px-6 bg-white border-b border-gray-100 z-30 shrink-0">
+        <header className="h-16 flex items-center justify-between px-6 bg-white border-b border-gray-100 relative z-30 shrink-0">
             <div className="flex items-center justify-between w-full">
                 {/* Brand & Stats */}
                 <div className="flex items-center gap-4">
@@ -266,8 +257,8 @@ const Header = ({ rowCount, loadedRows, activeToolTab, onOpenToolTab, onOpenStat
     );
 };
 
-const Toolbar = ({ searchQuery, setSearchQuery, pageSize, setPageSize, totalRows, loadedRows, gridRef, isTableFullScreen, setIsTableFullScreen }) => (
-    <div className="h-12 flex items-center justify-between px-6 bg-gray-50 border-b border-gray-200 z-10 shrink-0">
+const Toolbar = ({ searchQuery, setSearchQuery, pageSize, setPageSize, totalRows, loadedRows }) => (
+    <div className="h-12 flex items-center justify-between px-6 bg-gray-50 border-b border-gray-200 relative z-20 shrink-0">
         <div className="flex items-center gap-4 flex-1">
             <div className="relative w-full max-w-sm">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -275,13 +266,8 @@ const Toolbar = ({ searchQuery, setSearchQuery, pageSize, setPageSize, totalRows
                     type="text"
                     placeholder="Rechercher dans les lignes..."
                     value={searchQuery}
-                    onChange={(e) => {
-                        setSearchQuery(e.target.value);
-                        if (gridRef.current?.api) {
-                            gridRef.current.api.setGridOption('quickFilterText', e.target.value);
-                        }
-                    }}
-                    className="w-full pl-10 pr-4 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-bank-500 transition-all placeholder:text-gray-300"
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-1.5 bg-white border border-gray-200 rounded-xl text-[11px] font-bold focus:ring-2 focus:ring-bank-500 transition-all placeholder:text-gray-300 shadow-sm"
                 />
             </div>
             <div className="hidden lg:flex items-center gap-4 pl-4 border-l border-gray-200">
@@ -289,13 +275,7 @@ const Toolbar = ({ searchQuery, setSearchQuery, pageSize, setPageSize, totalRows
                     <span>Afficher</span>
                     <select
                         value={pageSize}
-                        onChange={(e) => {
-                            const newSize = Number(e.target.value);
-                            setPageSize(newSize);
-                            if (gridRef.current?.api) {
-                                gridRef.current.api.setGridOption('paginationPageSize', newSize);
-                            }
-                        }}
+                        onChange={(e) => setPageSize(Number(e.target.value))}
                         className="bg-white border border-gray-200 rounded-lg px-2 py-0.5 text-bank-600 focus:ring-0 cursor-pointer font-black"
                     >
                         {[15, 50, 100, 500].map(v => <option key={v} value={v}>{v}</option>)}
@@ -309,25 +289,16 @@ const Toolbar = ({ searchQuery, setSearchQuery, pageSize, setPageSize, totalRows
             <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest hidden sm:block">
                 <span className="text-slate-900">{totalRows?.toLocaleString()}</span> lignes &middot; <span className="text-emerald-500">{loadedRows}</span> chargées
             </div>
-            <div className="flex items-center gap-2">
-                <button 
-                    onClick={() => setIsTableFullScreen(!isTableFullScreen)}
-                    className="p-2 text-gray-400 hover:text-bank-600 hover:bg-bank-50 rounded-xl transition-all"
-                    title={isTableFullScreen ? "Réduire le tableau" : "Agrandir le tableau"}
-                >
-                    {isTableFullScreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-                </button>
-                <button className="md:hidden p-2 text-gray-400">
-                    <Menu className="w-5 h-5" />
-                </button>
-            </div>
+            <button className="md:hidden p-2 text-gray-400">
+                <Menu className="w-5 h-5" />
+            </button>
         </div>
     </div>
 );
 
-const Footer = ({ currentPage, totalPages, pageSize, totalRows, loadedRows, gridRef, isMobile }) => {
-    const startRow = totalRows > 0 ? ((currentPage || 1) - 1) * (pageSize || 1) + 1 : 0;
-    const endRow = totalRows > 0 ? Math.min((currentPage || 1) * (pageSize || 1), loadedRows || 0) : 0;
+const Footer = ({ currentPage, totalPages, pageSize, totalRows, loadedRows, table, isMobile }) => {
+    const startRow = totalRows > 0 ? (currentPage - 1) * pageSize + 1 : 0;
+    const endRow = totalRows > 0 ? Math.min(currentPage * pageSize, loadedRows) : 0;
 
     return (
         <footer className="h-12 bg-white border-t border-gray-100 flex items-center justify-between px-6 z-10 shrink-0 select-none">
@@ -337,15 +308,15 @@ const Footer = ({ currentPage, totalPages, pageSize, totalRows, loadedRows, grid
 
             <div className="flex items-center gap-2">
                 <button
-                    onClick={() => gridRef.current?.api?.paginationGoToFirstPage()}
-                    disabled={currentPage === 1}
+                    onClick={() => table?.setPageIndex(0)}
+                    disabled={!table?.getCanPreviousPage?.()}
                     className="p-2 rounded-xl hover:bg-gray-100 disabled:opacity-20 transition-all text-slate-900"
                 >
                     <ChevronsLeft className="w-4 h-4" />
                 </button>
                 <button
-                    onClick={() => gridRef.current?.api?.paginationGoToPreviousPage()}
-                    disabled={currentPage === 1}
+                    onClick={() => table?.previousPage()}
+                    disabled={!table?.getCanPreviousPage?.()}
                     className="p-2 rounded-xl hover:bg-gray-100 disabled:opacity-20 transition-all text-slate-900"
                 >
                     <ChevronLeft className="w-4 h-4" />
@@ -356,15 +327,15 @@ const Footer = ({ currentPage, totalPages, pageSize, totalRows, loadedRows, grid
                 </div>
 
                 <button
-                    onClick={() => gridRef.current?.api?.paginationGoToNextPage()}
-                    disabled={currentPage === totalPages}
+                    onClick={() => table?.nextPage()}
+                    disabled={!table?.getCanNextPage?.()}
                     className="p-2 rounded-xl hover:bg-gray-100 disabled:opacity-20 transition-all text-slate-900"
                 >
                     <ChevronRight className="w-4 h-4" />
                 </button>
                 <button
-                    onClick={() => gridRef.current?.api?.paginationGoToLastPage()}
-                    disabled={currentPage === totalPages}
+                    onClick={() => table?.setPageIndex(table?.getPageCount?.() - 1)}
+                    disabled={!table?.getCanNextPage?.()}
                     className="p-2 rounded-xl hover:bg-gray-100 disabled:opacity-20 transition-all text-slate-900"
                 >
                     <ChevronsRight className="w-4 h-4" />
@@ -403,7 +374,7 @@ const AnomalyBanner = ({ anomalyResult, isExpanded, setIsExpanded, onExport }) =
                         <div className="flex justify-between items-start mb-4">
                             <div className="flex items-center gap-2">
                                 <Sparkles className="w-4 h-4 text-bank-600" />
-                                <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Interprétation Experte</h4>
+                                <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Interprétation IA</h4>
                             </div>
                             <button
                                 onClick={(e) => { e.stopPropagation(); onExport(); }}
@@ -423,7 +394,7 @@ const AnomalyBanner = ({ anomalyResult, isExpanded, setIsExpanded, onExport }) =
     );
 };
 
-const VariablesModal = ({ isOpen, onClose, columnsInfo, onTypeChange, onSave, isSaving }) => {
+const VariablesModal = ({ isOpen, onClose, columnsInfo, onTypeChange, onRecommendAI, onSave, isSaving }) => {
     if (!isOpen) return null;
     return (
         <Modal
@@ -433,23 +404,38 @@ const VariablesModal = ({ isOpen, onClose, columnsInfo, onTypeChange, onSave, is
             icon={Settings2}
             infoBlock={{
                 title: "Pourquoi définir les types de variables ?",
-                content: "Lors de l'import, certaines colonnes peuvent être mal interprétées — une date lue comme du texte, un entier lu comme un décimal. Définir le bon type permet une analyse experte de vos données et rend les graphiques plus précis.",
+                content: "Lors de l'import, certaines colonnes peuvent être mal interprétées — une date lue comme du texte, un entier lu comme un décimal. Définir le bon type permet à l'IA d'analyser correctement vos données et aux graphiques d'être plus précis.",
                 example: "si la colonne 'Age' est importée en STRING, les calculs de moyenne ou de distribution seront impossibles. En la passant en INT64, toutes les analyses numériques deviennent disponibles.",
                 warning: "changer un type ne modifie pas vos données source, uniquement leur interprétation dans cet outil."
             }}
         >
-            <div className="space-y-4">
+            {/* AI Suggest Button */}
+            <div className="pb-2">
+                <button
+                    onClick={onRecommendAI}
+                    disabled={isSaving}
+                    className="w-full py-3 bg-bank-50 hover:bg-bank-100 text-bank-600 rounded-xl border border-bank-200 flex items-center justify-center gap-3 transition-all active:scale-95 group"
+                >
+                    <Sparkles className="w-4 h-4 group-hover:animate-pulse" />
+                    <span className="text-[11px] font-black uppercase tracking-widest">Calculer avec l'IA</span>
+                </button>
+                <p className="text-[9px] font-bold text-gray-400 mt-2 text-center uppercase tracking-tighter">Gemini analyse les données pour recommander les types optimaux</p>
+            </div>
+
+            <div className="h-px bg-gray-100 my-4"></div>
+
+            <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
                 {Array.isArray(columnsInfo) && columnsInfo.length > 0 ? (
                     columnsInfo.map(col => (
-                        <div key={col.name || col.field} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100 group hover:border-bank-200 transition-all">
+                        <div key={col.name || col.field} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100 group hover:border-bank-200 transition-all">
                             <div className="flex flex-col">
-                                <span className="text-[11px] font-black text-gray-900 uppercase tracking-tight">{col.name || col.field || col.title}</span>
-                                <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Actuel: {TYPE_LABELS[col.dtype] || col.dtype}</span>
+                                <span className="text-[11px] font-black text-gray-900 uppercase tracking-tight truncate max-w-[140px]">{col.name || col.field || col.title}</span>
+                                <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Type {TYPE_LABELS[col.dtype] ? 'Défini' : 'Auto'}</span>
                             </div>
                             <select
                                 value={col.target_type || col.dtype}
                                 onChange={(e) => onTypeChange(col.name || col.field, e.target.value)}
-                                className="bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-[11px] font-bold text-bank-600 focus:ring-2 focus:ring-bank-500 cursor-pointer"
+                                className="bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-[10px] font-black text-bank-600 focus:ring-2 focus:ring-bank-500 cursor-pointer shadow-sm min-w-[120px]"
                             >
                                 {Object.entries(TYPE_LABELS).map(([val, label]) => (
                                     <option key={val} value={val}>{label}</option>
@@ -485,11 +471,11 @@ const AnomaliesModal = ({ isOpen, onClose, columns, selectedCols, onToggleCol, m
         <Modal
             isOpen={isOpen}
             onClose={onClose}
-            title="Analyse d'Anomalies Experte"
+            title="Analyse d'Anomalies IA"
             icon={Sparkles}
             infoBlock={{
                 title: "Qu'est-ce que la détection d'anomalies ?",
-                content: "Le système analyse vos colonnes numériques pour identifier les valeurs inhabituelles ou suspectes — des valeurs trop élevées, trop basses, ou statistiquement incohérentes avec le reste des données.",
+                content: "L'IA analyse vos colonnes numériques pour identifier les valeurs inhabituelles ou suspectes — des valeurs trop élevées, trop basses, ou statistiquement incohérentes avec le reste des données.",
                 example: "dans un dataset médical, un patient avec une tension artérielle de 400 serait immédiatement signalé comme anormal.",
                 warning: "Plus le seuil est bas, plus l'analyse est sensitive — vous détecterez plus d'anomalies mais avec plus de faux positifs."
             }}
@@ -525,7 +511,7 @@ const AnomaliesModal = ({ isOpen, onClose, columns, selectedCols, onToggleCol, m
                         >
                             <option value="iqr">Statistique : IQR (Recommandé)</option>
                             <option value="zscore">Statistique : Z-Score</option>
-                            <option value="isolation_forest">Algorithme : Isolation Forest</option>
+                            <option value="isolation_forest">IA : Isolation Forest</option>
                         </select>
                     </div>
 
@@ -936,11 +922,17 @@ const TYPE_CONFIG = {
         accentColor: 'bg-gray-300',
         description: 'Identifiant unique — séquence progressive'
     },
-    numeric: {
+    continuous: {
         label: 'NUM',
         color: 'bg-blue-100 text-blue-700',
         accentColor: 'bg-blue-400',
-        description: 'Variable numérique'
+        description: 'Variable numérique continue'
+    },
+    discrete: {
+        label: 'DISC',
+        color: 'bg-violet-100 text-violet-700',
+        accentColor: 'bg-violet-400',
+        description: 'Variable numérique discrète'
     },
     categorical: {
         label: 'CAT',
@@ -953,12 +945,6 @@ const TYPE_CONFIG = {
         color: 'bg-green-100 text-green-700',
         accentColor: 'bg-green-400',
         description: 'Variable booléenne'
-    },
-    date: {
-        label: 'DATE',
-        color: 'bg-teal-100 text-teal-700',
-        accentColor: 'bg-teal-400',
-        description: 'Variable temporelle'
     }
 };
 
@@ -1048,15 +1034,6 @@ const getCategoricalOption = (topValues) => ({
     series: [{ type: 'bar', data: topValues.map(v => v.count), itemStyle: { color: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: '#c4b5fd' }, { offset: 1, color: '#7c3aed' }] }, borderRadius: [0, 4, 4, 0] }, label: { show: true, position: 'right', fontSize: 10, color: '#6b7280', formatter: (p) => p.value.toLocaleString('fr-FR') } }]
 });
 
-const getDateBarChartOption = (values) => ({
-    backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis', backgroundColor: '#1f2937', borderColor: '#1f2937', textStyle: { color: '#fff' }, formatter: (params) => `Période <b>${params[0].name}</b><br/>Occurrences : <b>${params[0].value.toLocaleString('fr-FR')}</b><br/>Proportion : <b>${values[params[0].dataIndex].pct}%</b>` },
-    grid: { left: 45, right: 20, top: 30, bottom: 50 },
-    xAxis: { type: 'category', data: values.map(v => String(v.value)), axisLabel: { fontSize: 10, color: '#6b7280', rotate: 45, fontWeight: 'medium' } },
-    yAxis: { type: 'value', axisLabel: { fontSize: 10, color: '#6b7280', formatter: (v) => v.toLocaleString('fr-FR') }, splitLine: { lineStyle: { color: '#f3f4f6' } } },
-    series: [{ type: 'bar', data: values.map(v => v.count), itemStyle: { color: '#134e4a', borderRadius: [4, 4, 0, 0] }, emphasis: { itemStyle: { color: '#0f766e' } } }]
-});
-
 const getBooleanOption = (trueCount, falseCount, labelTrue = 'Vrai', labelFalse = 'Faux') => ({
     backgroundColor: 'transparent',
     tooltip: { trigger: 'item', backgroundColor: '#1f2937', borderColor: '#1f2937', textStyle: { color: '#fff' }, formatter: (p) => `<b>${p.name}</b><br/>${p.value.toLocaleString('fr-FR')} — ${p.percent}%` },
@@ -1068,7 +1045,6 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(false);
     const [selectedCol, setSelectedCol] = useState(null);
-    const [isFullScreen, setIsFullScreen] = useState(false);
 
     useEffect(() => {
         if (isOpen && columns?.length > 0 && !selectedCol) {
@@ -1100,8 +1076,8 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
     const config = currentColStats ? TYPE_CONFIG[currentColStats.type] : null;
 
     return (
-        <div className={`fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200 ${isFullScreen ? 'p-0' : 'p-4 md:p-6'}`}>
-            <div className={`flex flex-col bg-white shadow-2xl transition-all duration-300 ease-in-out animate-in zoom-in-95 ${isFullScreen ? 'w-full h-full rounded-none' : 'w-full max-w-5xl h-[85vh] rounded-3xl overflow-hidden'}`}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="flex flex-col bg-white rounded-3xl shadow-2xl w-full max-w-5xl h-[85vh] overflow-hidden animate-in zoom-in-95 duration-200">
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
                     <div className="flex items-center gap-3">
@@ -1113,18 +1089,9 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
                             <p className="text-xs text-gray-400 font-medium">Calculées sur l'intégralité du dataset</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <button 
-                            onClick={() => setIsFullScreen(!isFullScreen)} 
-                            className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-all"
-                            title={isFullScreen ? "Réduire" : "Plein écran"}
-                        >
-                            {isFullScreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
-                        </button>
-                        <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-all">
-                            <X size={20} />
-                        </button>
-                    </div>
+                    <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-all">
+                        <X size={20} />
+                    </button>
                 </div>
 
                 {/* Body */}
@@ -1133,7 +1100,7 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
                     <div className="w-full md:w-52 flex-shrink-0 border-b md:border-b-0 md:border-r border-gray-100 overflow-y-auto custom-scrollbar bg-gray-50/50 py-3 h-40 md:h-auto">
                         {(columns || []).map(col => {
                             const statData = stats ? stats[col.field] : null;
-                            const colType = statData ? statData.type : (col.is_numeric ? 'numeric' : 'categorical');
+                            const colType = statData ? statData.type : (col.is_numeric ? 'continuous' : 'categorical');
                             const colConfig = TYPE_CONFIG[colType] || TYPE_CONFIG.categorical;
                             const isActive = col.field === selectedCol;
                             return (
@@ -1184,12 +1151,12 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
                                     </div>
                                 )}
 
-                                {currentColStats.type === 'numeric' && (
+                                {currentColStats.type === 'continuous' && (
                                     <>
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                             <StatCard label="Moyenne" value={currentColStats.metrics.mean} accent={true} />
                                             <StatCard label="Médiane" value={currentColStats.metrics.median} />
-                                            <StatCard label="Mode" value={currentColStats.metrics.mode} />
+                                            <StatCard label="Écart-type" value={currentColStats.metrics.std} />
                                             <StatCard label="Valeurs nulles" value={currentColStats.metrics.nulls} subtitle={`${currentColStats.metrics.null_pct}% du total`} accent={currentColStats.metrics.null_pct > 20} />
                                         </div>
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1201,7 +1168,7 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
                                     </>
                                 )}
 
-                                {currentColStats.type === 'categorical' && (
+                                {(currentColStats.type === 'discrete' || currentColStats.type === 'categorical') && (
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                         <StatCard label="Total lignes" value={currentColStats.metrics.count} />
                                         <StatCard label="Valeurs uniques" value={currentColStats.metrics.uniques} accent={true} />
@@ -1219,17 +1186,8 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
                                     </div>
                                 )}
 
-                                {currentColStats.type === 'date' && (
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                        <StatCard label="Total lignes" value={currentColStats.metrics.count} />
-                                        <StatCard label="Début de période" value={currentColStats.metrics.min_date} accent={true} />
-                                        <StatCard label="Fin de période" value={currentColStats.metrics.max_date} />
-                                        <StatCard label="Amplitude" value={currentColStats.metrics.duration_days} subtitle="jours" />
-                                    </div>
-                                )}
-
                                 {/* Interpretation block */}
-                                {currentColStats.type === 'numeric' && (
+                                {currentColStats.type === 'continuous' && (
                                     <InterpretationBlock
                                         mean={currentColStats.metrics.mean}
                                         std={currentColStats.metrics.std}
@@ -1250,14 +1208,14 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
                                             </p>
                                         </div>
                                     )}
-                                    {currentColStats.type === 'numeric' && currentColStats.distribution && (
+                                    {currentColStats.type === 'continuous' && currentColStats.distribution && (
                                         <div className="h-80 w-full">
-                                            <ReactECharts 
-                                                option={currentColStats.distribution.length > 0 && currentColStats.distribution[0].range 
-                                                    ? getHistogramOption(currentColStats.distribution) 
-                                                    : getDiscreteOption(currentColStats.distribution)} 
-                                                style={{ height: '100%', width: '100%' }} 
-                                            />
+                                            <ReactECharts option={getHistogramOption(currentColStats.distribution)} style={{ height: '100%', width: '100%' }} />
+                                        </div>
+                                    )}
+                                    {currentColStats.type === 'discrete' && currentColStats.distribution && (
+                                        <div className="h-80 w-full">
+                                            <ReactECharts option={getDiscreteOption(currentColStats.distribution)} style={{ height: '100%', width: '100%' }} />
                                         </div>
                                     )}
                                     {currentColStats.type === 'categorical' && currentColStats.distribution && (
@@ -1300,16 +1258,37 @@ export default function Database({ addNotification }) {
     const [dataPreview, setDataPreview] = useState(null);
     const [loading, setLoading] = useState(true);
     const [activeToolTab, setActiveToolTab] = useState(null);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [isTableFullScreen, setIsTableFullScreen] = useState(false);
     const [pageSize, setPageSize] = useState(15);
 
+    const [sorting, setSorting] = useState([]);
+    const [globalFilter, setGlobalFilter] = useState('');
+    const [pagination, setPagination] = useState({
+        pageIndex: 0,
+        pageSize: pageSize
+    });
+
     const [selectedAnomalyCols, setSelectedAnomalyCols] = useState([]);
+    const [searchTerm, setSearchTerm] = useState('');
+
+    // Debounce search
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setGlobalFilter(searchTerm);
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [searchTerm]);
+
+    // Sync existing pageSize state
+    useEffect(() => {
+        setPagination(prev => ({ ...prev, pageSize }));
+    }, [pageSize]);
+
     const [anomalyMethod, setAnomalyMethod] = useState('zscore');
     const [anomalyThreshold, setAnomalyThreshold] = useState(3.0);
     const [anomalyResult, setAnomalyResult] = useState(null);
     const [anomalyLoading, setAnomalyLoading] = useState(false);
     const [isAnomalyBannerExpanded, setIsAnomalyBannerExpanded] = useState(false);
+    const [showAnomaliesOnly, setShowAnomaliesOnly] = useState(false);
 
     const [columnsInfo, setColumnsInfo] = useState([]);
     const [isSavingTypes, setIsSavingTypes] = useState(false);
@@ -1330,7 +1309,7 @@ export default function Database({ addNotification }) {
     const [totalPages, setTotalPages] = useState(1);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-    const gridRef = useRef(null);
+    // gridRef removed as per TanStack migration
 
     useEffect(() => {
         const handleResize = () => {
@@ -1359,6 +1338,147 @@ export default function Database({ addNotification }) {
             fetchColumnsInfo();
         }
     }, [dataPreview]);
+
+    // ─── TANSTACK TABLE LOGIC ────────────────────────
+
+    const columns = useMemo(() => {
+        if (!dataPreview?.columns || !dataPreview?.columns_info) return [];
+
+        let firstIdFound = false;
+
+        return dataPreview.columns.map((col) => {
+            const info = dataPreview.columns_info.find(i => i.name === col.field);
+            const isNumeric = info?.is_numeric;
+            const isCategorical = info?.dtype === 'String' || info?.dtype === 'Utf8';
+            let isId = info?.is_identifier === true;
+
+            if (isId) {
+                if (firstIdFound) {
+                    isId = false; // Only first ID is pinned
+                } else {
+                    firstIdFound = true;
+                }
+            }
+
+
+            let isLabelLike = false;
+            if (isCategorical && dataPreview.data && dataPreview.data.length > 0) {
+                // Optimization: sampled label-like check (first 50 rows only)
+                const samples = dataPreview.data.slice(0, 50).map(r => String(r[col.field] || ''));
+                const distinctSamples = new Set(samples).size;
+                isLabelLike = distinctSamples < 15;
+            }
+
+            return {
+                id: col.field,
+                accessorKey: col.field,
+                meta: { isNumeric, isLabelLike, isId, dtype: info?.dtype, typeBadge: getTypeBadge(info?.dtype) },
+
+                header: ({ column }) => {
+                    const badge = getTypeBadge(info?.dtype);
+                    const sorted = column.getIsSorted();
+                    return (
+                        <div
+                            onClick={column.getToggleSortingHandler()}
+                            className={`flex flex-col gap-0.5 cursor-pointer select-none group transition-colors ${isNumeric ? 'items-end' : 'items-start'}`}
+                        >
+                            <div className="flex items-center gap-1 w-full overflow-hidden">
+                                <span className="font-black text-[9px] uppercase tracking-tighter text-gray-500 group-hover:text-gray-900 transition-colors truncate">
+                                    {col.title}
+                                </span>
+                                <span className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    {sorted === 'asc' && <span className="text-bank-600 text-[9px] font-bold">↑</span>}
+                                    {sorted === 'desc' && <span className="text-bank-600 text-[9px] font-bold">↓</span>}
+                                    {!sorted && <span className="text-gray-200 text-[9px]">↕</span>}
+                                </span>
+                            </div>
+                            {badge && (
+                                <span className={`text-[7px] font-black px-1 py-0 rounded border leading-[1.2] tracking-tighter shadow-sm flex-shrink-0 max-w-fit ${badge.color}`}>
+                                    {badge.label}
+                                </span>
+                            )}
+                        </div>
+                    );
+                },
+
+                cell: ({ getValue }) => {
+                    const value = getValue();
+
+                    if (value === null || value === undefined || value === '')
+                        return <span className="text-gray-200 text-xs italic font-medium">—</span>;
+
+                    if (isId)
+                        return (
+                            <span className="text-gray-300 font-mono text-xs font-bold tabular-nums">
+                                {String(value)}
+                            </span>
+                        );
+
+                    if (isLabelLike) {
+                        const str = String(value);
+                        let hash = 0;
+                        for (let i = 0; i < str.length; i++)
+                            hash = str.charCodeAt(i) + ((hash << 5) - hash);
+                        const colorClasses = [
+                            'bg-indigo-50 text-indigo-600 border-indigo-100',
+                            'bg-emerald-50 text-emerald-600 border-emerald-100',
+                            'bg-slate-50 text-slate-600 border-slate-200',
+                            'bg-rose-50 text-rose-600 border-rose-100',
+                            'bg-amber-50 text-amber-600 border-amber-100',
+                            'bg-violet-50 text-violet-600 border-violet-100',
+                        ];
+                        const colorClass = colorClasses[Math.abs(hash) % colorClasses.length];
+                        return (
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${colorClass}`}>
+                                {str}
+                            </span>
+                        );
+                    }
+
+                    if (isNumeric) {
+                        const num = typeof value === 'number' ? value : parseFloat(value);
+                        const formatted = isNaN(num)
+                            ? String(value)
+                            : num.toLocaleString('fr-FR', { maximumFractionDigits: 4 });
+                        return (
+                            <span className="font-mono text-gray-800 font-semibold tabular-nums text-xs tracking-tight">
+                                {formatted}
+                            </span>
+                        );
+                    }
+
+                    return <span className="text-gray-600 text-xs font-medium">{String(value)}</span>;
+                }
+            };
+        });
+    }, [dataPreview]);
+
+    const anomalyIndices = useMemo(() => {
+        if (!anomalyResult?.anomalies) return new Set();
+        return new Set(anomalyResult.anomalies.map(a => a.row_index));
+    }, [anomalyResult]);
+
+    const tableData = useMemo(() => {
+        if (!dataPreview?.data) return [];
+        if (showAnomaliesOnly && anomalyResult?.anomalies) {
+            return dataPreview.data.filter((_, idx) => anomalyIndices.has(idx));
+        }
+        return dataPreview.data;
+    }, [dataPreview, showAnomaliesOnly, anomalyIndices]);
+
+    const table = useReactTable({
+        data: tableData,
+        columns,
+        state: { sorting, globalFilter, pagination },
+        onSortingChange: setSorting,
+        onGlobalFilterChange: setGlobalFilter,
+        onPaginationChange: setPagination,
+        getCoreRowModel: getCoreRowModel(),
+        getSortedRowModel: getSortedRowModel(),
+        getFilteredRowModel: getFilteredRowModel(),
+        getPaginationRowModel: getPaginationRowModel(),
+        manualPagination: false,
+    });
 
     const fetchDataPreview = async () => {
         setLoading(true);
@@ -1500,14 +1620,10 @@ export default function Database({ addNotification }) {
     };
 
     const handleReset = () => {
-        setSearchQuery('');
+        setGlobalFilter('');
         setPageSize(15);
         setActiveToolTab(null);
         setAnomalyResult(null);
-        if (gridRef.current?.api) {
-            gridRef.current.api.setGridOption('quickFilterText', '');
-            gridRef.current.api.paginationSetPageSize(15);
-        }
         addNotification("Interface réinitialisée.", "info");
     };
 
@@ -1544,32 +1660,8 @@ export default function Database({ addNotification }) {
         }
     };
 
-    useEffect(() => {
-        const handleKeyDown = (e) => {
-            if (e.key === 'Escape' && isTableFullScreen) {
-                setIsTableFullScreen(false);
-            }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isTableFullScreen]);
-
-    const handleImport = async (file) => {
-        if (!gridRef.current?.api) return;
-
-        const rowData = [];
-        gridRef.current.api.forEachNodeAfterFilter(node => {
-            rowData.push(node.data);
-        });
-    };
-
     const handleExport = (format) => {
-        if (!gridRef.current?.api) return;
-
-        const rowData = [];
-        gridRef.current.api.forEachNodeAfterFilter(node => {
-            rowData.push(node.data);
-        });
+        const rowData = table.getFilteredRowModel().rows.map(row => row.original);
 
         if (rowData.length === 0) {
             addNotification("Aucune donnée à exporter.", "warning");
@@ -1623,17 +1715,14 @@ export default function Database({ addNotification }) {
     };
 
     const handleGeneratePDF = async () => {
-        if (!gridRef.current?.api || !dataPreview?.columns || pdfSelectedCols.length === 0) {
+        if (!dataPreview?.columns || pdfSelectedCols.length === 0) {
             addNotification("Veuillez sélectionner au moins une colonne.", "warning");
             return;
         }
         setIsPDFGenerating(true);
 
         try {
-            const rowData = [];
-            gridRef.current.api.forEachNodeAfterFilter(node => {
-                if (node.data) rowData.push(node.data);
-            });
+            const rowData = table.getFilteredRowModel().rows.map(row => row.original);
 
             if (rowData.length === 0) {
                 addNotification("Aucune donnée à exporter.", "warning");
@@ -1677,68 +1766,34 @@ export default function Database({ addNotification }) {
         }
     };
 
-    const colDefs = useMemo(() => {
-        if (!dataPreview?.columns) return [];
-        return dataPreview.columns.map((col, idx) => ({
-            field: col.field,
-            headerName: col.title,
-            sortable: true,
-            filter: true,
-            resizable: true,
-            headerComponent: (props) => {
-                const sType = col.semantic_type || (col.is_identifier ? 'identifier' : (col.is_numeric ? 'numeric' : 'categorical'));
-                const config = TYPE_CONFIG[sType] || TYPE_CONFIG.categorical;
-                return (
-                    <div className="flex flex-col leading-none py-1">
-                        <span className="text-[11px] font-black text-slate-800 uppercase tracking-tight truncate mb-0.5">
-                            {props.displayName}
-                        </span>
-                        <span className={`text-[8px] font-extrabold uppercase tracking-[0.1em] px-1.5 py-0.5 rounded-md ${config.color}`}>
-                            {config.label}
-                        </span>
-                    </div>
-                );
-            },
-            width: col.is_identifier ? 100 : 180,
-            pinned: (col.is_identifier || (isMobile && idx === 0)) ? 'left' : null,
-            cellClass: (params) => {
-                const classes = ["text-xs"];
-                if (col.is_identifier) classes.push('text-gray-400 font-medium');
-                else if (col.is_numeric) classes.push('justify-end font-mono text-gray-900');
-                else classes.push('text-slate-600 font-medium');
+    // colDefs removed
 
-                if (params.data && anomalyResult?.anomalous_ids?.includes(params.data.id) && selectedAnomalyCols.includes(col.field)) {
-                    classes.push('!bg-amber-100 !text-amber-900 font-bold');
-                }
-                return classes.join(' ');
-            },
-            valueFormatter: (params) => {
-                if (col.is_numeric && params.value != null) {
-                    return params.value.toLocaleString();
-                }
-                return params.value;
+    // rowClassRules removed
+
+    const handleSuggestTypesAI = async () => {
+        setIsSavingTypes(true);
+        try {
+            const res = await customFetch('/api/database/ai-suggest-types');
+            const data = await res.json();
+            if (res.ok && data.status === 'success') {
+                const recs = data.recommendations;
+                setColumnsInfo(prev => prev.map(col => {
+                    const rec = recs.find(r => r.column === col.name);
+                    if (rec) {
+                        return { ...col, target_type: rec.recommended_type };
+                    }
+                    return col;
+                }));
+                addNotification("Recommendations IA appliquées. N'oubliez pas d'enregistrer.", "info");
+            } else {
+                addNotification(data.message || "Échec de l'analyse IA", "error");
             }
-        }));
-    }, [dataPreview, anomalyResult, selectedAnomalyCols, isMobile]);
-
-    const rowClassRules = useMemo(() => ({
-        'border-l-4 border-l-rose-500 bg-rose-50/20': (params) => {
-            if (!anomalyResult?.anomalies) return false;
-            return anomalyResult.anomalies.some(a => a.row_index === params.node.rowIndex);
-        },
-    }), [anomalyResult]);
-
-    const onGridReady = (params) => {
-        params.api.sizeColumnsToFit();
+        } catch (e) {
+            addNotification("Erreur lors de la suggestion IA", "error");
+        } finally {
+            setIsSavingTypes(false);
+        }
     };
-
-    const defaultColDef = useMemo(() => ({
-        sortable: true,
-        filter: true,
-        resizable: true,
-        flex: 1,
-        minWidth: 100,
-    }), []);
 
     const handleDeleteData = async () => {
         try {
@@ -1756,12 +1811,7 @@ export default function Database({ addNotification }) {
         }
     };
 
-    const onPaginationChanged = () => {
-        if (gridRef.current?.api) {
-            setCurrentPage((gridRef.current.api.paginationGetCurrentPage() || 0) + 1);
-            setTotalPages(gridRef.current.api.paginationGetTotalPages() || 1);
-        }
-    };
+    // gridRef based pagination handlers removed
 
     if (loading) {
         return (
@@ -1789,117 +1839,163 @@ export default function Database({ addNotification }) {
                 onDelete={() => setShowDeleteConfirm(true)}
                 onExport={handleExport}
             />
-            
-            <div className={`bg-white transition-all duration-300 ease-in-out ${isTableFullScreen ? 'fixed inset-0 z-[100] flex flex-col' : 'rounded-3xl shadow-2xl shadow-bank-100 overflow-hidden border border-bank-100'}`}>
-                <Toolbar
-                    searchQuery={searchQuery}
-                    setSearchQuery={setSearchQuery}
-                    pageSize={pageSize}
-                    setPageSize={setPageSize}
-                    totalRows={dataPreview?.total_rows}
-                    loadedRows={dataPreview?.data?.length}
-                    gridRef={gridRef}
-                    isTableFullScreen={isTableFullScreen}
-                    setIsTableFullScreen={setIsTableFullScreen}
-                />
 
-                <div className={`ag-theme-quartz ${isTableFullScreen ? 'flex-1' : 'h-[600px] border-b border-gray-100'}`}>
-                    <AgGridReact
-                        ref={gridRef}
-                        rowData={dataPreview?.data}
-                        columnDefs={colDefs}
-                        defaultColDef={defaultColDef}
-                        onGridReady={onGridReady}
-                        pagination={true}
-                        paginationPageSize={pageSize}
-                        onPaginationChanged={onPaginationChanged}
-                        quickFilterText={searchQuery}
-                        rowClassRules={rowClassRules}
-                    />
-                </div>
-            </div>
+            <Toolbar
+                searchQuery={searchTerm}
+                setSearchQuery={setSearchTerm}
+                pageSize={pageSize}
+                setPageSize={(val) => {
+                    setPageSize(val);
+                    table?.setPageSize?.(val);
+                }}
+                totalRows={table?.getFilteredRowModel?.()?.rows?.length || 0}
+                loadedRows={dataPreview?.data?.length}
+            />
 
-            {!isTableFullScreen && (
+            <div className="flex-1 flex flex-col relative overflow-hidden bg-gray-50">
                 <AnomalyBanner
                     anomalyResult={anomalyResult}
                     isExpanded={isAnomalyBannerExpanded}
                     setIsExpanded={setIsAnomalyBannerExpanded}
                     onExport={handleExportAnomalies}
                 />
-            )}
 
-            {/* MODALS */}
-            <VariablesModal
-                isOpen={activeToolTab === 'types'}
-                onClose={() => setActiveToolTab(null)}
-                columnsInfo={columnsInfo}
-                onTypeChange={handleTypeChange}
-                onSave={saveColumnTypes}
-                isSaving={isSavingTypes}
-            />
+                <div className="flex-1 overflow-auto rounded-t-2xl border-x border-t border-gray-100 shadow-sm relative mx-4 mt-2 mb-0 bg-white scrollbar-thin">
+                    <table className="w-full border-collapse">
+                        <thead className="sticky top-0 z-10">
+                            {table?.getHeaderGroups?.()?.map(hg => (
+                                <tr key={hg.id}>
+                                    {hg.headers.map((header, i) => {
+                                        const meta = header.column.columnDef.meta;
+                                        return (
+                                            <th
+                                                key={header.id}
+                                                className={`px-4 py-2 bg-gray-50 border-b-2 border-gray-100 first:border-l-0 last:border-r-0 ${i > 0 ? 'border-l border-gray-100' : ''} ${meta?.isId ? 'w-16 min-w-[64px]' : 'min-w-[100px]'} ${meta?.isNumeric ? 'text-right' : 'text-left'} ${meta?.isId ? 'sticky left-0 top-0 z-30 bg-gray-50 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]' : 'sticky top-0 z-20 bg-gray-50'}`}
+                                            >
+                                                {flexRender(header.column.columnDef.header, header.getContext())}
+                                            </th>
+                                        );
+                                    })}
+                                </tr>
+                            ))}
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                            {table?.getRowModel?.()?.rows?.map((row, rowIdx) => {
+                                const originalIdx = row.index;
+                                const isAnomaly = anomalyIndices.has(originalIdx);
+                                const isFaded = anomalyResult && !isAnomaly && !showAnomaliesOnly;
+                                const isEven = rowIdx % 2 === 0;
 
-            <AnomaliesModal
-                isOpen={activeToolTab === 'anomalies'}
-                onClose={() => setActiveToolTab(null)}
-                columns={dataPreview?.columns}
-                selectedCols={selectedAnomalyCols}
-                onToggleCol={(field) => {
-                    setSelectedAnomalyCols(prev => prev.includes(field) ? prev.filter(f => f !== field) : [...prev, field]);
-                }}
-                method={anomalyMethod}
-                setMethod={setAnomalyMethod}
-                threshold={anomalyThreshold}
-                setThreshold={setAnomalyThreshold}
-                onAnalyze={handleAnalyzeAnomalies}
-                isLoading={anomalyLoading}
-                hasResult={!!anomalyResult}
-                onReopenBanner={() => { setIsAnomalyBannerExpanded(true); setActiveToolTab(null); }}
-            />
+                                return (
+                                    <tr
+                                        key={row.id}
+                                        className={`group transition-all duration-100 ${isAnomaly ? 'bg-rose-50/80 border-l-[3px] border-l-rose-400 hover:bg-rose-50' : isEven ? 'bg-white hover:bg-violet-50/30' : 'bg-gray-50/50 hover:bg-violet-50/30'} ${isFaded ? 'opacity-25' : ''}`}
+                                    >
+                                        {row.getVisibleCells().map((cell, cellIdx) => {
+                                            const meta = cell.column.columnDef.meta;
+                                            return (
+                                                <td
+                                                    key={cell.id}
+                                                    className={`px-4 py-2.5 text-xs ${cellIdx > 0 ? 'border-l border-gray-50' : ''} ${meta?.isNumeric ? 'text-right' : 'text-left'} ${meta?.isId ? `sticky left-0 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.04)] bg-inherit group-hover:bg-violet-50/30` : ''}`}
+                                                >
+                                                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                </td>
+                                            );
+                                        })}
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
 
-            <CalculatedFieldsModal
-                isOpen={activeToolTab === 'expression'}
-                onClose={() => setActiveToolTab(null)}
-                columns={dataPreview?.columns}
-                onAdd={handleAddExpression}
-                isLoading={expressionLoading}
-                error={expressionError}
-            />
+                    {table?.getRowModel?.()?.rows?.length === 0 && (
+                        <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+                            <div className="w-16 h-16 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-center mb-4">
+                                <Search size={24} className="opacity-30" />
+                            </div>
+                            <p className="text-sm font-bold text-gray-500 uppercase tracking-tighter">Aucun résultat</p>
+                            <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase tracking-widest">Essayez de modifier votre recherche</p>
+                        </div>
+                    )}
+                </div>
 
-            <PDFExportModal
-                isOpen={isPDFExportModalOpen}
-                onClose={() => setIsPDFExportModalOpen(false)}
-                columns={dataPreview?.columns || []}
-                selectedCols={pdfSelectedCols}
-                onToggleCol={(field) => {
-                    if (field === 'all') setPdfSelectedCols((dataPreview?.columns || []).map(c => c.field));
-                    else if (field === 'none') setPdfSelectedCols([]);
-                    else setPdfSelectedCols(prev => prev.includes(field) ? prev.filter(f => f !== field) : [...prev, field]);
-                }}
-                onGenerate={handleGeneratePDF}
-                isLoading={isPDFGenerating}
-            />
+                {/* MODALS */}
+                <VariablesModal
+                    isOpen={activeToolTab === 'types'}
+                    onClose={() => setActiveToolTab(null)}
+                    columnsInfo={columnsInfo}
+                    onTypeChange={(col, type) => {
+                        setColumnsInfo(prev => prev.map(c => c.name === col ? { ...c, target_type: type } : c));
+                    }}
+                    onRecommendAI={handleSuggestTypesAI}
+                    onSave={saveColumnTypes}
+                    isSaving={isSavingTypes}
+                />
 
-            <StatisticsModal
-                isOpen={isStatsModalOpen}
-                onClose={() => setIsStatsModalOpen(false)}
-                columns={dataPreview?.columns || []}
-            />
+                <AnomaliesModal
+                    isOpen={activeToolTab === 'anomalies'}
+                    onClose={() => setActiveToolTab(null)}
+                    columns={dataPreview?.columns}
+                    selectedCols={selectedAnomalyCols}
+                    onToggleCol={(field) => {
+                        setSelectedAnomalyCols(prev => prev.includes(field) ? prev.filter(f => f !== field) : [...prev, field]);
+                    }}
+                    method={anomalyMethod}
+                    setMethod={setAnomalyMethod}
+                    threshold={anomalyThreshold}
+                    setThreshold={setAnomalyThreshold}
+                    onAnalyze={handleAnalyzeAnomalies}
+                    isLoading={anomalyLoading}
+                    hasResult={!!anomalyResult}
+                    onReopenBanner={() => { setIsAnomalyBannerExpanded(true); setActiveToolTab(null); }}
+                />
 
-            <MathWarningModal
-                isOpen={!!mathWarning}
-                onClose={() => setMathWarning(null)}
-                warning={mathWarning}
-                onConfirm={handleAddExpression}
-                isLoading={expressionLoading}
-            />
+                <CalculatedFieldsModal
+                    isOpen={activeToolTab === 'expression'}
+                    onClose={() => setActiveToolTab(null)}
+                    columns={dataPreview?.columns}
+                    onAdd={handleAddExpression}
+                    isLoading={expressionLoading}
+                    error={expressionError}
+                />
+
+                <PDFExportModal
+                    isOpen={isPDFExportModalOpen}
+                    onClose={() => setIsPDFExportModalOpen(false)}
+                    columns={dataPreview?.columns}
+                    selectedCols={pdfSelectedCols}
+                    onToggleCol={(field) => {
+                        if (field === 'all') setPdfSelectedCols(dataPreview.columns.map(c => c.field));
+                        else if (field === 'none') setPdfSelectedCols([]);
+                        else setPdfSelectedCols(prev => prev.includes(field) ? prev.filter(f => f !== field) : [...prev, field]);
+                    }}
+                    onGenerate={handleGeneratePDF}
+                    isLoading={isPDFGenerating}
+                />
+
+                <StatisticsModal
+                    isOpen={isStatsModalOpen}
+                    onClose={() => setIsStatsModalOpen(false)}
+                    columns={dataPreview?.columns || []}
+                />
+
+                <MathWarningModal
+                    isOpen={!!mathWarning}
+                    onClose={() => setMathWarning(null)}
+                    warning={mathWarning}
+                    onConfirm={handleAddExpression}
+                    isLoading={expressionLoading}
+                />
+
+            </div>
 
             <Footer
-                currentPage={currentPage}
-                totalPages={totalPages}
+                currentPage={(table?.getState?.()?.pagination?.pageIndex || 0) + 1}
+                totalPages={table?.getPageCount?.() || 1}
                 pageSize={pageSize}
                 totalRows={dataPreview?.total_rows}
-                loadedRows={dataPreview?.data?.length}
-                gridRef={gridRef}
+                loadedRows={table?.getFilteredRowModel?.()?.rows?.length || 0}
+                table={table}
                 isMobile={isMobile}
             />
 
@@ -1940,6 +2036,13 @@ export default function Database({ addNotification }) {
                     </div>
                 </div>
             )}
+
+            <button
+                onClick={() => handleOpenToolTab('anomalies')}
+                className="fixed bottom-20 right-6 w-14 h-14 bg-bank-600 text-white rounded-2xl shadow-2xl flex items-center justify-center md:hidden z-40 active:scale-90 transition-all"
+            >
+                <Sparkles className="w-6 h-6 animate-pulse" />
+            </button>
         </div>
     );
 }

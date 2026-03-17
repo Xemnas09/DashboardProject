@@ -89,6 +89,36 @@ async def save_upload_chunked(upload_file, dest_path: str) -> int:
     return total
 
 
+def classify_column(series: pl.Series) -> str:
+    """
+    Unified classification rule for column types.
+    Identifies 'identifier' based on uniqueness and naming hints.
+    """
+    dtype = series.dtype
+    is_int = dtype in (pl.Int8, pl.Int16, pl.Int32, pl.Int64,
+                       pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64)
+    is_float = dtype in (pl.Float32, pl.Float64)
+
+    if is_int or is_float:
+        total = len(series)
+        if total == 0:
+            return "continuous"
+        unique_ratio = series.n_unique() / total
+        name_lower = series.name.lower()
+        name_hints = any(kw in name_lower for kw in
+                         ['id', 'index', 'idx', 'key', 'code', 'num', 'no'])
+        # Identifier if: near-unique values OR name strongly suggests ID
+        if unique_ratio > 0.95 or (unique_ratio > 0.80 and name_hints):
+            return "identifier"
+        if is_int and series.n_unique() <= 20:
+            return "discrete"
+        return "continuous"
+
+    if dtype == pl.Boolean:
+        return "boolean"
+    return "categorical"
+
+
 # ---------------------------------------------------------------------------
 # Schema Inference & Application
 # ---------------------------------------------------------------------------
@@ -191,10 +221,14 @@ def process_file_preview(
         # 4. Format for UI response
         columns_info = []
         for col in df.columns:
+            series = df[col]
+            col_type = classify_column(series)
             columns_info.append({
                 'name': col,
-                'dtype': str(df[col].dtype),
-                'is_numeric': df[col].dtype.is_numeric(),
+                'dtype': str(series.dtype),
+                'is_numeric': series.dtype.is_numeric(),
+                'is_identifier': col_type == "identifier",
+                'type': col_type
             })
 
         df_preview = df.head(row_limit)

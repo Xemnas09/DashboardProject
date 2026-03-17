@@ -165,7 +165,7 @@ async def logout(request: Request, response: Response) -> dict[str, str]:
                 
             cache_id = payload.get("cache_id")
             if cache_id:
-                from main import cache_manager
+                from services.data_cache import cache_manager
                 await cache_manager.delete(cache_id)
             
             username = payload.get("sub")

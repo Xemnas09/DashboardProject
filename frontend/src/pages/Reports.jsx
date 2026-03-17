@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
-import { AgGridReact } from 'ag-grid-react';
-import { ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
-import 'ag-grid-community/styles/ag-grid.css';
-import 'ag-grid-community/styles/ag-theme-quartz.css';
-
-ModuleRegistry.registerModules([AllCommunityModule]);
-import { BarChart3, Settings2, Download, Table as TableIcon, AlertCircle, Database as DatabaseIcon, Filter, X as XIcon, Sparkles, GripVertical, Plus, X, Search, Check, ChevronDown } from 'lucide-react';
+import {
+    useReactTable,
+    getCoreRowModel,
+    getPaginationRowModel,
+    flexRender,
+} from '@tanstack/react-table';
+import { BarChart3, Settings2, Download, Table as TableIcon, AlertCircle, Database as DatabaseIcon, Filter, X as XIcon, Sparkles, GripVertical, Plus, X, Search, Check, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { customFetch } from '../features/auth/session';
@@ -867,24 +867,32 @@ export default function Reports({ addNotification }) {
     };
     generatePivotRef.current = generatePivot;
 
-    const pivotColDefs = useMemo(() => {
-        if (!pivotData || !pivotData.headers) return [];
-        return pivotData.headers.map((h, i) => ({
-            field: h,
-            headerName: h,
-            filter: true,
-            sortable: true,
-            resizable: true,
-            valueFormatter: (params) => {
-                if (params.data?.isTotalRow && i === 0) return 'TOTAL';
-                return params.value;
+    const pivotTable = useReactTable({
+        data: pivotData?.data || [],
+        columns: useMemo(() => {
+            if (!pivotData || !pivotData.headers) return [];
+            return pivotData.headers.map((h, i) => ({
+                accessorKey: h,
+                header: h,
+                cell: info => {
+                    const value = info.getValue();
+                    const isTotal = info.row.original.isTotalRow;
+                    if (isTotal && i === 0) return <span className="font-black text-bank-900">TOTAL</span>;
+                    return value;
+                },
+                meta: {
+                    isTotal: pivotData?.headers && i >= pivotRows.length
+                }
+            }));
+        }, [pivotData, pivotRows]),
+        getCoreRowModel: getCoreRowModel(),
+        getPaginationRowModel: getPaginationRowModel(),
+        initialState: {
+            pagination: {
+                pageSize: 20,
             },
-            cellClassRules: {
-                'bg-bank-50 font-black text-bank-900 border-t-2 border-bank-200': (params) => params.data?.isTotalRow,
-                'bg-gray-50/30 text-bank-700 font-bold border-l border-gray-100': (params) => i >= pivotRows.length && !params.data?.isTotalRow
-            }
-        }));
-    }, [pivotData, pivotRows]);
+        },
+    });
 
     if (loading) {
         return <div className="p-8 flex items-center justify-center h-full"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-bank-600"></div></div>;
@@ -1102,16 +1110,63 @@ export default function Reports({ addNotification }) {
                             </div>
 
                             {pivotData ? (
-                                <div className="ag-theme-quartz" style={{ width: '100%', height: '600px' }}>
-                                    <AgGridReact
-                                        rowData={pivotData.data}
-                                        columnDefs={pivotColDefs}
-                                        pagination={true}
-                                        paginationPageSize={20}
-                                        animateRows={true}
-                                        onGridReady={(params) => params.api.sizeColumnsToFit()}
-                                    />
-                                </div>
+                                <>
+                                    <div className="flex-1 overflow-auto bg-white scrollbar-thin">
+                                        <table className="w-full border-collapse">
+                                            <thead className="sticky top-0 z-10 bg-gray-50 border-b border-gray-200">
+                                                {pivotTable.getHeaderGroups().map(hg => (
+                                                    <tr key={hg.id}>
+                                                        {hg.headers.map(header => (
+                                                            <th key={header.id} className="px-4 py-3 text-left text-[11px] font-black text-gray-900 uppercase tracking-tight border-r border-gray-100 last:border-r-0">
+                                                                {flexRender(header.column.columnDef.header, header.getContext())}
+                                                            </th>
+                                                        ))}
+                                                    </tr>
+                                                ))}
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-50">
+                                                {pivotTable.getRowModel().rows.map(row => (
+                                                    <tr key={row.id} className={`hover:bg-violet-50/30 transition-colors ${row.original.isTotalRow ? 'bg-bank-50/80 border-t-2 border-bank-200 sticky bottom-0' : ''}`}>
+                                                        {row.getVisibleCells().map((cell, i) => (
+                                                            <td key={cell.id} className={`px-4 py-2.5 text-xs border-r border-gray-50 last:border-r-0 ${row.original.isTotalRow ? 'font-black text-bank-900' : i >= pivotRows.length ? 'text-bank-700 font-bold bg-gray-50/20' : 'text-gray-600 font-medium'}`}>
+                                                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                            </td>
+                                                        ))}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    {pivotData.data.length > 20 && (
+                                        <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+                                            <div className="flex items-center gap-4">
+                                                <div className="flex items-center gap-1">
+                                                    <button
+                                                        onClick={() => pivotTable.previousPage()}
+                                                        disabled={!pivotTable.getCanPreviousPage()}
+                                                        className="p-2 rounded-xl border border-gray-200 hover:bg-white disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+                                                    >
+                                                        <ChevronLeft size={16} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => pivotTable.nextPage()}
+                                                        disabled={!pivotTable.getCanNextPage()}
+                                                        className="p-2 rounded-xl border border-gray-200 hover:bg-white disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+                                                    >
+                                                        <ChevronRight size={16} />
+                                                    </button>
+                                                </div>
+                                                <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">
+                                                    Page <span className="text-bank-600">{pivotTable.getState().pagination.pageIndex + 1}</span> sur {pivotTable.getPageCount()}
+                                                </span>
+                                            </div>
+                                            <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">
+                                                {pivotData.rowCount} lignes au total
+                                            </span>
+                                        </div>
+                                    )}
+                                </>
                             ) : (
                                 <div className="flex-1 flex flex-col items-center justify-center py-20 text-gray-400">
                                     <div className="w-24 h-24 bg-gray-50 rounded-3xl flex items-center justify-center mb-6 border border-gray-100 shadow-inner">

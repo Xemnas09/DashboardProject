@@ -91,6 +91,43 @@ class GeminiInterpreter:
             logger.error(f"[Gemini API - Recommend] Failed after {duration}ms | Error: {str(e)}")
             raise LLMUnavailableException()
 
+    async def recommend_column_types(self, samples_json: str, profiling_json: str, language: str) -> list[dict]:
+        """
+        Analyzes 100 sample rows AND statistical profiling to recommend the best Polars-compatible types.
+        """
+        if not self.api_key:
+            raise LLMUnavailableException()
+
+        prompt = (
+            f"Tu es un ingénieur de données et statisticien expert. Ta mission est de recommander le type de données le plus approprié "
+            f"pour chaque colonne d'un dataset, en te basant sur un échantillon et des métadonnées statistiques.\n\n"
+            f"--- ÉCHANTILLON (100 premières lignes) ---\n"
+            f"{samples_json}\n\n"
+            f"--- PROFILAGE STATISTIQUE (Stats par colonne) ---\n"
+            f"{profiling_json}\n\n"
+            f"--- RÈGLES DE DÉCISION ---\n"
+            f"1. Si une colonne a une cardinalité (unique_count) de 2, utilise 'Boolean' si les valeurs font sens (0/1, Oui/Non, True/False).\n"
+            f"2. Si une colonne contient des dates ou des timestamps, utilise 'Date' ou 'Datetime'.\n"
+            f"3. Si une colonne contient des nombres avec une précision décimale, utilise 'Float64'.\n"
+            f"4. S'il s'agit d'identifiants uniques (IDs) ou de codes, utilise 'String' pour éviter les erreurs de calcul.\n"
+            f"5. Si c'est du texte libre ou des catégories, utilise 'String'.\n\n"
+            f"Instruction: Renvoie UNIQUEMENT un JSON valide contenant une liste d'objets avec les clés 'column' et 'recommended_type'.\n"
+            f"Types autorisés: ['Int64', 'Float64', 'String', 'Boolean', 'Date', 'Datetime'].\n"
+            f"Réponds précisément dans cette langue pour les métadonnées: {language}."
+        )
+
+        try:
+            model = genai.GenerativeModel(self.model_name)
+            response = await model.generate_content_async(
+                prompt, 
+                generation_config=genai.GenerationConfig(response_mime_type="application/json")
+            )
+            import json
+            return json.loads(response.text.strip())
+        except Exception as e:
+            logger.error(f"[Gemini API - Precision Type Rec] Failed: {str(e)}")
+            raise LLMUnavailableException()
+
     async def summarize_anomalies(self, anomaly_count: int, anomaly_rate: float, method_used: str, flagged_columns_freq: dict, top_anomalies: list, language: str) -> str | None:
         if not self.api_key:
             return None

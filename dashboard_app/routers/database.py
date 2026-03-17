@@ -1,44 +1,44 @@
 """
-Database router: /api/database, /api/database/recast, /api/calculated-field, /api/anomalies, /api/database/stats.
+Database router: /api/database, /api/database/recast, /api/calculated-field
 """
-
 import os
-import time
+import shutil
+
 import polars as pl
 from fastapi import APIRouter, Request, Depends
 from loguru import logger
-from typing import Dict, List, Any, Optional
 
 from api.auth.schemas import TokenPayload
 from schemas.database import RecastRequest, ExpressionRequest
-from schemas.anomaly import AnomalyRequest, AnomalyResponse
 from core.dependencies import get_current_user, limiter
 from core.exceptions import ValidationException, NotFoundException, SessionExpiredException
-from services.file_processor import process_file_preview, read_cached_df, apply_filters
+from services.file_processor import (
+    validate_extension,
+    save_upload_chunked,
+    process_file_preview,
+    read_cached_df,
+    apply_filters,
+    classify_column
+)
 from services.expression_parser import parse_expression
 from services.notifications import notification_store
-from services.data_cache import cache_manager
-from services.column_classifier import classify_column
-from services.data_service import apply_recast, save_df_resilient
-from services.anomaly_detector import anomaly_detector
-from services.llm_interpreter import llm_interpreter
 
 router = APIRouter(tags=["Database"])
+_stats_cache = None
 
-# Global cache for statistics to avoid re-calculating on every request
-_stats_cache: Optional[Dict[str, Any]] = None
 
 def reset_stats_cache():
-    """Invalidates the global statistics cache."""
     global _stats_cache
     _stats_cache = None
 
-def _get_df(entry) -> pl.DataFrame:
-    """Helper to read the full dataframe from a cache entry or raise 404."""
+
+def _get_df(entry):
+    """Read the full dataframe from a cache entry."""
     df = read_cached_df(entry.filepath, entry.selected_sheet, entry.schema_overrides)
     if df is None:
         raise NotFoundException("Impossible de lire les données")
     return df
+
 
 # ---------------------------------------------------------------------------
 # GET /api/database
@@ -48,31 +48,27 @@ async def database_view(
     request: Request,
     user: TokenPayload = Depends(get_current_user),
 ):
-    """Returns a metadata preview of the current database state."""
+    from services.data_cache import cache_manager
     entry = await cache_manager.get(user.cache_id)
     if not entry:
         return {"status": "success", "data_preview": None}
 
-    # Guard: If sheet selection is required but not yet done
-    if entry.pending_sheets and not entry.selected_sheet:
-        return {"status": "success", "data_preview": None, "requires_sheet": True}
-
     df = _get_df(entry)
 
-    # Prepare Preview
+    # 2. Prepare Preview
     data_preview = {
-        'columns': [{
-            'field': c,
-            'title': c,
+        'columns': [{'field': c, 'title': c} for c in df.columns],
+        'columns_info': [{
+            'name': c,
             'dtype': str(df[c].dtype),
             'is_numeric': df[c].dtype.is_numeric(),
-            'semantic_type': classify_column(df[c]),
             'is_identifier': classify_column(df[c]) == "identifier",
         } for c in df.columns],
         'data': df.head(2000).to_dicts(),
         'total_rows': len(df),
     }
     return {"status": "success", "data_preview": data_preview}
+
 
 # ---------------------------------------------------------------------------
 # POST /api/database/recast
@@ -82,7 +78,7 @@ async def database_recast(
     body: RecastRequest,
     user: TokenPayload = Depends(get_current_user),
 ):
-    """Updates column types (casting) and persists changes to disk."""
+    from services.data_cache import cache_manager
     entry = await cache_manager.get(user.cache_id)
     if not entry:
         raise SessionExpiredException()
@@ -97,28 +93,115 @@ async def database_recast(
     if not modifications:
         return {"status": "success", "message": "Aucune modification"}
 
-    # 1. Load the raw dataframe
-    df = read_cached_df(filepath, selected_sheet)
-    if df is None:
-         raise ValidationException("Impossible de charger le fichier pour le retypage")
+    # Load the dataframe
+    if filepath.endswith('.csv'):
+        with open(filepath, 'rb') as f:
+            df = pl.read_csv(f.read(), ignore_errors=True)
+    elif filepath.endswith('.xlsx'):
+        if selected_sheet:
+            df = pl.read_excel(filepath, sheet_name=selected_sheet)
+        else:
+            df = pl.read_excel(filepath)
+    else:
+        raise ValidationException("Format non supporté")
 
-    # 2. Apply complex recast logic (Service Layer)
+    # Build cast expressions with defensive cleaning
+    expressions = []
+    logger.debug(f"Starting recast for {len(modifications)} columns [user={user.sub}]")
+    
+    for mod in modifications:
+        col_name = mod.column
+        target_type = mod.type
+        
+        if col_name not in df.columns:
+            continue
+            
+        # Base string representation for parsing
+        clean_str = pl.col(col_name).cast(pl.String).str.strip_chars()
+        
+        if target_type == 'String':
+            expressions.append(pl.col(col_name).cast(pl.String))
+            
+        elif target_type == 'Int64':
+            # Numeric cleanup: remove spaces, symbols, handle comma decimals
+            clean_num = clean_str.str.replace_all(r"[^\d.,\-]", "").str.replace(r",", ".")
+            expressions.append(
+                clean_num.cast(pl.Float64, strict=False).cast(pl.Int64, strict=False).alias(col_name)
+            )
+            
+        elif target_type == 'Float64':
+            clean_num = clean_str.str.replace_all(r"[^\d.,\-]", "").str.replace(r",", ".")
+            expressions.append(clean_num.cast(pl.Float64, strict=False).alias(col_name))
+            
+        elif target_type == 'Boolean':
+            lower = clean_str.str.to_lowercase()
+            expressions.append(
+                pl.when(lower.is_in(["1", "true", "vrai", "oui", "yes", "y", "t"]))
+                .then(True)
+                .when(lower.is_in(["0", "false", "faux", "non", "no", "n", "f"]))
+                .then(False)
+                .otherwise(None)
+                .cast(pl.Boolean)
+                .alias(col_name)
+            )
+            
+        elif target_type == 'Date':
+            # Attempt parsing. Polars handles many standard formats automatically.
+            expressions.append(clean_str.str.to_date(strict=False).alias(col_name))
+
+    if not expressions:
+        return {"status": "success", "message": "Aucune modification applicable"}
+
+    # Dry-run validation to ensure we don't wipe out columns entirely
     try:
-        df, warnings = apply_recast(df, modifications)
-    except ValueError as e:
-        raise ValidationException(str(e))
+        test_df = df.with_columns(expressions)
+    except Exception as e:
+        logger.error(f"Cast failure: {str(e)}")
+        raise ValidationException(f"Erreur technique lors de la conversion : {str(e)}")
 
-    # 3. Save modifications (Atomic/Resilient)
-    success = save_df_resilient(df, filepath, selected_sheet)
-    if not success:
-        raise ValidationException("Échec de l'enregistrement du fichier (verrouillage Windows)")
+    for mod in modifications:
+        col = mod.column
+        if col in df.columns:
+            # Check if we went from [some data] to [all nulls]
+            non_null_before = df.height - df[col].null_count()
+            non_null_after = test_df.height - test_df[col].null_count()
+            
+            if non_null_before > 0 and non_null_after == 0:
+                logger.warning(f"Cast rejected: Total data loss on column '{col}'")
+                raise ValidationException(
+                    f"Conversion impossible pour '{col}' : les données ne correspondent pas au format {mod.type}."
+                )
 
-    # 4. Update session metadata and cache
+    df = test_df
+
+    # Update schema overrides
     for mod in modifications:
         if mod.column in df.columns:
             entry.schema_overrides[mod.column] = mod.type
 
-    # Refresh the preview for the frontend
+    # Check for partial data loss warnings
+    warnings = []
+    for mod in modifications:
+        col = mod.column
+        if col in df.columns and df[col].null_count() > (df.height * 0.5):
+            warnings.append(f"Attention: >50% de données nulles dans '{col}' après conversion.")
+
+    # Save back to file (atomic)
+    temp_filepath = filepath + ".tmp"
+    if filepath.endswith('.csv'):
+        df.write_csv(temp_filepath)
+    elif filepath.endswith('.xlsx'):
+        df.write_excel(temp_filepath, worksheet=selected_sheet or 'Sheet1')
+
+    # Atomic replacement
+    backup_path = filepath + ".old"
+    if os.path.exists(backup_path):
+        os.remove(backup_path)
+    os.rename(filepath, backup_path)
+    os.rename(temp_filepath, filepath)
+    os.remove(backup_path)
+
+    # Refresh preview
     entry.preview = process_file_preview(
         filepath,
         sheet_name=selected_sheet,
@@ -140,18 +223,98 @@ async def database_recast(
         "notification": notif,
     }
 
+
 # ---------------------------------------------------------------------------
-# POST /api/database/expression (Legacy alias: /api/calculated-field)
+# GET /api/database/ai-suggest-types
 # ---------------------------------------------------------------------------
-@router.post("/api/calculated-field")  # Backward compatibility for tests
+@router.get("/api/database/ai-suggest-types")
+@limiter.limit("5/minute")
+async def ai_suggest_types(
+    request: Request,
+    user: TokenPayload = Depends(get_current_user),
+    language: str = "fr"
+):
+    from services.data_cache import cache_manager
+    from services.llm_interpreter import llm_interpreter
+    
+    logger.debug(f"AI Suggestion Request: user={user.sub}, cache_id={user.cache_id}")
+    entry = await cache_manager.get(user.cache_id)
+    
+    if not entry:
+        logger.warning(f"AI Suggestion failed: No cache entry found for cache_id={user.cache_id} [user={user.sub}]")
+        # Log all available cache IDs for debugging (Admin only context usually)
+        status = await cache_manager.status()
+        logger.debug(f"Current Cache Status: {status.get('entries')} entries available.")
+        raise SessionExpiredException()
+
+    logger.debug(f"Cache hit for AI Suggestion: filename={entry.filename}")
+
+    df = _get_df(entry)
+    
+    # Statistical Profiling
+    profiling = {}
+    for col in df.columns:
+        series = df[col]
+        stats = {
+            "null_count": int(series.null_count()),
+            "unique_count": int(series.n_unique()),
+            "dtype": str(series.dtype)
+        }
+        # Numeric stats for extra precision
+        if series.dtype.is_numeric():
+            try:
+                stats["min"] = float(series.min())
+                stats["max"] = float(series.max())
+                stats["mean"] = float(series.mean())
+            except:
+                pass
+        profiling[col] = stats
+
+    # Analyze first 100 rows
+    samples = df.head(100).to_dicts()
+    import json
+    samples_json = json.dumps(samples)
+    profiling_json = json.dumps(profiling)
+
+    ALLOWED_TYPES = ["Int64", "Float64", "String", "Boolean", "Date", "Datetime"]
+    try:
+        recommendations = await llm_interpreter.recommend_column_types(samples_json, profiling_json, language)
+        
+        # Defensive filtering: ensure the LLM returned a list of dicts with valid columns and types
+        if not isinstance(recommendations, list):
+            logger.error(f"AI Suggestion returned invalid format: {type(recommendations)}")
+            return {"status": "error", "message": "L'IA a renvoyé un format de réponse invalide."}
+
+        safe_recs = []
+        for r in recommendations:
+            if not isinstance(r, dict): continue
+            col = r.get("column")
+            recommended_type = r.get("recommended_type")
+            
+            if col in df.columns and recommended_type in ALLOWED_TYPES:
+                safe_recs.append(r)
+            else:
+                logger.warning(f"AI Suggestion filtered out: col={col}, type={recommended_type}")
+
+        logger.info(f"AI Suggestion successful: {len(safe_recs)} columns recommended [user={user.sub}]")
+        return {"status": "success", "recommendations": safe_recs}
+        
+    except Exception as e:
+        logger.error(f"AI Suggestion failed: {str(e)}")
+        return {"status": "error", "message": "L'IA n'a pas pu analyser les types."}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/database/expression
+# ---------------------------------------------------------------------------
 @router.post("/api/database/expression")
 @limiter.limit("20/minute")
-async def create_calculated_field(
+async def create_expression(
     request: Request,
     body: ExpressionRequest,
     user: TokenPayload = Depends(get_current_user),
 ):
-    """Creates a new calculated column from a string expression."""
+    from services.data_cache import cache_manager
     entry = await cache_manager.get(user.cache_id)
     if not entry:
         raise SessionExpiredException()
@@ -173,11 +336,14 @@ async def create_calculated_field(
         expr = parse_expression(expression, df.columns)
         new_series = df.select(expr.alias("__temp__")).get_column("__temp__")
         
-        # Mathematical Safety Check
+        # --- Mathematical Safety Check ---
         if not body.force:
-            # Check for NaN or Inf (common for div by zero)
-            total_issues = (new_series.is_null().sum() if not new_series.dtype.is_float() 
-                            else (new_series.is_nan().sum() + new_series.is_infinite().sum()))
+            # Check for NaN or Inf (common for div by zero or domain errors)
+            null_count = new_series.is_null().sum()
+            nan_count = new_series.is_nan().sum() if new_series.dtype.is_float() else 0
+            inf_count = new_series.is_infinite().sum() if new_series.dtype.is_float() else 0
+            
+            total_issues = nan_count + inf_count
             
             if total_issues > 0:
                 from fastapi.responses import JSONResponse
@@ -189,13 +355,17 @@ async def create_calculated_field(
                         "affected_rows": int(total_issues),
                         "total_rows": len(df),
                         "message": f"{total_issues} lignes produiront des erreurs mathématiques (NaN/Inf).",
-                        "details": "Cela arrive généralement lors de divisions par zéro ou d'opérations hors domaine."
+                        "details": "Cela arrive généralement lors de divisions par zéro ou d'opérations hors domaine (SQRT négatif, LOG(0))."
                     }
                 )
 
-        if body.force and new_series.dtype.is_float():
-            new_series = new_series.fill_nan(None)
-            new_series = pl.when(new_series.is_infinite()).then(None).otherwise(new_series)
+        # If force=True or no issues, proceed
+        if body.force:
+            # Replace NaN/Inf with null for consistency
+            if new_series.dtype.is_float():
+                new_series = new_series.fill_nan(None)
+                # Polars doesn't have a direct fill_inf, but we can use when/then
+                new_series = pl.when(new_series.is_infinite()).then(None).otherwise(new_series)
 
         df = df.with_columns(new_series.alias(new_col_name))
         
@@ -203,14 +373,16 @@ async def create_calculated_field(
         logger.error(f"Error parsing expression: {e}")
         raise ValidationException(f"Erreur de syntaxe ou de calcul: {str(e)}")
 
-    # Save changes (Service Layer)
-    success = save_df_resilient(df, entry.filepath, entry.selected_sheet)
-    if not success:
-         raise ValidationException("Échec de l'enregistrement du nouveau champ (verrouillage Windows)")
+    # Save back to file
+    filepath = entry.filepath
+    if filepath.endswith('.csv'):
+        df.write_csv(filepath)
+    elif filepath.endswith('.xlsx'):
+        df.write_excel(filepath)
 
-    # Refresh metadata
+    # Refresh preview
     entry.preview = process_file_preview(
-        entry.filepath,
+        filepath,
         sheet_name=entry.selected_sheet,
         schema_overrides=entry.schema_overrides,
     )
@@ -233,6 +405,10 @@ async def create_calculated_field(
 # ---------------------------------------------------------------------------
 # POST /api/anomalies
 # ---------------------------------------------------------------------------
+from schemas.anomaly import AnomalyRequest, AnomalyResponse
+from services.anomaly_detector import anomaly_detector
+from services.llm_interpreter import llm_interpreter
+
 @router.post("/api/anomalies", response_model=AnomalyResponse)
 @limiter.limit("20/minute")
 async def detect_anomalies(
@@ -240,7 +416,7 @@ async def detect_anomalies(
     body: AnomalyRequest,
     user: TokenPayload = Depends(get_current_user),
 ):
-    """Detects statistical outliers in the specified columns."""
+    from services.data_cache import cache_manager
     entry = await cache_manager.get(user.cache_id)
     if not entry: raise SessionExpiredException()
     
@@ -251,7 +427,7 @@ async def detect_anomalies(
     anomaly_count = len(anomalies)
     anomaly_rate = round((anomaly_count / total_rows) * 100, 2) if total_rows > 0 else 0
 
-    # LLM Interpretation of the results
+    # Préparation pour le LLM
     llm_summary = None
     if anomaly_count > 0:
         freqs = {}
@@ -259,7 +435,7 @@ async def detect_anomalies(
             for c in a["flagged_columns"]:
                 freqs[c] = freqs.get(c, 0) + 1
         
-        # Sample for the LLM
+        # Correction : Limiter aux 3 premières colonnes flaggées par ligne
         top_anomalies = [
             {c: a["values"][c] for c in a["flagged_columns"][:3]} 
             for a in anomalies[:3]
@@ -268,10 +444,6 @@ async def detect_anomalies(
         llm_summary = await llm_interpreter.summarize_anomalies(
             anomaly_count, anomaly_rate, body.method, freqs, top_anomalies, body.language
         )
-
-    # Persist anomaly count for dashboard
-    entry.last_anomaly_count = anomaly_count
-    await cache_manager.set(user.cache_id, entry)
 
     return {
         "status": "success",
@@ -284,6 +456,7 @@ async def detect_anomalies(
         "llm_summary": llm_summary
     }
 
+
 # ---------------------------------------------------------------------------
 # GET /api/database/stats
 # ---------------------------------------------------------------------------
@@ -291,21 +464,18 @@ async def detect_anomalies(
 async def get_column_stats(
     user: TokenPayload = Depends(get_current_user)
 ):
-    """Computes distribution and descriptive statistics for all columns."""
     global _stats_cache
     
     if _stats_cache is not None:
         return {"status": "success", "stats": _stats_cache}
 
+    from services.data_cache import cache_manager
     entry = await cache_manager.get(user.cache_id)
     if not entry:
         return {"status": "success", "stats": {}}
 
-    # Guard: If sheet selection is required but not yet done
-    if entry.pending_sheets and not entry.selected_sheet:
-        return {"status": "success", "stats": {}, "requires_sheet": True}
-
     df = _get_df(entry)
+
     stats = {}
     total_rows = len(df)
 
@@ -315,8 +485,9 @@ async def get_column_stats(
         null_pct = round((null_count / total_rows) * 100, 1) if total_rows > 0 else 0
         unique_count = int(series.n_unique())
         
-        # 1. Determine Semantic Type
+        # 1. Determine Type using unified logic
         col_type = classify_column(series)
+        is_identifier = col_type == "identifier"
         
         # 2. Base metrics
         metrics = {
@@ -324,6 +495,8 @@ async def get_column_stats(
             "nulls": null_count,
             "null_pct": null_pct,
             "uniques": unique_count,
+            "type": col_type,
+            "is_identifier": is_identifier,
         }
         
         dist_data = []
@@ -333,9 +506,10 @@ async def get_column_stats(
                 "min": float(series.min()) if series.dtype.is_numeric() else str(series.min()),
                 "max": float(series.max()) if series.dtype.is_numeric() else str(series.max()),
             })
+            # No dist needed for ID as per prompt
 
         elif col_type == "boolean":
-            # Dynamic label detection for Boolean columns
+            # Dynamic label detection
             modalities = series.drop_nulls().unique().to_list()
             if len(modalities) == 2:
                 m1, m2 = modalities[0], modalities[1]
@@ -370,8 +544,7 @@ async def get_column_stats(
                 "false_pct": round((false_count / non_null_count * 100), 1) if non_null_count > 0 else 0,
             })
 
-        elif col_type == "numeric":
-            # Descriptive stats for measures
+        elif col_type == "continuous":
             metrics.update({
                 "min": float(series.min()) if series.min() is not None else 0.0,
                 "max": float(series.max()) if series.max() is not None else 0.0,
@@ -382,7 +555,7 @@ async def get_column_stats(
                 "q3": float(series.quantile(0.75)) if series.quantile(0.75) is not None else 0.0,
             })
             
-            # Histogram generation
+            # Histogram
             clean_series = series.drop_nulls()
             if not clean_series.is_empty() and series.min() != series.max():
                 h_min, h_max = float(series.min()), float(series.max())
@@ -400,36 +573,15 @@ async def get_column_stats(
                         "range": f"{start:.1f}-{end:.1f}",
                         "count": int(dist_map.get(b_idx, 0))
                     })
-            
-            # Additional discrete-style stats for numeric variables
-            mode_list = series.mode().to_list()
-            mode_val = str(mode_list[0]) if mode_list else "—"
-            metrics.update({
-                "mode": mode_val,
-            })
-            
-            # If low cardinality, also provide a categorical-style distribution
-            unique_count = series.n_unique()
-            if unique_count <= 20:
-                counts = series.value_counts().sort(by="count", descending=True).head(10)
-                non_null_count = total_rows - null_count
-                for row in counts.to_dicts():
-                    val = row[col]
-                    if val is None: continue
-                    dist_data.append({
-                        "value": str(val),
-                        "count": int(row["count"]),
-                        "pct": round((int(row["count"]) / non_null_count * 100), 1) if non_null_count > 0 else 0
-                    })
         
-        elif col_type == "categorical":
+        elif col_type in ["discrete", "categorical"]:
             mode_list = series.mode().to_list()
             mode_val = str(mode_list[0]) if mode_list else "—"
             metrics.update({
                 "mode": mode_val,
             })
             
-            # Distribution: top 10 most frequent items
+            # Distribution Top 10
             counts = series.value_counts().sort(by="count", descending=True).head(10)
             non_null_count = total_rows - null_count
             for row in counts.to_dicts():
@@ -440,46 +592,6 @@ async def get_column_stats(
                     "count": int(row["count"]),
                     "pct": round((int(row["count"]) / non_null_count * 100), 1) if non_null_count > 0 else 0
                 })
-        
-        elif col_type == "date":
-            # Temporal metrics
-            clean_series = series.drop_nulls()
-            if not clean_series.is_empty():
-                min_date = clean_series.min()
-                max_date = clean_series.max()
-                
-                min_str = min_date.strftime("%Y-%m-%d") if hasattr(min_date, 'strftime') else str(min_date)
-                max_str = max_date.strftime("%Y-%m-%d") if hasattr(max_date, 'strftime') else str(max_date)
-                
-                try:
-                    duration_days = (max_date - min_date).days
-                except Exception:
-                    duration_days = "N/A"
-                
-                metrics.update({
-                    "min_date": min_str,
-                    "max_date": max_str,
-                    "duration_days": duration_days,
-                })
-
-                # Temporal distribution (auto-grouping by Year or Month)
-                try:
-                    if isinstance(duration_days, int):
-                        if duration_days > 1000:
-                            grouped = clean_series.dt.year().value_counts().sort("count", descending=True).head(15)
-                        else:
-                            grouped = clean_series.dt.strftime("%Y-%m").value_counts().sort("count", descending=True).head(15)
-                            
-                        non_null_count = total_rows - null_count
-                        for row in grouped.to_dicts():
-                            val = row[col]
-                            dist_data.append({
-                                "value": str(val),
-                                "count": int(row["count"]),
-                                "pct": round((int(row["count"]) / non_null_count * 100), 1) if non_null_count > 0 else 0
-                            })
-                except Exception as e:
-                    logger.error(f"Failed to calculate date distribution for {col}: {e}")
 
         stats[col] = {
             "type": col_type,

@@ -29,7 +29,7 @@ def _get_df(entry):
 # ---------------------------------------------------------------------------
 @router.get("/api/reports/columns")
 async def reports_columns(user: TokenPayload = Depends(get_current_user)):
-    from main import cache_manager
+    from services.data_cache import cache_manager
     entry = await cache_manager.get(user.cache_id)
     columns_info = []
 
@@ -52,7 +52,7 @@ async def reports_columns(user: TokenPayload = Depends(get_current_user)):
 # ---------------------------------------------------------------------------
 @router.get("/api/reports/unique-values")
 async def unique_values(column: str, user: TokenPayload = Depends(get_current_user)):
-    from main import cache_manager
+    from services.data_cache import cache_manager
     entry = await cache_manager.get(user.cache_id)
     if not entry:
         raise SessionExpiredException()
@@ -89,7 +89,7 @@ async def chart_data(
     body: ChartDataRequest,
     user: TokenPayload = Depends(get_current_user),
 ):
-    from main import cache_manager
+    from services.data_cache import cache_manager
     entry = await cache_manager.get(user.cache_id)
     if not entry:
         raise SessionExpiredException()
@@ -251,7 +251,7 @@ async def pivot_data(
     body: PivotDataRequest,
     user: TokenPayload = Depends(get_current_user),
 ):
-    from main import cache_manager
+    from services.data_cache import cache_manager
     entry = await cache_manager.get(user.cache_id)
     if not entry:
         raise SessionExpiredException()

@@ -67,7 +67,7 @@ async def upload_file(
         file_size_mb = round(os.path.getsize(filepath) / (1024 * 1024), 1)
 
     cache_id = user.cache_id
-    from main import cache_manager
+    from services.data_cache import cache_manager
 
     entry = CacheEntry(
         filepath=filepath,
@@ -113,7 +113,7 @@ async def select_sheet(
     body: SheetSelectRequest,
     user: TokenPayload = Depends(get_current_user),
 ):
-    from main import cache_manager
+    from services.data_cache import cache_manager
     entry = await cache_manager.get(user.cache_id)
     if not entry:
         raise ValidationException("Aucun fichier en attente")
@@ -178,7 +178,7 @@ async def sheet_preview(
 @router.post("/clear_data")
 @router.post("/api/clear_data")  # Add alias for consistency
 async def clear_data(user: TokenPayload = Depends(get_current_user)):
-    from main import cache_manager
+    from services.data_cache import cache_manager
     entry = await cache_manager.get(user.cache_id)
     if entry:
         # Delete file from disk
