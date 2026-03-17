@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Banque Dashboard{% endblock %}</title>
+    <!-- Fonts: Inter & Playfair Display -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;600;700&display=swap"
+        rel="stylesheet">
+
+    <!-- AG-Grid Community -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.1/styles/ag-grid.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.1/styles/ag-theme-quartz.css" />
+    <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.1/dist/ag-grid-community.min.js"></script>
+
+    <!-- External Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Modern Skeleton Loading Animation */
+        @keyframes shimmer {
+            0% {
+                background-position: -1000px 0;
+            }
+
+            100% {
+                background-position: 1000px 0;
+            }
+        }
+
+        .skeleton {
+            animation: shimmer 2s infinite linear;
+            background: linear-gradient(to right, #f3f4f6 4%, #e5e7eb 25%, #f3f4f6 36%);
+            background-size: 1000px 100%;
+        }
+
+        /* Customize Tabulator to match Tailwind */
+        .tabulator {
+            border: none !important;
+            background-color: white !important;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .tabulator-header {
+            background-color: #f9fafb !important;
+            /* bg-gray-50 */
+            border-bottom: 2px solid #e5e7eb !important;
+            color: #374151 !important;
+            /* text-gray-700 */
+            font-weight: 600 !important;
+        }
+
+        .tabulator-row {
+            background-color: white !important;
+            border-bottom: 1px solid #f3f4f6 !important;
+            color: #1f2937 !important;
+            /* text-gray-800 */
+        }
+
+        .tabulator-row:hover {
+            background-color: #f0f9ff !important;
+            /* hover:bg-bank-50 */
+        }
+
+        .tabulator-cell {
+            padding: 12px 16px !important;
+        }
+
+        /* Mobile responsive fix for Tabulator */
+        @media (max-width: 640px) {
+            .tabulator-cell {
+                padding: 8px 10px !important;
+                font-size: 0.875rem;
+            }
+        }
+
+        /* Global Animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeInRight {
+            from {
+                opacity: 0;
+                transform: translateX(-30px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes slowZoom {
+            from {
+                transform: scale(1);
+            }
+
+            to {
+                transform: scale(1.1);
+            }
+        }
+
+        .animate-fade-in-up {
+            animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            opacity: 0;
+        }
+
+        .animate-fade-in-right {
+            animation: fadeInRight 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            opacity: 0;
+        }
+
+        .animate-slow-zoom {
+            animation: slowZoom 20s ease-in-out infinite alternate;
+        }
+
+        .delay-100 {
+            animation-delay: 0.1s;
+        }
+
+        .delay-200 {
+            animation-delay: 0.2s;
+        }
+
+        .delay-300 {
+            animation-delay: 0.3s;
+        }
+
+        .delay-400 {
+            animation-delay: 0.4s;
+        }
+
+        .delay-500 {
+            animation-delay: 0.5s;
+        }
+
+        .delay-700 {
+            animation-delay: 0.7s;
+        }
+
+        :root {
+            /* Default Theme (Blue/Bank) */
+            --bank-50: #f0f9ff;
+            --bank-100: #e0f2fe;
+            --bank-200: #bae6fd;
+            --bank-300: #7dd3fc;
+            --bank-400: #38bdf8;
+            --bank-500: #0ea5e9;
+            --bank-600: #0284c7;
+            --bank-700: #0369a1;
+            --bank-800: #075985;
+            --bank-900: #0c4a6e;
+        }
+
+        [data-theme="red"] {
+            /* Societe Generale Style (Official Red #E10028) */
+            --bank-50: #fff1f2;
+            --bank-100: #ffe4e6;
+            --bank-200: #fecdd3;
+            --bank-300: #fda4af;
+            --bank-400: #fb7185;
+            --bank-500: #f43f5e;
+            --bank-600: #E10028;
+            /* Official SG Red */
+            --bank-700: #be123c;
+            --bank-800: #9f1239;
+            --bank-900: #1f2937;
+            /* Dark Slate for contrast */
+        }
+
+        [data-theme="violet"] {
+            /* Violet Theme */
+            --bank-50: #f5f3ff;
+            --bank-100: #ede9fe;
+            --bank-200: #ddd6fe;
+            --bank-300: #c4b5fd;
+            --bank-400: #a78bfa;
+            --bank-500: #8b5cf6;
+            --bank-600: #7c3aed;
+            --bank-700: #6d28d9;
+            --bank-800: #5b21b6;
+            --bank-900: #4c1d95;
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        serif: ['Playfair Display', 'serif'],
+                    },
+                    colors: {
+                        bank: {
+                            50: 'var(--bank-50)',
+                            100: 'var(--bank-100)',
+                            200: 'var(--bank-200)',
+                            300: 'var(--bank-300)',
+                            400: 'var(--bank-400)',
+                            500: 'var(--bank-500)',
+                            600: 'var(--bank-600)',
+                            700: 'var(--bank-700)',
+                            800: 'var(--bank-800)',
+                            900: 'var(--bank-900)',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom AG-Grid Theme Overrides to match Dashboard Theme */
+        .ag-theme-quartz {
+            --ag-active-color: var(--bank-600);
+            --ag-selected-row-background-color: var(--bank-50);
+            --ag-header-background-color: #f9fafb;
+            --ag-header-foreground-color: #374151;
+            --ag-font-family: 'Inter', sans-serif;
+        }
+    </style>
+    <script>
+            // Blocking script to avoid FOUC (Flash of Unstyled Content)
+            (function () {
+                const theme = localStorage.getItem('bank-theme') || 'default';
+                if (theme !== 'default') {
+                    document.documentElement.setAttribute('data-theme', theme);
+                }
+            })();
+    </script>
+    {% block extra_css %}{% endblock %}
+</head>
+
+<body class="bg-gray-50 font-sans antialiased text-gray-900 selection:bg-bank-200 selection:text-bank-900">
+
+    {% block app_background %}
+    <!-- Global Background Image (Subtle) -->
+    <div class="fixed inset-0 z-0 pointer-events-none">
+        <div
+            class="absolute inset-0 bg-[url('{{ url_for('static', filename='images/background.jpg') }}')] bg-cover bg-center opacity-5 mix-blend-multiply filter grayscale">
+        </div>
+
+        <div class="absolute inset-0 bg-gradient-to-br from-gray-50/80 to-gray-100/80 backdrop-blur-[1px]"></div>
+    </div>
+    {% endblock %}
+
+    <!-- Wrapper to ensure content is above background -->
+    <div class="relative z-10">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="fixed top-6 inset-x-0 flex flex-col items-center z-[100] space-y-3 pointer-events-none">
+            {% for category, message in messages %}
+            <div
+                class="notification group pointer-events-auto flex items-center gap-4 px-5 py-4 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.2)] bg-white border-l-4 {{ 'border-red-500' if category == 'error' else 'border-green-500' }} transform transition-all duration-500 ease-out translate-y-0 opacity-100 min-w-[320px] max-w-md animate-fade-in-up">
+                <div class="flex-shrink-0">
+                    {% if category == 'error' %}
+                    <div class="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center text-red-500">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                    {% else %}
+                    <div class="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center text-green-500">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="flex-1">
+                    <p class="text-sm font-bold text-gray-900 leading-tight">{{ 'Erreur' if category == 'error' else
+                        'Succès' }}</p>
+                    <p class="text-xs text-gray-500 mt-1">{{ message }}</p>
+                </div>
+                <button class="text-gray-300 hover:text-gray-500 transition-colors"
+                    onclick="this.parentElement.remove()">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            {% endfor %}
+            <script>
+                document.addEventListener('DOMContentLoaded', () => {
+                    const notes = document.querySelectorAll('.notification');
+                    notes.forEach(note => {
+                        setTimeout(() => {
+                            note.style.transform = 'translateY(-20px) scale(0.95)';
+                            note.style.opacity = '0';
+                            setTimeout(() => note.remove(), 500);
+                        }, 5000);
+                    });
+                });
+            </script>
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+
+        <!-- Settings Modal (Global) -->
+        <div id="settings-modal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title"
+            role="dialog" aria-modal="true">
+            <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"
+                    id="modal-backdrop"></div>
+                <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+                <div
+                    class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                    <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                        <div class="sm:flex sm:items-start">
+                            <div
+                                class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-bank-100 sm:mx-0 sm:h-10 sm:w-10">
+                                <svg class="h-6 w-6 text-bank-600" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                                </svg>
+                            </div>
+                            <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                                <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">Paramètres</h3>
+                                <div class="mt-4">
+                                    <p class="text-sm text-gray-500 mb-4">Personnalisez l'apparence de votre espace de
+                                        travail.</p>
+                                    <h4 class="text-sm font-semibold text-gray-700 mb-3">Thème Chromatique</h4>
+                                    <div class="grid grid-cols-3 gap-3">
+                                        <button
+                                            class="theme-btn flex flex-col items-center justify-center p-3 border-2 border-transparent hover:border-gray-200 rounded-lg focus:outline-none transition-all"
+                                            data-theme="default">
+                                            <div class="w-8 h-8 rounded-full bg-[#0ea5e9] mb-2 shadow-sm"></div>
+                                            <span class="text-xs font-medium text-gray-700">Classique</span>
+                                        </button>
+                                        <button
+                                            class="theme-btn flex flex-col items-center justify-center p-3 border-2 border-transparent hover:border-gray-200 rounded-lg focus:outline-none transition-all"
+                                            data-theme="red">
+                                            <div class="w-8 h-8 rounded-full bg-[#f43f5e] mb-2 shadow-sm"></div>
+                                            <span class="text-xs font-medium text-gray-700">Société G.</span>
+                                        </button>
+                                        <button
+                                            class="theme-btn flex flex-col items-center justify-center p-3 border-2 border-transparent hover:border-gray-200 rounded-lg focus:outline-none transition-all"
+                                            data-theme="violet">
+                                            <div class="w-8 h-8 rounded-full bg-[#8b5cf6] mb-2 shadow-sm"></div>
+                                            <span class="text-xs font-medium text-gray-700">Moderne</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                        <button type="button" id="save-modal"
+                            class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-bank-600 text-base font-medium text-white hover:bg-bank-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-bank-500 sm:ml-3 sm:w-auto sm:text-sm">Enregistrer</button>
+                        <button type="button" id="cancel-modal"
+                            class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-bank-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">Annuler</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Logout Modal -->
+        <div id="logout-modal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title"
+            role="dialog" aria-modal="true">
+            <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"
+                    id="logout-backdrop"></div>
+                <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+                <div
+                    class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                    <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                        <div class="sm:flex sm:items-start">
+                            <div
+                                class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+                                <svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                            </div>
+                            <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                                <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">Confirmer la
+                                    déconnexion</h3>
+                                <div class="mt-2">
+                                    <p class="text-sm text-gray-500">Êtes-vous sûr de vouloir vous déconnecter ?</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                        <button type="button" id="confirm-logout"
+                            class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm">Déconnexion</button>
+                        <button type="button" id="cancel-logout"
+                            class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-bank-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">Annuler</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            document.addEventListener('DOMContentLoaded', () => {
+                // --- Settings Modal & Theme Switcher ---
+                const modal = document.getElementById('settings-modal');
+                const saveBtn = document.getElementById('save-modal');
+                const cancelBtn = document.getElementById('cancel-modal');
+                const backdrop = document.getElementById('modal-backdrop');
+                const themeBtns = document.querySelectorAll('.theme-btn');
+                const root = document.documentElement;
+
+                // --- Logout Modal Logic ---
+                const logoutModal = document.getElementById('logout-modal');
+                const confirmLogoutBtn = document.getElementById('confirm-logout');
+                const cancelLogoutBtn = document.getElementById('cancel-logout');
+                const logoutBackdrop = document.getElementById('logout-backdrop');
+
+                // Event delegation for logout triggers (since they are in child templates)
+                document.body.addEventListener('click', (e) => {
+                    const trigger = e.target.closest('.logout-trigger');
+                    if (trigger) {
+                        e.preventDefault();
+                        logoutModal.classList.remove('hidden');
+                    }
+                });
+
+                function closeLogoutModal() {
+                    logoutModal.classList.add('hidden');
+                }
+
+                if (confirmLogoutBtn) {
+                    confirmLogoutBtn.addEventListener('click', () => {
+                        window.location.href = "{{ url_for('logout') }}";
+                    });
+                }
+
+                if (cancelLogoutBtn) cancelLogoutBtn.addEventListener('click', closeLogoutModal);
+                if (logoutBackdrop) logoutBackdrop.addEventListener('click', closeLogoutModal);
+
+                // Global settings link handler
+                document.body.addEventListener('click', (e) => {
+                    const link = e.target.closest('a[href="#"]');
+                    if (link && link.textContent.trim().includes('Paramètres')) {
+                        e.preventDefault();
+                        initialTheme = localStorage.getItem('bank-theme') || 'default';
+                        currentTempTheme = initialTheme;
+                        applyTheme(initialTheme); // Re-apply current to be safe
+                        modal.classList.remove('hidden');
+                    }
+                });
+
+                let initialTheme = localStorage.getItem('bank-theme') || 'default';
+                let currentTempTheme = initialTheme;
+
+                // Note: Initial theme application is handled by the head script to avoid FOUC.
+                // But we should still highlight the active button
+                updateActiveButton(initialTheme);
+
+                function applyTheme(theme) {
+                    if (theme === 'default') {
+                        root.removeAttribute('data-theme');
+                    } else {
+                        root.setAttribute('data-theme', theme);
+                    }
+                    updateActiveButton(theme);
+                }
+
+                function updateActiveButton(theme) {
+                    themeBtns.forEach(btn => {
+                        const btnTheme = btn.getAttribute('data-theme');
+                        if ((theme === 'default' && btnTheme === 'default') || theme === btnTheme) {
+                            btn.classList.add('border-bank-500');
+                            btn.classList.remove('border-transparent', 'hover:border-gray-200');
+                        } else {
+                            btn.classList.remove('border-bank-500');
+                            btn.classList.add('border-transparent', 'hover:border-gray-200');
+                        }
+                    });
+                }
+
+                function closeModal(save) {
+                    if (save) {
+                        localStorage.setItem('bank-theme', currentTempTheme);
+                        applyTheme(currentTempTheme);
+                    } else {
+                        applyTheme(initialTheme);
+                    }
+                    modal.classList.add('hidden');
+                }
+
+                if (saveBtn) saveBtn.addEventListener('click', () => closeModal(true));
+                if (cancelBtn) cancelBtn.addEventListener('click', () => closeModal(false));
+                if (backdrop) backdrop.addEventListener('click', () => closeModal(false));
+
+                themeBtns.forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const theme = btn.getAttribute('data-theme');
+                        currentTempTheme = theme;
+                        applyTheme(theme);
+                    });
+                });
+
+                // --- Global Notification Logic ---
+                const notifBtn = document.getElementById('notification-btn');
+                const notifDropdown = document.getElementById('notification-dropdown');
+                const notifContainer = document.getElementById('notification-container');
+                const notifList = notifDropdown ? notifDropdown.querySelector('.max-h-80, .max-h-64') : null;
+
+                // Function to add notification dynamically
+                window.addGlobalNotification = (notif) => {
+                    if (!notifList || !notifBtn) return;
+
+                    // Remove empty state if present
+                    const emptyState = notifList.querySelector('.text-center');
+                    if (emptyState) emptyState.remove();
+
+                    // Create HTML (Modern structure)
+                    const div = document.createElement('div');
+                    div.className = "px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors animate-fade-in-down group cursor-default";
+
+                    const catColor = notif.category === 'success' ? 'green' : (notif.category === 'error' ? 'red' : (notif.category === 'warning' ? 'amber' : 'blue'));
+
+                    div.innerHTML = `
+                        <div class="flex items-start gap-3">
+                            <div class="mt-1 flex-shrink-0">
+                                <div class="w-2 h-2 rounded-full bg-${catColor}-500"></div>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-800 leading-snug group-hover:text-gray-900">${notif.message}</p>
+                                <p class="text-[10px] text-gray-400 mt-1 flex items-center">
+                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    ${notif.time || 'À l\'instant'}
+                                </p>
+                            </div>
+                        </div>
+                    `;
+
+                    // Prepend
+                    notifList.insertBefore(div, notifList.firstChild);
+
+                    // Show Red Dot / Badge
+                    let dot = notifBtn.querySelector('.bg-red-500');
+                    if (!dot) {
+                        dot = document.createElement('span');
+                        dot.id = "notification-badge";
+                        dot.className = "absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white animate-pulse";
+                        notifBtn.appendChild(dot);
+                    }
+                };
+
+                if (notifBtn && notifDropdown) {
+                    notifBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        notifDropdown.classList.toggle('hidden');
+
+                        if (!notifDropdown.classList.contains('hidden')) {
+                            // Mark as read
+                            const dot = document.getElementById('notification-badge');
+                            if (dot) dot.remove();
+
+                            fetch("{{ url_for('mark_notifications_read') }}", { method: 'POST' });
+                        }
+                    });
+
+                    document.addEventListener('click', (e) => {
+                        if (notifContainer && !notifContainer.contains(e.target)) {
+                            notifDropdown.classList.add('hidden');
+                        }
+                    });
+                }
+
+                // --- Sidebar Logic (Global & Persistent) ---
+                const sidebar = document.getElementById('sidebar');
+                const sidebarToggle = document.getElementById('sidebar-toggle');
+                const sidebarTexts = document.querySelectorAll('.sidebar-text');
+                const sidebarTitle = document.getElementById('sidebar-title');
+
+                if (sidebarToggle && sidebar) {
+                    // Default state is expanded (HTML default), so no initial setup needed.
+                    // We removed localStorage persistence as per user request.
+
+                    sidebarToggle.addEventListener('click', () => {
+                        const isCollapsed = sidebar.classList.contains('w-20');
+                        const newState = !isCollapsed;
+                        setSidebarState(newState);
+                    });
+
+                    function setSidebarState(collapsed) {
+                        if (window.innerWidth >= 768) {
+                            if (collapsed) {
+                                sidebar.classList.remove('w-64');
+                                sidebar.classList.add('w-20');
+                                if (sidebarTitle) sidebarTitle.classList.add('opacity-0', 'w-0');
+                                sidebarTexts.forEach(el => el.classList.add('opacity-0', 'w-0', 'hidden'));
+                            } else {
+                                sidebar.classList.remove('w-20');
+                                sidebar.classList.add('w-64');
+                                if (sidebarTitle) sidebarTitle.classList.remove('opacity-0', 'w-0');
+                                sidebarTexts.forEach(el => {
+                                    el.classList.remove('opacity-0', 'w-0', 'hidden');
+                                });
+                            }
+                        } else {
+                            sidebar.classList.toggle('-translate-x-full');
+                        }
+                    }
+                }
+            });
+        </script>
+
+</body>
+
+</html>

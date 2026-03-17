@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="min-h-screen bg-transparent flex" id="app-container">
+    <!-- Sidebar -->
+    <!-- Sidebar -->
+    {% include 'includes/sidebar.html' %}
+
+
+    <main class="flex-1 flex flex-col min-w-0 bg-gray-50 overflow-hidden">
+        <!-- Header -->
+        <header class="bg-white shadow-sm h-16 flex items-center justify-between px-6 z-10">
+            <div class="flex items-center">
+                <button id="sidebar-toggle"
+                    class="text-gray-500 hover:text-bank-600 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-bank-500 p-2 rounded-md">
+                    <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 6h16M4 12h16M4 18h7" />
+                    </svg>
+                </button>
+                <div class="ml-4 hidden md:block">
+                    <h1 class="text-xl font-bold text-gray-900" style="font-family: 'Playfair Display', serif;">Tableau
+                        de Bord</h1>
+                    <p class="text-xs text-gray-500">Vue d'ensemble de votre activité et importations de fichiers</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-4">
+                <span class="text-sm text-gray-500 hidden sm:block" id="current-date"></span>
+                <div class="relative" id="notification-container">
+                    <button id="notification-btn"
+                        class="p-2 text-gray-400 hover:text-bank-600 transition-colors relative focus:outline-none">
+                        {% if session.get('has_unread') %}
+                        <span class="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full animate-pulse"></span>
+                        {% endif %}
+                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                        </svg>
+                    </button>
+
+                    <!-- Dropdown -->
+                    <div id="notification-dropdown"
+                        class="hidden absolute right-0 mt-2 w-80 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-gray-100 py-1 z-50 origin-top-right transform transition-all">
+                        <div class="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
+                            <h3 class="text-sm font-semibold text-gray-900">Notifications</h3>
+                            <span class="text-xs text-gray-500">{{ session.get('notifications', [])|length }}
+                                récentes</span>
+                        </div>
+                        <div class="max-h-64 overflow-y-auto">
+                            {% if session.get('notifications') %}
+                            {% for notif in session.get('notifications') %}
+                            <div
+                                class="px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors">
+                                <div class="flex justify-between items-start">
+                                    <p class="text-sm font-medium text-gray-800">{{ notif.message }}</p>
+                                    <span class="text-xs text-gray-400 whitespace-nowrap ml-2">{{ notif.time }}</span>
+                                </div>
+                                <p
+                                    class="text-xs text-{{ 'green' if notif.category == 'success' else 'bank' if notif.category == 'info' else 'yellow' }}-600 mt-1 capitalize">
+                                    {{ notif.category }}</p>
+                            </div>
+                            {% endfor %}
+                            {% else %}
+                            <div class="px-4 py-6 text-center text-gray-500 text-sm">
+                                Aucune nouvelle notification
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="max-w-7xl mx-auto space-y-8 animate-fade-in-up">
+            <!-- Welcome Section -->
+            <div
+                class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 flex justify-between items-center animate-fade-in-up delay-100">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-900">Bienvenue, {{ session.get('user', 'Utilisateur') |
+                        capitalize }}</h2>
+                    <p class="text-gray-500 mt-1">Voici un résumé de l'activité financière d'aujourd'hui.</p>
+                </div>
+                <div class="hidden md:block">
+                    <span
+                        class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-bank-100 text-bank-800">
+                        Dernière màj: <span class="ml-1" id="last-update">Aujourd'hui</span>
+                    </span>
+                </div>
+            </div>
+
+            <!-- KPI Cards (Static Demo) -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div
+                    class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow animate-fade-in-up delay-200">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500 uppercase tracking-wider">Transactions</p>
+                            <h3 class="text-3xl font-bold text-gray-900 mt-2">2,450</h3>
+                            <div class="mt-2 flex items-center text-sm">
+                                <span class="text-green-600 font-medium flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
+                                    </svg>
+                                    +12.5%
+                                </span>
+                                <span class="text-gray-400 ml-2">vs hier</span>
+                            </div>
+                        </div>
+                        <div class="p-3 bg-bank-50 rounded-lg text-bank-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <div
+                    class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow animate-fade-in-up delay-300">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500 uppercase tracking-wider">Volume Total</p>
+                            <h3 class="text-3xl font-bold text-gray-900 mt-2">45,230 €</h3>
+                            <div class="mt-2 flex items-center text-sm">
+                                <span class="text-green-600 font-medium flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
+                                    </svg>
+                                    +5.2%
+                                </span>
+                                <span class="text-gray-400 ml-2">vs hier</span>
+                            </div>
+                        </div>
+                        <div class="p-3 bg-green-50 rounded-lg text-green-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z">
+                                </path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <div
+                    class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow animate-fade-in-up delay-400">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500 uppercase tracking-wider">Nouveaux Clients
+                            </p>
+                            <h3 class="text-3xl font-bold text-gray-900 mt-2">12</h3>
+                            <div class="mt-2 flex items-center text-sm">
+                                <span class="text-gray-500 font-medium">Stable</span>
+                            </div>
+                        </div>
+                        <div class="p-3 bg-purple-50 rounded-lg text-purple-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z">
+                                </path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload Section -->
+            <div
+                class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-fade-in-up delay-500">
+                <div class="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+                    <h2 class="text-lg font-semibold text-gray-800">Importation de Données</h2>
+                    <span class="text-xs text-gray-500 bg-white border border-gray-200 px-2 py-1 rounded">ZIP, CSV,
+                        XLSX</span>
+                </div>
+                <div class="p-8">
+                    <form id="upload-form"
+                        class="relative border-2 border-dashed border-gray-300 rounded-lg p-12 text-center hover:border-bank-500 hover:bg-bank-50 transition-all duration-300 cursor-pointer group">
+                        <input type="file" name="file" id="file-input"
+                            class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+
+                        <div id="upload-ui">
+                            <div class="group-hover:scale-110 transform transition-transform duration-300 mb-4">
+                                <div
+                                    class="w-16 h-16 bg-bank-100 text-bank-600 rounded-full flex items-center justify-center mx-auto">
+                                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12">
+                                        </path>
+                                    </svg>
+                                </div>
+                            </div>
+                            <h3 class="text-lg font-medium text-gray-900 group-hover:text-bank-700">Glissez-déposez
+                                ou cliquez pour upload</h3>
+                            <p class="mt-2 text-sm text-gray-500 max-w-sm mx-auto">
+                                Analyse automatique par Polars.
+                            </p>
+                        </div>
+
+                        <!-- Upload Loading State (Hidden by default) -->
+                        <div id="upload-loading" class="hidden">
+                            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-bank-600 mx-auto mb-4">
+                            </div>
+                            <p class="text-bank-600 font-medium">Traitement en cours...</p>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Success Action Container -->
+            <div id="upload-success-container"
+                class="hidden bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-8 text-center transition-all duration-500 fade-in">
+                <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7">
+                        </path>
+                    </svg>
+                </div>
+                <h3 class="text-xl font-bold text-gray-900 mb-2">Importation Réussie !</h3>
+                <p class="text-gray-500 mb-6">Vos données ont été traitées et sont prêtes à être analysées.</p>
+
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+                    <a href="{{ url_for('database_view') }}"
+                        class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-bank-600 hover:bg-bank-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-bank-500 transition-colors w-full sm:w-auto justify-center font-semibold">
+                        <svg class="mr-2 -ml-1 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                        </svg>
+                        Voir la Base de Données
+                    </a>
+                    <a href="{{ url_for('reports') }}"
+                        class="inline-flex items-center px-6 py-3 border-2 border-bank-600 text-base font-medium rounded-md shadow-sm text-bank-600 bg-white hover:bg-bank-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-bank-500 transition-all duration-200 w-full sm:w-auto justify-center font-semibold group">
+                        <svg class="mr-2 -ml-1 w-5 h-5 group-hover:scale-110 transition-transform" fill="none"
+                            stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        Générer des Rapports
+                    </a>
+                </div>
+            </div>
+
+        </div>
+</div>
+</main>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+
+
+
+        // --- AJAX Upload Logic ---
+        const fileInput = document.getElementById('file-input');
+        const uploadUI = document.getElementById('upload-ui');
+        const uploadLoading = document.getElementById('upload-loading');
+        const uploadSuccessContainer = document.getElementById('upload-success-container');
+
+        if (fileInput) {
+            fileInput.addEventListener('change', async (e) => {
+                if (fileInput.files.length > 0) {
+                    // 1. Show Loading UI
+                    uploadUI.classList.add('hidden');
+                    uploadLoading.classList.remove('hidden');
+                    if (uploadSuccessContainer) uploadSuccessContainer.classList.add('hidden');
+
+                    const formData = new FormData();
+                    formData.append('file', fileInput.files[0]);
+
+                    // Timeout safety
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+                    try {
+                        const response = await fetch("{{ url_for('upload_file') }}", {
+                            method: 'POST',
+                            body: formData,
+                            signal: controller.signal
+                        });
+
+                        clearTimeout(timeoutId);
+
+                        const result = await response.json();
+
+                        if (response.ok && result.status === 'success') {
+                            // Show Success Container
+                            if (uploadSuccessContainer) uploadSuccessContainer.classList.remove('hidden');
+                            showNotification(result.message, 'success');
+
+                            // Add Global Notification
+                            if (window.addGlobalNotification && result.notification) {
+                                window.addGlobalNotification(result.notification);
+                            }
+                        } else {
+                            throw new Error(result.message || 'Erreur inconnue');
+                        }
+                    } catch (error) {
+                        console.error('Upload Error:', error);
+                        let msg = error.message;
+                        if (error.name === 'AbortError') msg = "Temps d'attente dépassé.";
+                        showNotification(msg, 'error');
+                        // Show upload UI again if failed
+                        uploadUI.classList.remove('hidden');
+                    } finally {
+                        uploadLoading.classList.add('hidden');
+                    }
+                }
+            });
+        }
+
+        function showNotification(message, type) {
+            const container = document.querySelector('.fixed.z-50.pointer-events-none') || createNotificationContainer();
+            const div = document.createElement('div');
+            div.className = `notification p-4 rounded shadow-lg text-white pointer-events-auto transform transition-all duration-500 ease-in-out fade-in mb-2 ${type === 'error' ? 'bg-red-500' : 'bg-green-500'}`;
+            div.textContent = message;
+            container.appendChild(div);
+
+            setTimeout(() => {
+                div.classList.add('opacity-0', 'translate-x-full');
+                setTimeout(() => div.remove(), 500);
+            }, 4000);
+        }
+
+        function createNotificationContainer() {
+            const div = document.createElement('div');
+            div.className = "fixed top-4 right-4 z-50 space-y-2 pointer-events-none";
+            document.body.appendChild(div);
+            return div;
+        }
+
+        // Global logic moved to base.html
+    });
+</script>
+{% endblock %}

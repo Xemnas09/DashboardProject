@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<style>
+    .btn-premium {
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .btn-premium:hover {
+        transform: translateY(-1px) scale(1.02);
+        box-shadow: 0 4px 12px -2px rgba(14, 165, 233, 0.2);
+    }
+
+    .btn-premium:active {
+        transform: translateY(0) scale(0.98);
+    }
+
+    .delete-btn-premium {
+        transition: all 0.2s ease;
+    }
+
+    .delete-btn-premium:hover {
+        background-color: #fee2e2;
+        transform: scale(1.05);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-transparent flex" id="app-container">
+    {% include 'includes/sidebar.html' %}
+
+    <main class="flex-1 flex flex-col min-w-0 bg-gray-50 overflow-hidden">
+        <!-- Header -->
+        <header
+            class="h-16 bg-white/80 backdrop-blur-md border-b border-gray-200 flex items-center justify-between px-6 sticky top-0 z-10">
+            <div class="flex items-center space-x-4">
+                <button id="sidebar-toggle"
+                    class="text-gray-500 hover:text-bank-600 focus:outline-none focus:ring-2 focus:ring-bank-500 rounded-lg p-1">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                </button>
+                <div>
+                    <h1 class="text-xl font-bold text-gray-900" style="font-family: 'Playfair Display', serif;">
+                        Base de données</h1>
+                    <p class="text-xs text-gray-500">Consultez et gérez vos données importées</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-4">
+                {% include 'includes/header_right.html' ignore missing %}
+                <div class="flex items-center space-x-3 text-sm text-gray-500">
+                    <span id="current-date-db"></span>
+                    <span id="current-time-db" class="font-mono text-bank-600"></span>
+                </div>
+
+                {% include 'includes/header_notifications.html' %}
+            </div>
+        </header>
+
+        <script>
+            document.addEventListener('DOMContentLoaded', () => {
+                const dateEl = document.getElementById('current-date-db');
+                const timeEl = document.getElementById('current-time-db');
+
+                function updateDateTime() {
+                    const now = new Date();
+                    const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+                    if (dateEl) dateEl.textContent = now.toLocaleDateString('fr-FR', dateOptions);
+                    if (timeEl) timeEl.textContent = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                }
+
+                updateDateTime();
+                setInterval(updateDateTime, 1000);
+            });
+        </script>
+
+        <!-- Content Area -->
+        <div class="flex-1 overflow-auto p-8 animate-fade-in-up">
+            <div class="max-w-7xl mx-auto h-full flex flex-col">
+                {% if data_preview %}
+                <!-- Hidden Data for JS -->
+                <div id="data-preview-json" class="hidden">{{ data_preview | tojson | safe }}</div>
+
+                <div id="data-preview-container"
+                    class="bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full">
+                    <div
+                        class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center flex-shrink-0">
+                        <div class="flex items-center gap-4">
+                            <h2 class="text-lg font-semibold text-gray-800">Données Importées</h2>
+                            <span class="text-sm text-gray-500">Total: {{ data_preview.total_rows }} lignes</span>
+                        </div>
+                        <form id="delete-data-form" action="{{ url_for('clear_data') }}" method="POST">
+                            <button type="button" id="delete-data-btn"
+                                class="inline-flex items-center px-4 py-2 text-xs font-semibold rounded-lg text-red-700 bg-red-100/80 hover:bg-red-200 transition-all delete-btn-premium">
+                                <svg class="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                                Supprimer les données
+                            </button>
+                        </form>
+                    </div>
+
+                    <div id="grid-wrapper" class="p-4 flex-1 flex flex-col min-h-0 relative">
+                        <div id="grid-skeleton" class="absolute inset-4 z-10 bg-white space-y-4">
+                            <div class="h-10 w-full skeleton rounded-t-lg"></div>
+                            <div class="flex-1 space-y-2">
+                                <div class="h-12 w-full skeleton opacity-80"></div>
+                                <div class="h-12 w-full skeleton opacity-60"></div>
+                                <div class="h-12 w-full skeleton opacity-40"></div>
+                            </div>
+                        </div>
+                        <div id="myGrid"
+                            class="ag-theme-quartz w-full h-full opacity-0 transition-opacity duration-500"></div>
+                    </div>
+                </div>
+
+                <!-- Modal Suppression -->
+                <div id="delete-modal" class="fixed inset-0 z-50 hidden overflow-y-auto">
+                    <div class="flex items-center justify-center min-h-screen px-4">
+                        <div class="fixed inset-0 bg-gray-500/75 backdrop-blur-sm" id="delete-backdrop"></div>
+                        <div
+                            class="bg-white rounded-xl overflow-hidden shadow-xl transform transition-all sm:max-w-lg sm:w-full relative z-10">
+                            <div class="p-6">
+                                <div class="flex items-center space-x-4">
+                                    <div
+                                        class="flex-shrink-0 w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-600">
+                                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h3 class="text-lg font-bold text-gray-900">Supprimer les données ?</h3>
+                                        <p class="text-sm text-gray-500">Cette action est irréversible.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-gray-50 px-6 py-4 flex flex-row-reverse gap-3">
+                                <button type="button" id="confirm-delete"
+                                    class="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-all btn-premium">Supprimer</button>
+                                <button type="button" id="cancel-delete"
+                                    class="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-all">Annuler</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <script>
+                    document.addEventListener('DOMContentLoaded', () => {
+                        const modal = document.getElementById('delete-modal');
+                        const btn = document.getElementById('delete-data-btn');
+                        const cancel = document.getElementById('cancel-delete');
+                        const backdrop = document.getElementById('delete-backdrop');
+                        const confirm = document.getElementById('confirm-delete');
+                        const form = document.getElementById('delete-data-form');
+
+                        if (btn) btn.onclick = () => modal.classList.remove('hidden');
+                        if (cancel) cancel.onclick = () => modal.classList.add('hidden');
+                        if (backdrop) backdrop.onclick = () => modal.classList.add('hidden');
+                        if (confirm) confirm.onclick = () => {
+                            confirm.disabled = true;
+                            confirm.innerHTML = '<svg class="animate-spin h-4 w-4 text-white mx-auto" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+                            form.submit();
+                        };
+                    });
+                </script>
+                {% else %}
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+                    <div
+                        class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-400">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-medium text-gray-900">Aucune donnée chargée</h3>
+                    <p class="mt-2 text-gray-500">Importez un fichier depuis le tableau de bord.</p>
+                    <a href="{{ url_for('dashboard') }}"
+                        class="mt-6 inline-flex items-center px-6 py-3 bg-bank-600 text-white font-semibold rounded-xl hover:bg-bank-700 transition-all btn-premium">Aller
+                        au Tableau de Bord</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const dataPreviewEl = document.getElementById('data-preview-json');
+        if (dataPreviewEl) {
+            try {
+                const initialData = JSON.parse(dataPreviewEl.textContent);
+                const gridDiv = document.getElementById('myGrid');
+                const skeleton = document.getElementById('grid-skeleton');
+
+                const columnDefs = initialData.columns.map(col => ({
+                    field: col.field, headerName: col.title, sortable: true, filter: true, resizable: true
+                }));
+
+                const gridOptions = {
+                    columnDefs: columnDefs,
+                    rowData: initialData.data,
+                    pagination: true,
+                    paginationPageSize: 20,
+                    defaultColDef: { flex: 1, minWidth: 100 },
+                    onGridReady: () => {
+                        setTimeout(() => {
+                            if (skeleton) skeleton.classList.add('hidden');
+                            if (gridDiv) gridDiv.classList.remove('opacity-0');
+                        }, 400);
+                    }
+                };
+                agGrid.createGrid(gridDiv, gridOptions);
+            } catch (e) {
+                console.error("Error initializing Grid:", e);
+                const skeleton = document.getElementById('grid-skeleton');
+                if (skeleton) skeleton.innerHTML = '<div class="p-4 text-red-500 text-center font-medium">Erreur de chargement des données.</div>';
+            }
+        }
+    });
+</script>
+{% endblock %}
