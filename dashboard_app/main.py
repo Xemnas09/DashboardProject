@@ -12,7 +12,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from jose import jwt, JWTError
+import jwt
 from loguru import logger
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -98,7 +98,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Datavera API",
     description="Backend API for the Datavera data analytics dashboard.",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -171,7 +171,7 @@ async def log_requests(request: Request, call_next):
                 algorithms=[settings.jwt_algorithm],
             )
             user = payload.get("sub", "unknown")
-        except JWTError:
+        except jwt.PyJWTError:
             user = "invalid_token"
 
     if response.status_code < 400:
@@ -221,4 +221,4 @@ else:
     # Fallback si le frontend n'est pas buildé (dev local)
     @app.get("/", include_in_schema=False)
     async def root():
-        return {"status": "ok", "app": "Datavera API", "version": "2.8.2"}
+        return {"status": "ok", "app": "Datavera API", "version": "0.2.0"}

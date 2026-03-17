@@ -3,10 +3,9 @@ Statistical logic to classify Polars DataFrame columns into semantic types.
 
 This module maps raw data types (Dtypes) to meaningful semantic roles:
 - **identifier**: Unique or near-unique keys (IDs, UUIDs, PKs).
-- **continuous**: Measures that take any value (floats or high-cardinality ints).
-- **discrete**: Counts or ranked values with limited unique set.
+- **numeric**: Measures that take any value (floats or high-cardinality ints).
 - **boolean**: True/False logic (detects 0/1 disguised as numeric).
-- **categorical**: Shared qualitative attributes (strings).
+- **categorical**: Shared qualitative attributes or low-cardinality numeric sets.
 - **date**: Temporal information (Date/Datetime).
 """
 
@@ -39,12 +38,12 @@ def classify_column(series: pl.Series) -> str:
     if is_int or is_float:
         total = len(series)
         if total == 0:
-            return "continuous"
+            return "numeric"
             
         non_null_series = series.drop_nulls()
         non_null_total = len(non_null_series)
         if non_null_total == 0:
-            return "continuous"
+            return "numeric"
             
         unique_count = non_null_series.n_unique()
         unique_ratio = unique_count / non_null_total
@@ -90,13 +89,17 @@ def classify_column(series: pl.Series) -> str:
             if unique_vals == {0, 1}:
                 return "boolean"
                 
-        # --- PHASE 3: Discrete vs Continuous ---
-        # We consider a numeric column 'discrete' if it has limited variance (<= 20 unique values).
-        # Otherwise, we treat it as continuous (likely a measure or price).
-        if is_int and unique_count <= 20:
-            return "discrete"
+        # --- PHASE 3: Numeric vs Categorical (Consolidation) ---
+        # If it's a measure (age, price), it stays numeric (NUM) to allow stats.
+        if has_measure_name:
+            return "numeric"
             
-        return "continuous"
+        # Consolidation: Low cardinality integers (e.g., discrete variables like rating 1-5)
+        # are mapped to categorical (CAT).
+        if is_int and unique_count <= 20:
+            return "categorical"
+            
+        return "numeric"
 
     # Default fallback for String/Object columns
     return "categorical"

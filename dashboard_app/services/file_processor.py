@@ -22,6 +22,7 @@ from python_calamine import CalamineWorkbook
 from core.settings import settings
 from core.exceptions import FileTooLargeException, InvalidFileTypeException
 from services.type_inference import infer_and_cast_schema, smart_cast_to_boolean, smart_cast_to_date
+from services.column_classifier import classify_column
 
 
 # ---------------------------------------------------------------------------
@@ -88,6 +89,9 @@ async def save_upload_chunked(upload_file, dest_path: str) -> int:
     return total
 
 
+# ---------------------------------------------------------------------------
+# Schema Inference & Application
+# ---------------------------------------------------------------------------
 def process_file_preview(
     filepath: str,
     sheet_name: Optional[str] = None,
@@ -95,17 +99,23 @@ def process_file_preview(
     row_limit: int = 2000,
 ) -> Optional[Dict[str, Any]]:
     """
-    Reads a file and generates a structured preview for the frontend.
-    Applies automatic type inference and respects manual user overrides.
+    Generate a high-level preview of a dataset for UI display.
+    
+    This function:
+    1. Loads a sample/subset of the data.
+    2. Runs advanced type inference (detecting dates, booleans, and formats).
+    3. Merges automated inference with manual user overrides.
+    4. Formats columns and data for the frontend table.
     
     Args:
-        filepath: Absolute path to the file.
-        sheet_name: Specific Excel sheet to read (defaults to first if missing).
-        schema_overrides: Manual mapping of column name to target type.
-        row_limit: Maximum rows to return in the preview.
+        filepath: Absolute path to the dataset on disk.
+        sheet_name: Specific Excel sheet to target.
+        schema_overrides: Mapping of column names to target Polars types.
+        row_limit: Maximum number of rows to return in the preview.
         
     Returns:
-        Dictionary containing column headers, row data, and inferred schema metadata.
+        A dictionary with sheet metadata, column info, and preview rows, 
+        or None if processing fails.
     """
     logger.info(f"Generating preview for: {filepath} (sheet={sheet_name}, limit={row_limit})")
     try:
@@ -160,11 +170,15 @@ def process_file_preview(
                 if col in df.columns:
                     current_type = str(df[col].dtype)
                     if target in ('Int64', 'Float64'):
-                        clean_expr = pl.col(col).str.replace_all(r"[^\d.,\-]", "").str.replace(",", ".")
-                        if target == 'Int64':
-                            cast_exprs.append(clean_expr.cast(pl.Float64, strict=False).cast(pl.Int64, strict=False).alias(col))
+                        if current_type in ('String', 'Utf8'):
+                            clean_expr = pl.col(col).str.replace_all(r"[^\d.,\-]", "").str.replace(",", ".")
+                            if target == 'Int64':
+                                cast_exprs.append(clean_expr.cast(pl.Float64, strict=False).cast(pl.Int64, strict=False).alias(col))
+                            else:
+                                cast_exprs.append(clean_expr.cast(pl.Float64, strict=False).alias(col))
                         else:
-                            cast_exprs.append(clean_expr.cast(pl.Float64, strict=False).alias(col))
+                            # Already numeric or other type, just cast directly
+                            cast_exprs.append(pl.col(col).cast(getattr(pl, target), strict=False).alias(col))
                     elif target == 'String' and 'String' not in current_type and 'Utf8' not in current_type:
                         cast_exprs.append(pl.col(col).cast(pl.String))
                     elif target == 'Boolean':
@@ -188,8 +202,14 @@ def process_file_preview(
 
         result = {
             'requires_sheet_selection': False,
-            'columns': [{'title': col, 'field': col} for col in df.columns],
-            'columns_info': columns_info,
+            'columns': [{
+                'field': col,
+                'title': col,
+                'dtype': str(df[col].dtype),
+                'is_numeric': df[col].dtype.is_numeric(),
+                'semantic_type': classify_column(df[col]),
+                'is_identifier': classify_column(df[col]) == "identifier",
+            } for col in df.columns],
             'data': safe_df.to_dicts(),
             'total_rows': df.height,
             'selected_sheet': sheet_name,
@@ -204,7 +224,7 @@ def process_file_preview(
 
 
 # ---------------------------------------------------------------------------
-# Read the full DataFrame from a cache entry
+# Core Reading & Filtering
 # ---------------------------------------------------------------------------
 def read_cached_df(
     filepath: str, 
@@ -212,23 +232,25 @@ def read_cached_df(
     overrides: Optional[Dict[str, str]] = None
 ) -> Optional[pl.DataFrame]:
     """
-    Reads a full dataset into a Polars DataFrame.
-    Uses memory-first reading to avoid leaving open file handles on Windows.
+    Read the full dataset from disk into a Polars DataFrame.
+    
+    This function implements a "Lock-Free" reading strategy by loading 
+    file contents into memory before parsing. This avoids permission errors
+    and file locking issues on Windows systems.
     
     Args:
         filepath: Absolute path to the file.
-        selected_sheet: Excel sheet to read.
-        overrides: Mapping of column names to target types.
+        selected_sheet: Name of the sheet to read (for Excel files).
+        overrides: Column casting rules to apply immediately after loading.
         
     Returns:
-        A Polars DataFrame or None on failure.
+        A fully typed Polars DataFrame, or None if the file is missing or corrupt.
     """
     if not filepath or not os.path.exists(filepath):
         return None
 
     try:
         # Standardize loading: Read bytes -> Load from bytes
-        # This is the "Lock-Free" strategy for Windows.
         if filepath.endswith('.csv'):
             with open(filepath, 'rb') as f:
                 df = pl.read_csv(f.read(), ignore_errors=True)
@@ -236,7 +258,7 @@ def read_cached_df(
             with open(filepath, 'rb') as f:
                 xlsx_content = f.read()
             
-            # Use Pandas briefly just to resolve sheet names if it wasn't specified
+            # Defaults to first sheet if not specified
             if not selected_sheet:
                 with pd.ExcelFile(BytesIO(xlsx_content)) as xl:
                     selected_sheet = xl.sheet_names[0]
@@ -276,26 +298,22 @@ def read_cached_df(
         return None
 
 
-# ---------------------------------------------------------------------------
-# Filter helper
-# ---------------------------------------------------------------------------
 def apply_filters(df: pl.DataFrame, filters: Dict[str, Any]) -> pl.DataFrame:
     """
-    Applies column equality filters to a DataFrame.
+    Apply a set of inclusive filters to a DataFrame.
     
     Args:
-        df: Input DataFrame.
-        filters: Dictionary of { "column_name": "value" }.
+        df: The source Polars DataFrame.
+        filters: A map of column names to values. Supports boolean string parsing.
         
     Returns:
-        Filtered DataFrame.
+        The filtered DataFrame.
     """
     if not filters:
         return df
     
     for col, val in filters.items():
         if col in df.columns:
-            # Handle Boolean strings from frontend
             if df[col].dtype == pl.Boolean:
                 val = str(val).lower() in ['true', '1', 'yes', 'oui']
             df = df.filter(pl.col(col) == val)
@@ -305,15 +323,18 @@ def apply_filters(df: pl.DataFrame, filters: Dict[str, Any]) -> pl.DataFrame:
 
 def get_sheet_previews_parallel(filepath: str, max_rows: int = 10) -> Dict[str, Any]:
     """
-    Fast, parallel inspection of all sheets in an Excel workbook.
-    Returns preview data for each sheet so the user can choose.
+    Inspect all sheets in an Excel workbook in parallel.
+    
+    This is used to provide the user with a quick overview of all sheets
+    when a multi-sheet workbook is uploaded. It extracts headers and a small
+    sample of data from each sheet.
     
     Args:
-        filepath: Absolute path to the .xlsx file.
-        max_rows: Number of preview rows to extract per sheet.
+        filepath: Path to the .xlsx file.
+        max_rows: Samples rows to extract per sheet.
         
     Returns:
-        A dictionary mapping sheet names to their preview metadata.
+        A map where keys are sheet names and values are preview dictionaries.
     """
     if not filepath.endswith('.xlsx'):
         return {}
@@ -349,7 +370,7 @@ def get_sheet_previews_parallel(filepath: str, max_rows: int = 10) -> Dict[str, 
             return sheet_name, {
                 "columns": [{"title": h, "field": h} for h in header_list],
                 "data": data,
-                "total_rows": 0 # Exact count is expensive, skipped here
+                "total_rows": 0
             }
         except Exception as e:
             logger.error(f"Failed to inspect sheet {sheet_name}: {e}")
@@ -362,7 +383,6 @@ def get_sheet_previews_parallel(filepath: str, max_rows: int = 10) -> Dict[str, 
         sheet_names = wb.sheet_names
         
         with ThreadPoolExecutor(max_workers=min(len(sheet_names), 8)) as executor:
-            # results = dict(executor.map(read_sheet_info, sheet_names)) # map returns tuples if function returns tuples
             results_list = list(executor.map(read_sheet_info, sheet_names))
             
         return {name: info for name, info in results_list if info is not None}

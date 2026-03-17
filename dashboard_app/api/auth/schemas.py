@@ -3,7 +3,7 @@ Pydantic schemas for the Auth domain. Defines the payload structures
 for authentication requests and the layout of the signed JWT tokens.
 """
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import BaseModel
 
 
@@ -29,4 +29,4 @@ class TokenPayload(BaseModel):
     @property
     def expires_at(self) -> datetime:
         """Returns the token expiration as a UTC datetime object."""
-        return datetime.utcfromtimestamp(self.exp)
+        return datetime.fromtimestamp(self.exp, timezone.utc).replace(tzinfo=None)

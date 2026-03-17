@@ -6,11 +6,11 @@ Run: python -m pytest tests/test_api.py -v
 """
 import os
 import io
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from httpx import AsyncClient, ASGITransport
-from jose import jwt
+import jwt
 
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -27,44 +27,7 @@ from core.dependencies import limiter
 limiter.enabled = False
 
 
-# ===========================================================================
-# Fixtures
-# ===========================================================================
-
-@pytest.fixture(scope="session", autouse=True)
-async def setup_database():
-    """Ensure tables are created and default users seeded before any tests run."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all) # Start fresh for tests
-        await conn.run_sync(Base.metadata.create_all)
-    
-    from core.database import AsyncSessionLocal
-    async with AsyncSessionLocal() as db:
-        # Create admin
-        await create_user(db, UserCreate(
-            username="admin", 
-            password="admin123", 
-            role="super_admin"
-        ))
-    
-    # Ensure upload directory exists for tests
-    os.makedirs(settings.upload_folder, exist_ok=True)
-    
-    yield
-
-@pytest.fixture
-async def client():
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
-
-
-@pytest.fixture
-async def auth_client():
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        await ac.post("/login", json={"username": "admin", "password": "admin123"})
-        yield ac
+# Fixtures are now in conftest.py
 
 
 def _make_token(sub="admin", cache_id="test-cache", token_type="access", expire_minutes=30):
@@ -73,7 +36,7 @@ def _make_token(sub="admin", cache_id="test-cache", token_type="access", expire_
         "sub": sub, "cache_id": cache_id, "type": token_type,
         "role": "super_admin" if sub == "admin" else "user",
         "jti": str(uuid.uuid4()),
-        "exp": datetime.utcnow() + timedelta(minutes=expire_minutes),
+        "exp": datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=expire_minutes),
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
@@ -84,7 +47,7 @@ def _make_expired_token(sub="admin", cache_id="test-cache", token_type="access")
         "sub": sub, "cache_id": cache_id, "type": token_type,
         "role": "super_admin" if sub == "admin" else "user",
         "jti": str(uuid.uuid4()),
-        "exp": datetime.utcnow() - timedelta(minutes=5),
+        "exp": datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=5),
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
@@ -143,15 +106,19 @@ async def test_tampered_token(client):
 
 async def test_refresh_flow(client):
     refresh = _make_token(token_type="refresh", expire_minutes=60)
-    r = await client.post("/api/auth/refresh", cookies={"refresh_token": refresh})
+    client.cookies.set("refresh_token", refresh)
+    r = await client.post("/api/auth/refresh")
     assert r.status_code == 200
     assert "access_token" in r.headers.get("set-cookie", "")
+    client.cookies.delete("refresh_token")
 
 
 async def test_refresh_expired(client):
     expired = _make_expired_token(token_type="refresh")
-    r = await client.post("/api/auth/refresh", cookies={"refresh_token": expired})
+    client.cookies.set("refresh_token", expired)
+    r = await client.post("/api/auth/refresh")
     assert r.status_code == 401
+    client.cookies.delete("refresh_token")
 
 
 async def test_logout(auth_client):
@@ -177,7 +144,7 @@ async def test_cache_eviction():
     entry = CacheEntry(filepath="/tmp/fake_evict.csv", filename="fake.csv")
     await cache_manager.set("evict-test", entry)
     # Override last_accessed AFTER the cache_manager.set (which sets it to utcnow)
-    entry.last_accessed = datetime.utcnow() - timedelta(hours=10)
+    entry.last_accessed = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=10)
     evicted = await cache_manager.evict_expired(ttl_hours=1)
     assert evicted >= 1
     assert await cache_manager.get("evict-test") is None

@@ -3,10 +3,11 @@ dashboard_app/.env
 dashboard_app/venv/
 dashboard_app/env/
 dashboard_app/.venv/
-dashboard_app/__pycache__/
-dashboard_app/*.pyc
-dashboard_app/*.pyo
-dashboard_app/*.pyd
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+dashboard_app/*.db
 dashboard_app/.Python
 dashboard_app/build/
 dashboard_app/develop-eggs/

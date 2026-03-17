@@ -5,9 +5,9 @@ Handles incoming WebSocket connections, authenticates them using short-lived
 WS tickets, registers users with the connection manager, and routes real-time 
 messages such as pings and presence updates.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from jose import JWTError, jwt
+import jwt
 from loguru import logger
 
 from api.realtime.connection_manager import connection_manager
@@ -25,12 +25,12 @@ def _verify_ws_token(token: str) -> str | None:
         if not username or token_type != "ws":
             return None
         return username
-    except JWTError:
+    except jwt.PyJWTError:
         return None
 
 
 def _now() -> str:
-    return datetime.utcnow().isoformat()
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
 
 @router.websocket("/ws")

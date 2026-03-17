@@ -7,7 +7,7 @@ message broadcasting across the Dashboard application.
 """
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import WebSocket
@@ -61,7 +61,7 @@ class ConnectionManager:
             # Update presence to active upon new connection
             self.presence[username] = {
                 "status": WS_STATUS_ACTIVE,
-                "last_seen": datetime.utcnow().isoformat(),
+                "last_seen": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             }
             
         logger.info(
@@ -188,26 +188,30 @@ class ConnectionManager:
         await self.send_to_user(username, {
             "event": WS_EVENT_SESSION_REVOKED,
             "payload": {"reason": reason},
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         })
         
         # 2. Forcefully close the physical WebSocket pipes on the backend
-        for ws in list(self.connections.get(username, [])):
+        async with self._lock:
+            sockets = list(self.connections.get(username, []))
+            
+        for ws in sockets:
             try:
                 await ws.close(code=WS_CLOSE_CODE_POLICY_VIOLATION)
             except Exception:
                 pass  # Ignore close exceptions if the pipe is already dead
         
         # 3. Aggressively purge them from local memory to avoid race conditions
-        self.presence.pop(username, None)
-        self.connections.pop(username, None)
+        async with self._lock:
+            self.presence.pop(username, None)
+            self.connections.pop(username, None)
         
         # 4. Notify everyone else immediately that this user is now offline
         # (Bypasses typical frontend unmount debouncing for security actions)
         await self.broadcast_except(username, {
             "event": WS_EVENT_USER_OFFLINE,
             "payload": {"username": username},
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         })
 
     # ── Presence ──────────────────────────────────────────────────────────────

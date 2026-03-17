@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -104,7 +104,7 @@ async def change_role(
     await connection_manager.send_to_user(username, {
         "event": "ROLE_CHANGED",
         "payload": {"new_role": body.new_role},
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
     })
     return {"status": "success", "new_role": body.new_role}
 
@@ -171,7 +171,7 @@ async def broadcast_message(
             "category": body.category,
             "from": current.sub,
         },
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
     }
     if body.target == "all":
         # Use broadcast_except to avoid sending back to the admin's own WS sessions.

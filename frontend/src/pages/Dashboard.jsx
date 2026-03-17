@@ -1,49 +1,290 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { UploadCloud, CheckCircle2, TrendingUp, Users, Database as DatabaseIcon, BarChart3, FileSpreadsheet, ArrowRight } from 'lucide-react';
+import { 
+  UploadCloud, CheckCircle2, DatabaseIcon, BarChart3, 
+  FileSpreadsheet, ArrowRight, AlertCircle, AlertTriangle, 
+  ShieldAlert, Settings2, Layers, Database, TrendingUp
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthContext';
 import { getDisplayName, customFetch } from '../features/auth/session';
 import OnlineUsers from '../features/realtime/OnlineUsers';
 
+// --- UTILITIES ---
+function formatRelativeTime(isoString) {
+  if (!isoString) return 'récemment';
+  const diff = Date.now() - new Date(isoString).getTime();
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  if (minutes < 2) return "à l'instant";
+  if (minutes < 60) return `il y a ${minutes} min`;
+  if (hours < 24) return `il y a ${hours}h`;
+  return `il y a ${days}j`;
+}
+
+// --- SUB-COMPONENTS ---
+function KpiCard({ label, value, sub, icon: Icon, color }) {
+  const COLORS = {
+    bank:    { bg: 'bg-bank-50',    text: 'text-bank-600',    border: 'border-bank-100',    grad: 'from-bank-500 to-bank-600'    },
+    violet:  { bg: 'bg-violet-50',  text: 'text-violet-600',  border: 'border-violet-100',  grad: 'from-violet-500 to-violet-600'  },
+    emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-100', grad: 'from-emerald-500 to-emerald-600' },
+    amber:   { bg: 'bg-amber-50',   text: 'text-amber-600',   border: 'border-amber-100',   grad: 'from-amber-500 to-amber-600'   },
+    red:     { bg: 'bg-red-50',     text: 'text-red-600',     border: 'border-red-100',     grad: 'from-red-500 to-red-600'     },
+  };
+  const c = COLORS[color] || COLORS.bank;
+
+  return (
+    <div className="group relative bg-white rounded-2xl shadow-sm border border-gray-100 p-5 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden">
+      <div className={`absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r ${c.grad} opacity-0 group-hover:opacity-100 transition-opacity`} />
+      <div className="flex items-start justify-between">
+        <div className="flex-1 min-w-0">
+          <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2">{label}</p>
+          <p className="text-2xl font-black text-gray-900 tracking-tight truncate">{value}</p>
+          <p className="text-[10px] font-bold text-gray-400 mt-1.5">{sub}</p>
+        </div>
+        <div className={`w-10 h-10 rounded-xl ${c.bg} ${c.text} flex items-center justify-center border ${c.border} flex-shrink-0 ml-3 group-hover:scale-110 transition-transform`}>
+          <Icon size={18} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ username, handlers }) {
+  return (
+    <div className="min-h-[80vh] flex flex-col items-center justify-center gap-8 animate-fade-in-up">
+      <div className="text-center">
+        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-bank-400 mb-2">Tableau de Bord</p>
+        <h1 className="text-4xl font-black text-gray-900 tracking-tight">Bienvenue, {username}</h1>
+        <p className="text-gray-400 mt-2 font-medium">Importez un fichier pour commencer votre analyse</p>
+      </div>
+
+      <div className="w-full max-w-2xl">
+        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+          <div
+            onDragEnter={handlers.handleDrag}
+            onDragLeave={handlers.handleDrag}
+            onDragOver={handlers.handleDrag}
+            onDrop={handlers.handleDrop}
+            onClick={() => handlers.fileInputRef.current.click()}
+            className={`p-16 text-center cursor-pointer transition-all duration-300 ${handlers.dragActive ? 'bg-bank-50/80 border-bank-400' : 'hover:bg-gray-50/50'}`}
+          >
+            <input
+              ref={handlers.fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={handlers.handleChange}
+              accept=".csv,.xlsx,.xls"
+            />
+
+            {!handlers.isUploading ? (
+              <>
+                <div className="relative mx-auto w-24 h-24 mb-8">
+                  <div className="absolute inset-0 bg-bank-100 rounded-3xl animate-pulse opacity-60" />
+                  <div className="relative w-24 h-24 bg-gradient-to-br from-bank-500 to-bank-700 rounded-3xl flex items-center justify-center shadow-2xl shadow-bank-200">
+                    <UploadCloud className="w-10 h-10 text-white" />
+                  </div>
+                </div>
+                <h3 className="text-xl font-black text-gray-900 mb-2">Glissez-déposez votre fichier ici</h3>
+                <p className="text-gray-400 text-sm font-medium mb-8">ou cliquez pour parcourir</p>
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  {[
+                    { icon: '⚡', label: 'Moteur Polars haute performance' },
+                    { icon: '🔍', label: 'Détection de types automatique' },
+                    { icon: '🛡️', label: "Anomalies détectées à l'import" },
+                  ].map((f, i) => (
+                    <span key={i} className="flex items-center gap-2 px-4 py-2 bg-gray-50 border border-gray-100 rounded-full text-xs font-bold text-gray-500">
+                      <span>{f.icon}</span>
+                      {f.label}
+                    </span>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="py-4">
+                <div className="w-14 h-14 rounded-full border-[3px] border-bank-200 border-t-bank-600 animate-spin mx-auto mb-5" />
+                <p className="text-bank-600 font-black text-sm uppercase tracking-wider">Traitement en cours...</p>
+                <p className="text-gray-400 text-xs mt-2 font-medium">Analyse Polars en cours</p>
+              </div>
+            )}
+          </div>
+          <div className="px-6 py-3 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between">
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Formats supportés</span>
+            <div className="flex gap-2">
+              {['CSV', 'XLSX', 'XLS'].map(fmt => (
+                <span key={fmt} className="px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-[10px] font-black text-gray-400 uppercase tracking-wider">{fmt}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DataState({ summary, username, onNewUpload }) {
+  if (!summary) return null;
+
+  return (
+    <div className="space-y-6 animate-fade-in-up">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-bank-400 mb-1">Tableau de Bord</p>
+          <h1 className="text-2xl font-black text-gray-900 tracking-tight">Bonjour, {username}</h1>
+        </div>
+        <button
+          onClick={onNewUpload}
+          className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-black text-gray-600 hover:border-bank-300 hover:text-bank-600 transition-all shadow-sm"
+        >
+          <UploadCloud size={14} />
+          Nouveau fichier
+        </button>
+      </div>
+
+      <div className="bg-gradient-to-r from-gray-950 via-gray-900 to-gray-950 rounded-2xl p-6 relative overflow-hidden shadow-xl">
+        <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.1) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+        <div className="absolute top-0 right-0 w-64 h-64 bg-bank-500/10 blur-[80px] rounded-full" />
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-bank-600/20 border border-bank-500/30 flex items-center justify-center flex-shrink-0">
+              <FileSpreadsheet className="w-6 h-6 text-bank-400" />
+            </div>
+            <div>
+              <p className="text-white font-black text-lg leading-tight">{summary.filename}</p>
+              <p className="text-white/40 text-xs font-medium mt-0.5">
+                Importé {formatRelativeTime(summary.imported_at)}
+                {summary.file_size_mb > 0 && ` · ${summary.file_size_mb} MB`}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">Qualité des données</p>
+              <div className="flex items-center gap-3">
+                <div className="w-32 h-2 bg-white/10 rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full rounded-full transition-all duration-1000 ${summary.quality_score >= 80 ? 'bg-emerald-400' : summary.quality_score >= 60 ? 'bg-amber-400' : 'bg-red-400'}`}
+                    style={{ width: `${summary.quality_score}%` }}
+                  />
+                </div>
+                <span className={`text-xl font-black ${summary.quality_score >= 80 ? 'text-emerald-400' : summary.quality_score >= 60 ? 'text-amber-400' : 'text-red-400'}`}>
+                  {summary.quality_score}%
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+        {summary.col_warnings?.length > 0 && (
+          <div className="relative z-10 mt-4 pt-4 border-t border-white/10 flex items-center gap-3 flex-wrap">
+            <AlertTriangle size={12} className="text-amber-400 flex-shrink-0" />
+            <span className="text-[10px] font-bold text-white/40">Colonnes avec valeurs manquantes :</span>
+            {summary.col_warnings.map(col => (
+              <span key={col} className="px-2 py-0.5 bg-amber-400/10 border border-amber-400/20 rounded-md text-[10px] font-black text-amber-400">{col}</span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: 'Lignes', value: summary.row_count.toLocaleString('fr-FR'), sub: 'enregistrements', icon: Database, color: 'bank' },
+          { label: 'Colonnes', value: summary.col_count, sub: `${summary.numeric_count} NUM · ${summary.categorical_count} CAT`, icon: Layers, color: 'violet' },
+          { label: 'Valeurs nulles', value: `${summary.null_rate}%`, sub: summary.null_rate < 5 ? 'Excellent' : summary.null_rate < 15 ? 'Acceptable' : 'À corriger', icon: AlertCircle, color: summary.null_rate < 5 ? 'emerald' : summary.null_rate < 15 ? 'amber' : 'red' },
+          { label: 'Anomalies', value: summary.anomaly_count > 0 ? summary.anomaly_count.toLocaleString('fr-FR') : '—', sub: summary.anomaly_count > 0 ? 'détectées' : 'Aucune détectée', icon: ShieldAlert, color: summary.anomaly_count > 0 ? 'red' : 'emerald' },
+        ].map((kpi, i) => (
+          <KpiCard key={i} {...kpi} />
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-3">
+          <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Actions rapides</p>
+          {[
+            { icon: Database, color: 'bg-bank-600', title: 'Explorer les données', description: `Visualisez et filtrez vos ${summary.row_count.toLocaleString('fr-FR')} lignes`, to: '/database', badge: null },
+            { icon: BarChart3, color: 'bg-violet-600', title: 'Créer des rapports', description: 'Graphiques, tableaux croisés dynamiques', to: '/reports', badge: null },
+            ...(summary.anomaly_count > 0 ? [{ icon: ShieldAlert, color: 'bg-red-500', title: `${summary.anomaly_count} anomalies détectées`, description: 'Des valeurs suspectes ont été trouvées dans vos données', to: '/database', badge: 'Attention', badgeColor: 'bg-red-100 text-red-600' }] : []),
+            ...(summary.quality_score < 80 ? [{ icon: Settings2, color: 'bg-amber-500', title: 'Corriger les types de colonnes', description: `${summary.col_warnings.length} colonne(s) avec des problèmes de qualité`, to: '/database', badge: 'Recommandé', badgeColor: 'bg-amber-100 text-amber-600' }] : []),
+          ].map((action, i) => (
+            <Link key={i} to={action.to} className="group flex items-center gap-4 p-4 bg-white rounded-2xl border border-gray-100 shadow-sm hover:border-bank-200 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+              <div className={`w-10 h-10 ${action.color} rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-110 transition-transform`}>
+                <action.icon className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="font-black text-sm text-gray-900">{action.title}</p>
+                  {action.badge && <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${action.badgeColor}`}>{action.badge}</span>}
+                </div>
+                <p className="text-xs text-gray-400 font-medium mt-0.5 truncate">{action.description}</p>
+              </div>
+              <ArrowRight size={16} className="text-gray-300 group-hover:text-bank-500 group-hover:translate-x-1 transition-all flex-shrink-0" />
+            </Link>
+          ))}
+        </div>
+        <div className="lg:col-span-1">
+          <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-3">Utilisateurs en ligne</p>
+          <OnlineUsers />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- MAIN COMPONENT ---
 export default function Dashboard({ addNotification }) {
+    const [summary, setSummary] = useState(null);
+    const [summaryLoading, setSummaryLoading] = useState(true);
     const [isUploading, setIsUploading] = useState(false);
     const [uploadSuccess, setUploadSuccess] = useState(false);
     const [dragActive, setDragActive] = useState(false);
     const [pendingSheets, setPendingSheets] = useState([]);
     const [selectedSheet, setSelectedSheet] = useState(null);
-    const [allPreviews, setAllPreviews] = useState({});
     const [sheetPreview, setSheetPreview] = useState(null);
     const [isPreviewLoading, setIsPreviewLoading] = useState(false);
     const fileInputRef = useRef(null);
 
-    // ✅ Synchronous read — available before first render, zero flash
     const { currentUser } = useAuth();
     const username = getDisplayName(currentUser) || 'Utilisateur';
+
+    const fetchSummary = async () => {
+        try {
+            setSummaryLoading(true);
+            const res = await customFetch('/api/dashboard/summary', { credentials: 'include' });
+            if (res.ok) {
+                const data = await res.json();
+                setSummary(data);
+            }
+        } catch (e) {
+            console.error("Failed to fetch dashboard summary", e);
+        } finally {
+            setSummaryLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchSummary();
+    }, []);
+
+    useEffect(() => {
+        if (uploadSuccess) fetchSummary();
+    }, [uploadSuccess]);
 
     const handleDrag = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (e.type === "dragenter" || e.type === "dragover") {
-            setDragActive(true);
-        } else if (e.type === "dragleave") {
-            setDragActive(false);
-        }
+        if (e.type === "dragenter" || e.type === "dragover") setDragActive(true);
+        else if (e.type === "dragleave") setDragActive(false);
     };
 
     const handleDrop = (e) => {
         e.preventDefault();
         e.stopPropagation();
         setDragActive(false);
-        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-            handleFileProcess(e.dataTransfer.files[0]);
-        }
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) handleFileProcess(e.dataTransfer.files[0]);
     };
 
     const handleChange = (e) => {
         e.preventDefault();
-        if (e.target.files && e.target.files[0]) {
-            handleFileProcess(e.target.files[0]);
-        }
+        if (e.target.files && e.target.files[0]) handleFileProcess(e.target.files[0]);
     };
 
     const handleFileProcess = async (file) => {
@@ -52,6 +293,11 @@ export default function Dashboard({ addNotification }) {
             return;
         }
 
+        // Reset the input and sheet states so re-uploading the same file/sheet triggers effects
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        setSelectedSheet(null);
+        setSheetPreview(null);
+
         setIsUploading(true);
         setUploadSuccess(false);
 
@@ -59,23 +305,16 @@ export default function Dashboard({ addNotification }) {
         formData.append('file', file);
 
         try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 30000);
-
             const res = await customFetch('/api/upload', {
                 method: 'POST',
                 body: formData,
-                signal: controller.signal,
                 credentials: 'include',
             });
-
-            clearTimeout(timeoutId);
             const result = await res.json();
 
             if (res.ok) {
                 if (result.status === 'requires_sheet') {
                     setPendingSheets(result.sheets);
-                    setAllPreviews(result.all_previews || {});
                     if (result.sheets.length > 0) setSelectedSheet(result.sheets[0]);
                     addNotification(`${result.sheets.length} feuilles détectées`, 'info');
                 } else if (result.status === 'success') {
@@ -87,17 +326,36 @@ export default function Dashboard({ addNotification }) {
             }
         } catch (err) {
             console.error(err);
-            addNotification(err.name === 'AbortError' ? "Temps d'attente dépassé." : err.message, 'error');
+            addNotification(err.message, 'error');
         } finally {
             setIsUploading(false);
         }
     };
 
-    useEffect(() => {
-        if (selectedSheet && allPreviews[selectedSheet]) {
-            setSheetPreview(allPreviews[selectedSheet]);
+    const handleSheetPreviewFetch = async (sheetName) => {
+        if (!sheetName) return;
+        setIsPreviewLoading(true);
+        try {
+            const res = await customFetch('/api/upload/sheet-preview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sheet_name: sheetName }),
+                credentials: 'include',
+            });
+            const result = await res.json();
+            if (res.ok && result.status === 'success') {
+                setSheetPreview(result.preview);
+            }
+        } catch (err) {
+            console.error("Preview fetch failed", err);
+        } finally {
+            setIsPreviewLoading(false);
         }
-    }, [selectedSheet, allPreviews]);
+    };
+
+    useEffect(() => {
+        if (selectedSheet) handleSheetPreviewFetch(selectedSheet);
+    }, [selectedSheet]);
 
     const handleSheetSelection = async () => {
         setIsUploading(true);
@@ -126,159 +384,31 @@ export default function Dashboard({ addNotification }) {
         }
     };
 
-    const kpiCards = [
-        { label: 'Transactions', value: '2,450', change: '+12.5%', positive: true, icon: DatabaseIcon, color: 'bank' },
-        { label: 'Volume Total', value: '45,230 €', change: '+5.2%', positive: true, icon: TrendingUp, color: 'emerald' },
-        { label: 'Nouveaux Clients', value: '12', change: 'Stable', positive: null, icon: Users, color: 'violet' }
-    ];
-
-    const colorMap = {
-        bank: { bg: 'bg-bank-50', text: 'text-bank-600', border: 'border-bank-100', gradient: 'from-bank-500 to-bank-600' },
-        emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-100', gradient: 'from-emerald-500 to-emerald-600' },
-        violet: { bg: 'bg-violet-50', text: 'text-violet-600', border: 'border-violet-100', gradient: 'from-violet-500 to-violet-600' }
+    const handleNewUpload = () => {
+        setUploadSuccess(false);
+        setSummary({ has_data: false });
+        if (fileInputRef.current) fileInputRef.current.value = "";
     };
 
+    const hasData = summary?.has_data === true;
+
     return (
-        <div className="max-w-7xl mx-auto space-y-8 animate-fade-in-up">
-            <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
-                {/* Welcome Section - Takes 3 columns */}
-                <div className="xl:col-span-3 relative bg-gradient-to-r from-gray-950 via-gray-900 to-gray-950 rounded-2xl shadow-2xl p-8 overflow-hidden h-full">
-                    {/* Background effects */}
-                    <div className="absolute inset-0 overflow-hidden">
-                        <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-bank-500/10 blur-[100px] rounded-full"></div>
-                        <div className="absolute bottom-0 left-[20%] w-[200px] h-[200px] bg-bank-400/5 blur-[80px] rounded-full"></div>
-                        <div className="absolute inset-0 opacity-[0.03]" style={{
-                            backgroundImage: 'linear-gradient(rgba(255,255,255,.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.1) 1px, transparent 1px)',
-                            backgroundSize: '40px 40px'
-                        }}></div>
-                    </div>
-
-                    <div className="relative z-10 flex flex-col h-full justify-center">
-                        <div>
-                            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-bank-400 mb-2">Tableau de Bord</p>
-                            <h2 className="text-3xl font-black text-white tracking-tight">Bienvenue, {username}</h2>
-                            <p className="text-white/40 mt-2 text-sm font-medium">Voici un résumé de l'activité d'aujourd'hui.</p>
-                        </div>
-                    </div>
+        <div className="max-w-7xl mx-auto space-y-6">
+            {summaryLoading ? (
+                <div className="min-h-[60vh] flex items-center justify-center">
+                    <div className="w-12 h-12 border-4 border-bank-200 border-t-bank-600 rounded-full animate-spin"></div>
                 </div>
-
-                {/* Online Users Section - Takes 1 column */}
-                <div className="xl:col-span-1">
-                    <OnlineUsers />
-                </div>
-            </div>
-
-            {/* KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                {kpiCards.map((kpi, i) => {
-                    const colors = colorMap[kpi.color];
-                    return (
-                        <div key={i} className="group bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden">
-                            {/* Accent bar */}
-                            <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${colors.gradient} opacity-0 group-hover:opacity-100 transition-opacity`}></div>
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{kpi.label}</p>
-                                    <h3 className="text-3xl font-black text-gray-900 mt-2 tracking-tight">{kpi.value}</h3>
-                                    <div className="mt-3 flex items-center text-xs">
-                                        {kpi.positive !== null ? (
-                                            <span className={`font-black flex items-center ${kpi.positive ? 'text-emerald-600' : 'text-red-500'}`}>
-                                                <TrendingUp className="w-3 h-3 mr-1" /> {kpi.change}
-                                            </span>
-                                        ) : (
-                                            <span className="text-gray-400 font-bold">{kpi.change}</span>
-                                        )}
-                                        <span className="text-gray-300 ml-2 font-medium">vs hier</span>
-                                    </div>
-                                </div>
-                                <div className={`w-12 h-12 rounded-2xl ${colors.bg} ${colors.text} flex items-center justify-center border ${colors.border} group-hover:scale-110 transition-transform`}>
-                                    <kpi.icon className="w-5 h-5" />
-                                </div>
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-
-            {/* Upload Section */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
-                    <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-bank-50 flex items-center justify-center text-bank-600">
-                            <UploadCloud className="w-4 h-4" />
-                        </div>
-                        <div>
-                            <h2 className="text-sm font-black text-gray-900 uppercase tracking-wider">Importation de Données</h2>
-                        </div>
-                    </div>
-                    <div className="flex gap-2">
-                        {['CSV', 'XLSX', 'XLS'].map(fmt => (
-                            <span key={fmt} className="px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-[10px] font-black text-gray-400 uppercase tracking-wider">{fmt}</span>
-                        ))}
-                    </div>
-                </div>
-
-                {!uploadSuccess ? (
-                    <div className="p-8">
-                        <form
-                            onDragEnter={handleDrag}
-                            onDragLeave={handleDrag}
-                            onDragOver={handleDrag}
-                            onDrop={handleDrop}
-                            onClick={() => fileInputRef.current.click()}
-                            className={`relative border-2 border-dashed rounded-2xl p-16 text-center transition-all duration-300 cursor-pointer group ${dragActive ? 'border-bank-500 bg-bank-50/50' : 'border-gray-200 hover:border-bank-400 hover:bg-bank-50/30'}`}
-                        >
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                className="hidden"
-                                onChange={handleChange}
-                                accept=".csv,.xlsx,.xls"
-                            />
-
-                            {!isUploading ? (
-                                <div>
-                                    <div className="group-hover:scale-110 transform transition-transform duration-300 mb-6">
-                                        <div className="w-20 h-20 bg-gradient-to-br from-bank-100 to-bank-50 text-bank-600 rounded-3xl flex items-center justify-center mx-auto shadow-lg shadow-bank-100 border border-bank-200/50">
-                                            <UploadCloud className="w-9 h-9" />
-                                        </div>
-                                    </div>
-                                    <h3 className="text-lg font-black text-gray-900 group-hover:text-bank-700 transition-colors">Glissez-déposez ou cliquez pour importer</h3>
-                                    <p className="mt-2 text-sm text-gray-400 font-medium max-w-sm mx-auto">Analyse automatique par le moteur Polars haute performance</p>
-                                </div>
-                            ) : (
-                                <div>
-                                    <div className="w-14 h-14 rounded-full border-[3px] border-bank-200 border-t-bank-600 animate-spin mx-auto mb-5"></div>
-                                    <p className="text-bank-600 font-black text-sm uppercase tracking-wider">Traitement en cours...</p>
-                                </div>
-                            )}
-                        </form>
-                    </div>
-                ) : (
-                    <div className="p-10 text-center animate-fade-in-up">
-                        <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-5 border border-emerald-100 shadow-lg shadow-emerald-100">
-                            <CheckCircle2 className="w-8 h-8 text-emerald-600" />
-                        </div>
-                        <h3 className="text-xl font-black text-gray-900 mb-2">Importation Réussie !</h3>
-                        <p className="text-gray-400 mb-8 text-sm font-medium">Vos données sont prêtes à être analysées.</p>
-
-                        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                            <Link to="/database" className="group inline-flex items-center px-6 py-3.5 bg-gradient-to-r from-gray-900 to-gray-800 text-white font-black text-sm rounded-xl shadow-xl hover:-translate-y-0.5 transition-all">
-                                <DatabaseIcon className="w-4 h-4 mr-2" />
-                                Base de Données
-                                <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
-                            </Link>
-                            <Link to="/reports" className="group inline-flex items-center px-6 py-3.5 border-2 border-bank-500 text-bank-600 font-black text-sm rounded-xl hover:bg-bank-50 transition-all">
-                                <BarChart3 className="w-4 h-4 mr-2" />
-                                Rapports
-                            </Link>
-                            <button onClick={() => setUploadSuccess(false)} className="inline-flex items-center px-6 py-3.5 border border-gray-200 text-gray-600 font-bold text-sm rounded-xl hover:bg-gray-50 transition-all">
-                                Importer un autre fichier
-                            </button>
-                        </div>
-                    </div>
-                )}
-            </div>
+            ) : hasData ? (
+                <DataState summary={summary} username={username} onNewUpload={handleNewUpload} />
+            ) : (
+                <EmptyState 
+                    username={username} 
+                    handlers={{
+                        handleDrag, handleDrop, handleChange, isUploading,
+                        dragActive, fileInputRef
+                    }} 
+                />
+            )}
 
             {/* Sheet Selection Modal */}
             {pendingSheets.length > 0 && (
@@ -359,8 +489,9 @@ export default function Dashboard({ addNotification }) {
                             <button
                                 onClick={async () => {
                                     setPendingSheets([]);
+                                    setSelectedSheet(null);
                                     setSheetPreview(null);
-                                    setUploadedFile(null); // Return to upload area
+                                    if (fileInputRef.current) fileInputRef.current.value = "";
                                     try {
                                         await customFetch('/api/clear_data', { method: 'POST' });
                                     } catch (err) {

@@ -54,11 +54,11 @@ function FieldChip({ id, zone, dtype, aggregation, onAggChange, onRemove }) {
     };
 
     const DTYPE_CHIP_STYLE = {
-        continuous: 'bg-blue-50 border-blue-100 text-blue-700',
-        discrete: 'bg-violet-50 border-violet-100 text-violet-700',
+        numeric: 'bg-blue-50 border-blue-100 text-blue-700',
         categorical: 'bg-amber-50 border-amber-100 text-amber-700',
         boolean: 'bg-green-50 border-green-100 text-green-700',
         identifier: 'bg-gray-50 border-gray-200 text-gray-500',
+        date: 'bg-teal-50 border-teal-100 text-teal-700',
         unknown: 'bg-gray-50 border-gray-200 text-gray-500',
     };
 
@@ -66,9 +66,9 @@ function FieldChip({ id, zone, dtype, aggregation, onAggChange, onRemove }) {
     const getTypeCategory = (dt) => {
         if (!dt) return 'unknown';
         const low = dt.toLowerCase();
-        if (low.includes('int') || low.includes('float') || low.includes('decimal')) return 'continuous';
+        if (low.includes('int') || low.includes('float') || low.includes('decimal')) return 'numeric';
         if (low.includes('bool')) return 'boolean';
-        if (low.includes('date') || low.includes('time')) return 'discrete';
+        if (low.includes('date') || low.includes('time')) return 'date';
         if (low.includes('string') || low.includes('utf8') || low.includes('object')) return 'categorical';
         return 'unknown';
     };

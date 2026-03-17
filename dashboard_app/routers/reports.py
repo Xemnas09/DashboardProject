@@ -129,7 +129,7 @@ async def chart_data(
     # === FREQUENCY MODE (no Y column) ===
     if not y_col:
         df = df.drop_nulls(subset=[x_col])
-        freq_df = df.group_by(x_col).agg(pl.count().alias('count'))
+        freq_df = df.group_by(x_col).agg(pl.len().alias('count'))
         freq_df = freq_df.sort('count', descending=True).head(limit)
         labels = [str(row[x_col]) for row in freq_df.to_dicts()]
         values = [int(row['count']) for row in freq_df.to_dicts()]
@@ -209,7 +209,7 @@ async def chart_data(
         if y_is_numeric:
             agg_df = df.group_by(x_col).agg(pl.col(y_col).sum().alias('value'))
         else:
-            agg_df = df.group_by(x_col).agg(pl.col(y_col).count().alias('value'))
+            agg_df = df.group_by(x_col).agg(pl.col(y_col).len().alias('value'))
         agg_df = agg_df.sort('value', descending=True).head(20)
         pie_data = [
             {"name": str(row[x_col]), "value": float(row['value'])}
@@ -302,7 +302,7 @@ async def pivot_data(
 
         if a == 'sum': e = curr.sum()
         elif a == 'mean': e = curr.mean()
-        elif a == 'count': e = pl.col(c).count()
+        elif a == 'count': e = pl.col(c).len()
         elif a == 'min': e = curr.min()
         elif a == 'max': e = curr.max()
         else: e = curr.sum()

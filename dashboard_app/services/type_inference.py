@@ -11,6 +11,7 @@ This module provides heuristics to detect:
 import polars as pl
 from loguru import logger
 from typing import Dict, List, Optional
+from .column_classifier import classify_column
 
 # Mapping of French and English month names to their numeric representation (MM).
 # Used for parsing text-based dates like "Mars 2023".
@@ -174,7 +175,22 @@ def infer_and_cast_schema(df: pl.DataFrame) -> pl.DataFrame:
                 logger.info(f"Inferred {col_name} as Date")
                 continue
 
-        # --- 3. Numeric refinement ---
+        # --- 3. Smart Category/ID alignment (Refined Rule 4) ---
+        # Align with statistics tool logic: cast codes to String to prevent averaging.
+        semantic_type = classify_column(series)
+        name_lower = col_name.lower()
+        id_hints = ('id', 'code', 'zip', 'cp', 'num', 'key')
+        
+        if semantic_type == "identifier":
+             cast_exprs.append(pl.col(col_name).cast(pl.String).alias(col_name))
+             logger.info(f"Inferred {col_name} as Identifier (Casted to String)")
+             continue
+        elif semantic_type == "categorical" and any(h in name_lower for h in id_hints):
+             cast_exprs.append(pl.col(col_name).cast(pl.String).alias(col_name))
+             logger.info(f"Inferred {col_name} as Categorical Code (Casted to String)")
+             continue
+
+        # --- 4. Numeric refinement ---
         # Only for strings that contain numbers with optional European separators.
         if dtype == pl.String or dtype == pl.Utf8:
             non_null_series = series.drop_nulls()

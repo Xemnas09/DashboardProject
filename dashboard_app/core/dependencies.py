@@ -11,7 +11,7 @@ Core features include:
 from typing import Optional
 
 from fastapi import Request, Depends
-from jose import jwt, JWTError, ExpiredSignatureError
+import jwt
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -71,9 +71,9 @@ async def get_current_user(
             settings.jwt_secret,
             algorithms=[settings.jwt_algorithm],
         )
-    except ExpiredSignatureError:
+    except jwt.ExpiredSignatureError:
         raise UnauthorizedException("Token expiré. Veuillez rafraîchir votre session.")
-    except JWTError:
+    except jwt.PyJWTError:
         raise UnauthorizedException("Token invalide.")
 
     if payload.get("type") != "access":

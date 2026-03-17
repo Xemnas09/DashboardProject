@@ -5,10 +5,10 @@ Provides endpoints for User Authentication, Session Management, and Token Issuan
 Includes functionality for login, logout, token refresh, and WebSocket ticket generation.
 """
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Request, Response, Depends, HTTPException
-from jose import jwt, JWTError
+import jwt
 
 from core.settings import settings
 from api.auth.schemas import LoginRequest, TokenPayload
@@ -38,7 +38,7 @@ def _create_token(data: dict, token_type: str, expires_delta: timedelta) -> str:
     Returns:
         str: The signed JWT string.
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     payload = {
         **data,
         "type": token_type,
@@ -161,8 +161,7 @@ async def logout(request: Request, response: Response) -> dict[str, str]:
             exp = payload.get("exp")
             if jti and exp:
                 from api.auth.token_service import revoke_token
-                from datetime import datetime
-                await revoke_token(jti, datetime.utcfromtimestamp(exp))
+                await revoke_token(jti, datetime.fromtimestamp(exp, timezone.utc).replace(tzinfo=None))
                 
             cache_id = payload.get("cache_id")
             if cache_id:
@@ -180,7 +179,7 @@ async def logout(request: Request, response: Response) -> dict[str, str]:
             if role == "super_admin":
                 from api.realtime.connection_manager import connection_manager
                 await connection_manager.force_disconnect_user(username, "Déconnexion.")
-        except JWTError:
+        except jwt.PyJWTError:
             pass
 
     is_prod = settings.environment == "production"
@@ -217,7 +216,7 @@ async def refresh_token(request: Request, response: Response) -> dict:
 
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
-    except JWTError:
+    except jwt.PyJWTError:
         raise UnauthorizedException("Refresh token invalide ou expiré. Reconnectez-vous.")
 
     if payload.get("type") != "refresh":
@@ -263,7 +262,7 @@ async def get_ws_token(
     Issues a short-lived (5 min), single-use JWT specifically scoped for WebSocket handshakes.
     These 'ws' tickets cannot be repurposed for standard REST API authorization.
     """
-    expire = datetime.utcnow() + timedelta(minutes=5)
+    expire = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=5)
     payload = {
         "sub": current_user.sub,
         "type": "ws",

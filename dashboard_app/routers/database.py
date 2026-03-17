@@ -61,11 +61,12 @@ async def database_view(
 
     # Prepare Preview
     data_preview = {
-        'columns': [{'field': c, 'title': c} for c in df.columns],
-        'columns_info': [{
-            'name': c,
+        'columns': [{
+            'field': c,
+            'title': c,
             'dtype': str(df[c].dtype),
             'is_numeric': df[c].dtype.is_numeric(),
+            'semantic_type': classify_column(df[c]),
             'is_identifier': classify_column(df[c]) == "identifier",
         } for c in df.columns],
         'data': df.head(2000).to_dicts(),
@@ -140,11 +141,12 @@ async def database_recast(
     }
 
 # ---------------------------------------------------------------------------
-# POST /api/database/expression
+# POST /api/database/expression (Legacy alias: /api/calculated-field)
 # ---------------------------------------------------------------------------
+@router.post("/api/calculated-field")  # Backward compatibility for tests
 @router.post("/api/database/expression")
 @limiter.limit("20/minute")
-async def create_expression(
+async def create_calculated_field(
     request: Request,
     body: ExpressionRequest,
     user: TokenPayload = Depends(get_current_user),
@@ -267,6 +269,10 @@ async def detect_anomalies(
             anomaly_count, anomaly_rate, body.method, freqs, top_anomalies, body.language
         )
 
+    # Persist anomaly count for dashboard
+    entry.last_anomaly_count = anomaly_count
+    await cache_manager.set(user.cache_id, entry)
+
     return {
         "status": "success",
         "method_used": body.method,
@@ -364,7 +370,7 @@ async def get_column_stats(
                 "false_pct": round((false_count / non_null_count * 100), 1) if non_null_count > 0 else 0,
             })
 
-        elif col_type == "continuous":
+        elif col_type == "numeric":
             # Descriptive stats for measures
             metrics.update({
                 "min": float(series.min()) if series.min() is not None else 0.0,
@@ -394,8 +400,29 @@ async def get_column_stats(
                         "range": f"{start:.1f}-{end:.1f}",
                         "count": int(dist_map.get(b_idx, 0))
                     })
+            
+            # Additional discrete-style stats for numeric variables
+            mode_list = series.mode().to_list()
+            mode_val = str(mode_list[0]) if mode_list else "—"
+            metrics.update({
+                "mode": mode_val,
+            })
+            
+            # If low cardinality, also provide a categorical-style distribution
+            unique_count = series.n_unique()
+            if unique_count <= 20:
+                counts = series.value_counts().sort(by="count", descending=True).head(10)
+                non_null_count = total_rows - null_count
+                for row in counts.to_dicts():
+                    val = row[col]
+                    if val is None: continue
+                    dist_data.append({
+                        "value": str(val),
+                        "count": int(row["count"]),
+                        "pct": round((int(row["count"]) / non_null_count * 100), 1) if non_null_count > 0 else 0
+                    })
         
-        elif col_type in ["discrete", "categorical"]:
+        elif col_type == "categorical":
             mode_list = series.mode().to_list()
             mode_val = str(mode_list[0]) if mode_list else "—"
             metrics.update({

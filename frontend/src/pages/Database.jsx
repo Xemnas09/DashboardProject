@@ -34,7 +34,9 @@ import {
     Settings2,
     Settings,
     FileType2,
-    Save
+    Save,
+    Maximize2,
+    Minimize2
 } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
 import { Link } from 'react-router-dom';
@@ -264,7 +266,7 @@ const Header = ({ rowCount, loadedRows, activeToolTab, onOpenToolTab, onOpenStat
     );
 };
 
-const Toolbar = ({ searchQuery, setSearchQuery, pageSize, setPageSize, totalRows, loadedRows, gridRef }) => (
+const Toolbar = ({ searchQuery, setSearchQuery, pageSize, setPageSize, totalRows, loadedRows, gridRef, isTableFullScreen, setIsTableFullScreen }) => (
     <div className="h-12 flex items-center justify-between px-6 bg-gray-50 border-b border-gray-200 z-10 shrink-0">
         <div className="flex items-center gap-4 flex-1">
             <div className="relative w-full max-w-sm">
@@ -307,9 +309,18 @@ const Toolbar = ({ searchQuery, setSearchQuery, pageSize, setPageSize, totalRows
             <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest hidden sm:block">
                 <span className="text-slate-900">{totalRows?.toLocaleString()}</span> lignes &middot; <span className="text-emerald-500">{loadedRows}</span> chargées
             </div>
-            <button className="md:hidden p-2 text-gray-400">
-                <Menu className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-2">
+                <button 
+                    onClick={() => setIsTableFullScreen(!isTableFullScreen)}
+                    className="p-2 text-gray-400 hover:text-bank-600 hover:bg-bank-50 rounded-xl transition-all"
+                    title={isTableFullScreen ? "Réduire le tableau" : "Agrandir le tableau"}
+                >
+                    {isTableFullScreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+                </button>
+                <button className="md:hidden p-2 text-gray-400">
+                    <Menu className="w-5 h-5" />
+                </button>
+            </div>
         </div>
     </div>
 );
@@ -925,17 +936,11 @@ const TYPE_CONFIG = {
         accentColor: 'bg-gray-300',
         description: 'Identifiant unique — séquence progressive'
     },
-    continuous: {
+    numeric: {
         label: 'NUM',
         color: 'bg-blue-100 text-blue-700',
         accentColor: 'bg-blue-400',
-        description: 'Variable numérique continue'
-    },
-    discrete: {
-        label: 'DISC',
-        color: 'bg-violet-100 text-violet-700',
-        accentColor: 'bg-violet-400',
-        description: 'Variable numérique discrète'
+        description: 'Variable numérique'
     },
     categorical: {
         label: 'CAT',
@@ -1063,6 +1068,7 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(false);
     const [selectedCol, setSelectedCol] = useState(null);
+    const [isFullScreen, setIsFullScreen] = useState(false);
 
     useEffect(() => {
         if (isOpen && columns?.length > 0 && !selectedCol) {
@@ -1094,8 +1100,8 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
     const config = currentColStats ? TYPE_CONFIG[currentColStats.type] : null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="flex flex-col bg-white rounded-3xl shadow-2xl w-full max-w-5xl h-[85vh] overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className={`fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200 ${isFullScreen ? 'p-0' : 'p-4 md:p-6'}`}>
+            <div className={`flex flex-col bg-white shadow-2xl transition-all duration-300 ease-in-out animate-in zoom-in-95 ${isFullScreen ? 'w-full h-full rounded-none' : 'w-full max-w-5xl h-[85vh] rounded-3xl overflow-hidden'}`}>
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
                     <div className="flex items-center gap-3">
@@ -1107,9 +1113,18 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
                             <p className="text-xs text-gray-400 font-medium">Calculées sur l'intégralité du dataset</p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-all">
-                        <X size={20} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button 
+                            onClick={() => setIsFullScreen(!isFullScreen)} 
+                            className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-all"
+                            title={isFullScreen ? "Réduire" : "Plein écran"}
+                        >
+                            {isFullScreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
+                        </button>
+                        <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-all">
+                            <X size={20} />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Body */}
@@ -1118,7 +1133,7 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
                     <div className="w-full md:w-52 flex-shrink-0 border-b md:border-b-0 md:border-r border-gray-100 overflow-y-auto custom-scrollbar bg-gray-50/50 py-3 h-40 md:h-auto">
                         {(columns || []).map(col => {
                             const statData = stats ? stats[col.field] : null;
-                            const colType = statData ? statData.type : (col.is_numeric ? 'continuous' : 'categorical');
+                            const colType = statData ? statData.type : (col.is_numeric ? 'numeric' : 'categorical');
                             const colConfig = TYPE_CONFIG[colType] || TYPE_CONFIG.categorical;
                             const isActive = col.field === selectedCol;
                             return (
@@ -1169,12 +1184,12 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
                                     </div>
                                 )}
 
-                                {currentColStats.type === 'continuous' && (
+                                {currentColStats.type === 'numeric' && (
                                     <>
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                             <StatCard label="Moyenne" value={currentColStats.metrics.mean} accent={true} />
                                             <StatCard label="Médiane" value={currentColStats.metrics.median} />
-                                            <StatCard label="Écart-type" value={currentColStats.metrics.std} />
+                                            <StatCard label="Mode" value={currentColStats.metrics.mode} />
                                             <StatCard label="Valeurs nulles" value={currentColStats.metrics.nulls} subtitle={`${currentColStats.metrics.null_pct}% du total`} accent={currentColStats.metrics.null_pct > 20} />
                                         </div>
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1186,7 +1201,7 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
                                     </>
                                 )}
 
-                                {(currentColStats.type === 'discrete' || currentColStats.type === 'categorical') && (
+                                {currentColStats.type === 'categorical' && (
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                         <StatCard label="Total lignes" value={currentColStats.metrics.count} />
                                         <StatCard label="Valeurs uniques" value={currentColStats.metrics.uniques} accent={true} />
@@ -1214,7 +1229,7 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
                                 )}
 
                                 {/* Interpretation block */}
-                                {currentColStats.type === 'continuous' && (
+                                {currentColStats.type === 'numeric' && (
                                     <InterpretationBlock
                                         mean={currentColStats.metrics.mean}
                                         std={currentColStats.metrics.std}
@@ -1235,14 +1250,14 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
                                             </p>
                                         </div>
                                     )}
-                                    {currentColStats.type === 'continuous' && currentColStats.distribution && (
+                                    {currentColStats.type === 'numeric' && currentColStats.distribution && (
                                         <div className="h-80 w-full">
-                                            <ReactECharts option={getHistogramOption(currentColStats.distribution)} style={{ height: '100%', width: '100%' }} />
-                                        </div>
-                                    )}
-                                    {currentColStats.type === 'discrete' && currentColStats.distribution && (
-                                        <div className="h-80 w-full">
-                                            <ReactECharts option={getDiscreteOption(currentColStats.distribution)} style={{ height: '100%', width: '100%' }} />
+                                            <ReactECharts 
+                                                option={currentColStats.distribution.length > 0 && currentColStats.distribution[0].range 
+                                                    ? getHistogramOption(currentColStats.distribution) 
+                                                    : getDiscreteOption(currentColStats.distribution)} 
+                                                style={{ height: '100%', width: '100%' }} 
+                                            />
                                         </div>
                                     )}
                                     {currentColStats.type === 'categorical' && currentColStats.distribution && (
@@ -1286,6 +1301,7 @@ export default function Database({ addNotification }) {
     const [loading, setLoading] = useState(true);
     const [activeToolTab, setActiveToolTab] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [isTableFullScreen, setIsTableFullScreen] = useState(false);
     const [pageSize, setPageSize] = useState(15);
 
     const [selectedAnomalyCols, setSelectedAnomalyCols] = useState([]);
@@ -1528,6 +1544,25 @@ export default function Database({ addNotification }) {
         }
     };
 
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape' && isTableFullScreen) {
+                setIsTableFullScreen(false);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isTableFullScreen]);
+
+    const handleImport = async (file) => {
+        if (!gridRef.current?.api) return;
+
+        const rowData = [];
+        gridRef.current.api.forEachNodeAfterFilter(node => {
+            rowData.push(node.data);
+        });
+    };
+
     const handleExport = (format) => {
         if (!gridRef.current?.api) return;
 
@@ -1650,16 +1685,20 @@ export default function Database({ addNotification }) {
             sortable: true,
             filter: true,
             resizable: true,
-            headerComponent: (props) => (
-                <div className="flex flex-col leading-none py-1">
-                    <span className="text-[11px] font-black text-slate-800 uppercase tracking-tight truncate mb-0.5">
-                        {props.displayName}
-                    </span>
-                    <span className="text-[8px] font-extrabold text-bank-500 uppercase tracking-[0.1em] opacity-80">
-                        {TYPE_LABELS[col.dtype] || col.dtype}
-                    </span>
-                </div>
-            ),
+            headerComponent: (props) => {
+                const sType = col.semantic_type || (col.is_identifier ? 'identifier' : (col.is_numeric ? 'numeric' : 'categorical'));
+                const config = TYPE_CONFIG[sType] || TYPE_CONFIG.categorical;
+                return (
+                    <div className="flex flex-col leading-none py-1">
+                        <span className="text-[11px] font-black text-slate-800 uppercase tracking-tight truncate mb-0.5">
+                            {props.displayName}
+                        </span>
+                        <span className={`text-[8px] font-extrabold uppercase tracking-[0.1em] px-1.5 py-0.5 rounded-md ${config.color}`}>
+                            {config.label}
+                        </span>
+                    </div>
+                );
+            },
             width: col.is_identifier ? 100 : 180,
             pinned: (col.is_identifier || (isMobile && idx === 0)) ? 'left' : null,
             cellClass: (params) => {
@@ -1688,6 +1727,18 @@ export default function Database({ addNotification }) {
             return anomalyResult.anomalies.some(a => a.row_index === params.node.rowIndex);
         },
     }), [anomalyResult]);
+
+    const onGridReady = (params) => {
+        params.api.sizeColumnsToFit();
+    };
+
+    const defaultColDef = useMemo(() => ({
+        sortable: true,
+        filter: true,
+        resizable: true,
+        flex: 1,
+        minWidth: 100,
+    }), []);
 
     const handleDeleteData = async () => {
         try {
@@ -1738,108 +1789,109 @@ export default function Database({ addNotification }) {
                 onDelete={() => setShowDeleteConfirm(true)}
                 onExport={handleExport}
             />
+            
+            <div className={`bg-white transition-all duration-300 ease-in-out ${isTableFullScreen ? 'fixed inset-0 z-[100] flex flex-col' : 'rounded-3xl shadow-2xl shadow-bank-100 overflow-hidden border border-bank-100'}`}>
+                <Toolbar
+                    searchQuery={searchQuery}
+                    setSearchQuery={setSearchQuery}
+                    pageSize={pageSize}
+                    setPageSize={setPageSize}
+                    totalRows={dataPreview?.total_rows}
+                    loadedRows={dataPreview?.data?.length}
+                    gridRef={gridRef}
+                    isTableFullScreen={isTableFullScreen}
+                    setIsTableFullScreen={setIsTableFullScreen}
+                />
 
-            <Toolbar
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
-                pageSize={pageSize}
-                setPageSize={setPageSize}
-                totalRows={dataPreview?.total_rows}
-                loadedRows={dataPreview?.data?.length}
-                gridRef={gridRef}
-            />
+                <div className={`ag-theme-quartz ${isTableFullScreen ? 'flex-1' : 'h-[600px] border-b border-gray-100'}`}>
+                    <AgGridReact
+                        ref={gridRef}
+                        rowData={dataPreview?.data}
+                        columnDefs={colDefs}
+                        defaultColDef={defaultColDef}
+                        onGridReady={onGridReady}
+                        pagination={true}
+                        paginationPageSize={pageSize}
+                        onPaginationChanged={onPaginationChanged}
+                        quickFilterText={searchQuery}
+                        rowClassRules={rowClassRules}
+                    />
+                </div>
+            </div>
 
-            <div className="flex-1 relative overflow-hidden bg-gray-50">
+            {!isTableFullScreen && (
                 <AnomalyBanner
                     anomalyResult={anomalyResult}
                     isExpanded={isAnomalyBannerExpanded}
                     setIsExpanded={setIsAnomalyBannerExpanded}
                     onExport={handleExportAnomalies}
                 />
+            )}
 
-                {dataPreview && (
-                    <div className="w-full h-full ag-theme-quartz custom-scrollbar" style={{ paddingTop: isAnomalyBannerExpanded ? '40px' : '0' }}>
-                        <AgGridReact
-                            ref={gridRef}
-                            rowData={dataPreview.data}
-                            columnDefs={colDefs}
-                            defaultColDef={{ sortable: true, filter: true, resizable: true }}
-                            pagination={true}
-                            paginationPageSize={pageSize}
-                            suppressPaginationPanel={true}
-                            onPaginationChanged={onPaginationChanged}
-                            rowClassRules={rowClassRules}
-                            quickFilterText={searchQuery}
-                        />
-                    </div>
-                )}
+            {/* MODALS */}
+            <VariablesModal
+                isOpen={activeToolTab === 'types'}
+                onClose={() => setActiveToolTab(null)}
+                columnsInfo={columnsInfo}
+                onTypeChange={handleTypeChange}
+                onSave={saveColumnTypes}
+                isSaving={isSavingTypes}
+            />
 
-                {/* MODALS */}
-                <VariablesModal
-                    isOpen={activeToolTab === 'types'}
-                    onClose={() => setActiveToolTab(null)}
-                    columnsInfo={columnsInfo}
-                    onTypeChange={handleTypeChange}
-                    onSave={saveColumnTypes}
-                    isSaving={isSavingTypes}
-                />
+            <AnomaliesModal
+                isOpen={activeToolTab === 'anomalies'}
+                onClose={() => setActiveToolTab(null)}
+                columns={dataPreview?.columns}
+                selectedCols={selectedAnomalyCols}
+                onToggleCol={(field) => {
+                    setSelectedAnomalyCols(prev => prev.includes(field) ? prev.filter(f => f !== field) : [...prev, field]);
+                }}
+                method={anomalyMethod}
+                setMethod={setAnomalyMethod}
+                threshold={anomalyThreshold}
+                setThreshold={setAnomalyThreshold}
+                onAnalyze={handleAnalyzeAnomalies}
+                isLoading={anomalyLoading}
+                hasResult={!!anomalyResult}
+                onReopenBanner={() => { setIsAnomalyBannerExpanded(true); setActiveToolTab(null); }}
+            />
 
-                <AnomaliesModal
-                    isOpen={activeToolTab === 'anomalies'}
-                    onClose={() => setActiveToolTab(null)}
-                    columns={dataPreview?.columns}
-                    selectedCols={selectedAnomalyCols}
-                    onToggleCol={(field) => {
-                        setSelectedAnomalyCols(prev => prev.includes(field) ? prev.filter(f => f !== field) : [...prev, field]);
-                    }}
-                    method={anomalyMethod}
-                    setMethod={setAnomalyMethod}
-                    threshold={anomalyThreshold}
-                    setThreshold={setAnomalyThreshold}
-                    onAnalyze={handleAnalyzeAnomalies}
-                    isLoading={anomalyLoading}
-                    hasResult={!!anomalyResult}
-                    onReopenBanner={() => { setIsAnomalyBannerExpanded(true); setActiveToolTab(null); }}
-                />
+            <CalculatedFieldsModal
+                isOpen={activeToolTab === 'expression'}
+                onClose={() => setActiveToolTab(null)}
+                columns={dataPreview?.columns}
+                onAdd={handleAddExpression}
+                isLoading={expressionLoading}
+                error={expressionError}
+            />
 
-                <CalculatedFieldsModal
-                    isOpen={activeToolTab === 'expression'}
-                    onClose={() => setActiveToolTab(null)}
-                    columns={dataPreview?.columns}
-                    onAdd={handleAddExpression}
-                    isLoading={expressionLoading}
-                    error={expressionError}
-                />
+            <PDFExportModal
+                isOpen={isPDFExportModalOpen}
+                onClose={() => setIsPDFExportModalOpen(false)}
+                columns={dataPreview?.columns || []}
+                selectedCols={pdfSelectedCols}
+                onToggleCol={(field) => {
+                    if (field === 'all') setPdfSelectedCols((dataPreview?.columns || []).map(c => c.field));
+                    else if (field === 'none') setPdfSelectedCols([]);
+                    else setPdfSelectedCols(prev => prev.includes(field) ? prev.filter(f => f !== field) : [...prev, field]);
+                }}
+                onGenerate={handleGeneratePDF}
+                isLoading={isPDFGenerating}
+            />
 
-                <PDFExportModal
-                    isOpen={isPDFExportModalOpen}
-                    onClose={() => setIsPDFExportModalOpen(false)}
-                    columns={dataPreview?.columns}
-                    selectedCols={pdfSelectedCols}
-                    onToggleCol={(field) => {
-                        if (field === 'all') setPdfSelectedCols(dataPreview.columns.map(c => c.field));
-                        else if (field === 'none') setPdfSelectedCols([]);
-                        else setPdfSelectedCols(prev => prev.includes(field) ? prev.filter(f => f !== field) : [...prev, field]);
-                    }}
-                    onGenerate={handleGeneratePDF}
-                    isLoading={isPDFGenerating}
-                />
+            <StatisticsModal
+                isOpen={isStatsModalOpen}
+                onClose={() => setIsStatsModalOpen(false)}
+                columns={dataPreview?.columns || []}
+            />
 
-                <StatisticsModal
-                    isOpen={isStatsModalOpen}
-                    onClose={() => setIsStatsModalOpen(false)}
-                    columns={dataPreview?.columns || []}
-                />
-
-                <MathWarningModal
-                    isOpen={!!mathWarning}
-                    onClose={() => setMathWarning(null)}
-                    warning={mathWarning}
-                    onConfirm={handleAddExpression}
-                    isLoading={expressionLoading}
-                />
-
-            </div>
+            <MathWarningModal
+                isOpen={!!mathWarning}
+                onClose={() => setMathWarning(null)}
+                warning={mathWarning}
+                onConfirm={handleAddExpression}
+                isLoading={expressionLoading}
+            />
 
             <Footer
                 currentPage={currentPage}
@@ -1888,7 +1940,6 @@ export default function Database({ addNotification }) {
                     </div>
                 </div>
             )}
-
         </div>
     );
 }

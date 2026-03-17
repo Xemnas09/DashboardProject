@@ -12,6 +12,7 @@ from api.auth.schemas import TokenPayload
 from schemas.upload import SheetSelectRequest
 from core.dependencies import get_current_user, limiter
 from core.exceptions import ValidationException
+from datetime import datetime, timezone
 from services.file_processor import (
     validate_extension,
     save_upload_chunked,
@@ -28,6 +29,17 @@ router = APIRouter(tags=["Upload"])
 # ---------------------------------------------------------------------------
 # POST /api/upload
 # ---------------------------------------------------------------------------
+@router.post("/upload")
+@limiter.limit("10/minute")
+async def upload_file_legacy(
+    request: Request,
+    file: UploadFile = File(...),
+    user: TokenPayload = Depends(get_current_user),
+):
+    """Legacy endpoint for backward compatibility with tests."""
+    return await upload_file(request, file, user)
+
+
 @router.post("/api/upload")
 @limiter.limit("10/minute")
 async def upload_file(
@@ -49,6 +61,11 @@ async def upload_file(
     preview_data = process_file_preview(filepath)
     reset_stats_cache()
 
+    # Get file size in MB
+    file_size_mb = 0.0
+    if os.path.exists(filepath):
+        file_size_mb = round(os.path.getsize(filepath) / (1024 * 1024), 1)
+
     cache_id = user.cache_id
     from main import cache_manager
 
@@ -58,6 +75,8 @@ async def upload_file(
         schema_overrides=preview_data.get('suggested_overrides', {}) if preview_data else {},
         preview=preview_data,
         selected_sheet=preview_data.get('selected_sheet') if preview_data else None,
+        imported_at=datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+        file_size_mb=file_size_mb
     )
 
     # Handle multi-sheet Excel
@@ -86,8 +105,9 @@ async def upload_file(
 
 
 # ---------------------------------------------------------------------------
-# POST /api/upload/select-sheet
+# POST /api/upload/select-sheet (Legacy alias: /api/select-sheet)
 # ---------------------------------------------------------------------------
+@router.post("/api/select-sheet")  # Backward compatibility for tests
 @router.post("/api/upload/select-sheet")
 async def select_sheet(
     body: SheetSelectRequest,

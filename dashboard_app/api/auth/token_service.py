@@ -12,7 +12,7 @@ Lifecycle:
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -73,7 +73,7 @@ async def load_revoked_tokens() -> None:
     Populate in-memory cache from DB on startup.
     Only loads non-expired tokens.
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(RevokedToken.jti).where(RevokedToken.expires_at > now)
@@ -88,7 +88,7 @@ async def cleanup_expired_tokens() -> None:
     Delete expired entries from DB and remove from cache.
     Called periodically (every hour) by the background task in main.py.
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(RevokedToken.jti).where(RevokedToken.expires_at <= now)

@@ -33,6 +33,14 @@ dashboard_app/
 │       ├── router.py       # WS connection endpoints
 │       └── manager.py      # ConnectionManager singleton (presence, broadcast)
 │
+├── services/               # Shared Business Logic (Service Layer)
+│   ├── file_processor.py   # Lock-free reading & preview generation (Calamine)
+│   ├── type_inference.py   # Advanced casting heuristics (Date, Bool, Numeric)
+│   ├── column_classifier.py# Semantic labeling (NUM, CAT, ID)
+│   ├── data_service.py     # Batch operations & atomic saving
+│   ├── anomaly_detector.py # Isolation Forest & IQR outliers
+│   └── llm_interpreter.py  # LLM interpretation of data patterns
+│
 └── main.py                 # Application factory & global router registry
 ```
 
