@@ -98,7 +98,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Datavera API",
     description="Backend API for the Datavera data analytics dashboard.",
-    version="0.2.0",
+    version="0.3.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -221,4 +221,4 @@ else:
     # Fallback si le frontend n'est pas buildé (dev local)
     @app.get("/", include_in_schema=False)
     async def root():
-        return {"status": "ok", "app": "Datavera API", "version": "0.2.0"}
+        return {"status": "ok", "app": "Datavera API", "version": "0.3.0"}

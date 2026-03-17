@@ -1,3 +1,16 @@
+## [0.3.0] - 2026-03-17
+
+### Added
+- **Blindage d'Importation (P1/P2)** : Moteur de lecture résilient avec détection d'encodage (UTF-8/Latin-1) et détection de séparateur (`;`, `,`, `\t`).
+- **Supports de Formats Étendus** : Support natif des fichiers **Parquet** (avec lazy loading) et **JSON** (records, NDJSON, columns).
+- **Importation URL Sécurisée** : Téléchargement distant avec protection contre le SSRF et limite de taille (50Mo).
+- **Nettoyage Automatique** : Suppression des caractères BOM et des espaces insécables dans les noms de colonnes.
+- **Résilience Excel/Parquet** : Conversion des erreurs de formules Excel en `null` et aplatissement des types complexes Parquet pour le frontend.
+
+### Fixed
+- **Validation Strict** : Détection et rejet propre des fichiers vides ou mal structurés.
+- **Optimisation Preview** : Chargement limité à 500 lignes pour les fichiers volumineux.
+
 ## [0.2.0] - 2026-03-17
 
 ### Added

@@ -1,4 +1,4 @@
-# Datavera v0.2.0
+# Datavera v0.3.0
 
 Datavera est une plateforme moderne d'analyse et d'exploration de données haute performance, conçue pour transformer des fichiers bruts (CSV, Excel) en insights exploitables avec une interface glassmorphic ultra-fluide.
 
