@@ -87,3 +87,64 @@ export async function customFetch(url, options = {}) {
     // We keep credentials: 'include' as a fallback pattern
     return fetch(url, { credentials: 'include', ...options, headers })
 }
+
+/**
+ * Custom XHR wrapper for file uploads to track exact progress and distinct phases (Sending vs Processing).
+ * It intercepts the network upload events that `fetch` cannot see.
+ * 
+ * @param {string} url - Target URL.
+ * @param {FormData} formData - The payload containing the file.
+ * @param {Object} callbacks - Contains onUploadProgress(pct), onUploadComplete(), and signal.
+ */
+export function customXHRUpload(url, formData, { onUploadProgress, onUploadComplete, signal }) {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.withCredentials = true;
+
+        xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable && onUploadProgress) {
+                const percentComplete = Math.round((event.loaded / event.total) * 100);
+                onUploadProgress(percentComplete);
+            }
+        };
+
+        xhr.upload.onload = () => {
+            // Fired precisely when the last byte is sent over the network
+            if (onUploadComplete) onUploadComplete();
+        };
+
+        xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                    const responseJson = JSON.parse(xhr.responseText);
+                    resolve({ ok: true, status: xhr.status, json: async () => responseJson });
+                } catch (e) {
+                    reject(new Error("Format de réponse invalide"));
+                }
+            } else {
+                try {
+                    const responseJson = JSON.parse(xhr.responseText);
+                    resolve({ ok: false, status: xhr.status, json: async () => responseJson });
+                } catch {
+                    reject(new Error(`Erreur HTTP: ${xhr.status}`));
+                }
+            }
+        };
+
+        xhr.onerror = () => reject(new Error("Erreur réseau pendant l'upload"));
+        xhr.onabort = () => {
+            const err = new Error("AbortError");
+            err.name = "AbortError";
+            reject(err);
+        };
+
+        if (signal) {
+            signal.addEventListener('abort', () => xhr.abort());
+        }
+
+        xhr.open('POST', url, true);
+        const token = getToken();
+        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        xhr.send(formData);
+    });
+}

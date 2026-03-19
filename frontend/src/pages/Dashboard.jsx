@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthContext';
-import { getDisplayName, customFetch } from '../features/auth/session';
+import { getDisplayName, customFetch, customXHRUpload } from '../features/auth/session';
 import OnlineUsers from '../features/realtime/OnlineUsers';
 
 // --- UTILITIES ---
@@ -62,9 +62,25 @@ function EmptyState({ username, handlers }) {
 
       <div className="w-full max-w-2xl">
         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-          {/* Overlay to block sidebar and header clicks during upload */}
+          {/* Cancelable Upload Modal Portal */}
           {handlers.isUploading && createPortal(
-            <div className="fixed inset-0 z-[9999] bg-white/30 backdrop-blur-[2px] cursor-wait" />,
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 animate-fade-in">
+              <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-sm w-full text-center border border-gray-100 flex flex-col items-center">
+                <div className="w-16 h-16 border-4 border-bank-100 border-t-bank-600 rounded-full animate-spin mb-6"></div>
+                <h3 className="text-xl font-black text-gray-900 mb-2">Importation en cours</h3>
+                <p className="text-sm font-medium text-gray-500 mb-8">
+                  {handlers.uploadPhase === 'processing' 
+                    ? 'Analyse Polars en cours...' 
+                    : `Envoi au serveur... ${handlers.uploadProgress}%`}
+                </p>
+                <button 
+                  onClick={handlers.handleCancelUpload}
+                  className="w-full py-3 px-4 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 font-bold rounded-xl transition-colors ring-1 ring-red-100"
+                >
+                  Annuler l'importation
+                </button>
+              </div>
+            </div>,
             document.body
           )}
 
@@ -334,7 +350,16 @@ export default function Dashboard({ addNotification }) {
     const [isPreviewLoading, setIsPreviewLoading] = useState(false);
     const [activeTab, setActiveTab] = useState('local');
     const [urlInput, setUrlInput] = useState('');
+    const [uploadPhase, setUploadPhase] = useState('sending');
+    const [uploadProgress, setUploadProgress] = useState(0);
     const fileInputRef = useRef(null);
+    const abortControllerRef = useRef(null);
+
+    const handleCancelUpload = () => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+    };
 
     const { currentUser } = useAuth();
     const username = getDisplayName(currentUser) || 'Utilisateur';
@@ -382,8 +407,8 @@ export default function Dashboard({ addNotification }) {
     };
 
     const handleFileProcess = async (file) => {
-        if (!file.name.match(/\.(csv|xlsx|xls)$/i)) {
-            addNotification('Format non supporté. Utilisez CSV ou Excel.', 'error');
+        if (!file.name.match(/\.(csv|tsv|json|xlsx|xls|parquet)$/i)) {
+            addNotification('Format non supporté. Pris en charge: CSV, Excel, Parquet, JSON.', 'error');
             return;
         }
 
@@ -394,15 +419,18 @@ export default function Dashboard({ addNotification }) {
 
         setIsUploading(true);
         setUploadSuccess(false);
+        setUploadPhase('sending');
+        setUploadProgress(0);
+        abortControllerRef.current = new AbortController();
 
         const formData = new FormData();
         formData.append('file', file);
 
         try {
-            const res = await customFetch('/api/upload', {
-                method: 'POST',
-                body: formData,
-                credentials: 'include',
+            const res = await customXHRUpload('/api/upload', formData, {
+                signal: abortControllerRef.current.signal,
+                onUploadProgress: (pct) => setUploadProgress(pct),
+                onUploadComplete: () => setUploadPhase('processing')
             });
             const result = await res.json();
 
@@ -419,10 +447,15 @@ export default function Dashboard({ addNotification }) {
                 throw new Error(result.message || 'Erreur inconnue');
             }
         } catch (err) {
-            console.error(err);
-            addNotification(err.message, 'error');
+            if (err.name === 'AbortError') {
+                addNotification("Importation annulée par l'utilisateur", 'info');
+            } else {
+                console.error(err);
+                addNotification(err.message, 'error');
+            }
         } finally {
             setIsUploading(false);
+            abortControllerRef.current = null;
         }
     };
 
@@ -438,6 +471,8 @@ export default function Dashboard({ addNotification }) {
 
         setIsUploading(true);
         setUploadSuccess(false);
+        setUploadPhase('sending');
+        abortControllerRef.current = new AbortController();
 
         try {
             const res = await customFetch('/api/upload/url', {
@@ -445,6 +480,7 @@ export default function Dashboard({ addNotification }) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url: urlInput }),
                 credentials: 'include',
+                signal: abortControllerRef.current.signal
             });
             const result = await res.json();
 
@@ -462,10 +498,15 @@ export default function Dashboard({ addNotification }) {
                 throw new Error(result.message || 'Erreur inconnue');
             }
         } catch (err) {
-            console.error(err);
-            addNotification(err.message, 'error');
+            if (err.name === 'AbortError') {
+                addNotification("Importation annulée par l'utilisateur", 'info');
+            } else {
+                console.error(err);
+                addNotification(err.message, 'error');
+            }
         } finally {
             setIsUploading(false);
+            abortControllerRef.current = null;
         }
     };
 
@@ -496,12 +537,15 @@ export default function Dashboard({ addNotification }) {
 
     const handleSheetSelection = async () => {
         setIsUploading(true);
+        setUploadPhase('processing');
+        abortControllerRef.current = new AbortController();
         try {
             const res = await customFetch('/api/upload/select-sheet', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ sheet_name: selectedSheet }),
                 credentials: 'include',
+                signal: abortControllerRef.current.signal
             });
             const result = await res.json();
 
@@ -514,10 +558,15 @@ export default function Dashboard({ addNotification }) {
                 throw new Error(result.message || 'Erreur lors de l\'importation de la feuille');
             }
         } catch (err) {
-            console.error(err);
-            addNotification(err.message, 'error');
+            if (err.name === 'AbortError') {
+                addNotification("Analyse annulée par l'utilisateur", 'info');
+            } else {
+                console.error(err);
+                addNotification(err.message, 'error');
+            }
         } finally {
             setIsUploading(false);
+            abortControllerRef.current = null;
         }
     };
 
@@ -543,7 +592,8 @@ export default function Dashboard({ addNotification }) {
                     handlers={{
                         handleDrag, handleDrop, handleChange, isUploading, uploadSuccess,
                         dragActive, fileInputRef,
-                        activeTab, setActiveTab, urlInput, setUrlInput, handleUrlSubmit
+                        activeTab, setActiveTab, urlInput, setUrlInput, handleUrlSubmit,
+                        uploadPhase, uploadProgress, handleCancelUpload
                     }} 
                 />
             )}

@@ -123,14 +123,19 @@ def infer_and_cast_schema(df: pl.DataFrame) -> pl.DataFrame:
         series = df[col_name]
         dtype = series.dtype
 
+        # Create a small sample for heavy regex tests to prevent locking the CPU on 100M row Parquet files
+        sample_series = series.drop_nulls().head(2000)
+        total_non_null = len(series.drop_nulls())
+        
+        if total_non_null == 0: 
+            continue
+
+        sample_df = pl.DataFrame({col_name: sample_series})
+
         # --- 1. Automatic Boolean Detection ---
         # Only checks String columns.
         if dtype == pl.String or dtype == pl.Utf8:
-            non_null_series = series.drop_nulls()
-            total_non_null = len(non_null_series)
-            if total_non_null == 0: continue
-
-            unique_vals = [str(x).lower().strip() for x in non_null_series.unique().to_list()]
+            unique_vals = [str(x).lower().strip() for x in sample_series.unique().to_list()]
             # Known pairs that represent binary states
             bool_pairs = [{'oui', 'non'}, {'vrai', 'faux'}, {'yes', 'no'}, {'true', 'false'}, {'0', '1'}, {'m', 'f'}]
             bool_trues = {'oui', 'vrai', 'yes', 'true', '1', 'm'}
@@ -166,14 +171,15 @@ def infer_and_cast_schema(df: pl.DataFrame) -> pl.DataFrame:
 
         if is_potential_date:
             date_expr = smart_cast_to_date(col_name, df)
-            test_cast = df.select(date_expr.alias("test"))["test"]
-            total_non_null = series.drop_nulls().len()
             
-            # Confidence threshold: 70% of rows must successfully convert to be considered a Date column.
-            if total_non_null > 0 and test_cast.drop_nulls().len() > (total_non_null * 0.7):
-                cast_exprs.append(date_expr.alias(col_name))
-                logger.info(f"Inferred {col_name} as Date")
-                continue
+            if len(sample_series) > 0:
+                test_cast = sample_df.select(date_expr.alias("test"))["test"]
+                
+                # Confidence threshold: 70% of rows must successfully convert to be considered a Date column.
+                if test_cast.drop_nulls().len() > (len(sample_series) * 0.7):
+                    cast_exprs.append(date_expr.alias(col_name))
+                    logger.info(f"Inferred {col_name} as Date")
+                    continue
 
         # --- 3. Smart Category/ID alignment (Refined Rule 4) ---
         # Align with statistics tool logic: cast codes to String to prevent averaging.
@@ -193,19 +199,15 @@ def infer_and_cast_schema(df: pl.DataFrame) -> pl.DataFrame:
         # --- 4. Numeric refinement ---
         # Only for strings that contain numbers with optional European separators.
         if dtype == pl.String or dtype == pl.Utf8:
-            non_null_series = series.drop_nulls()
-            total_non_null = len(non_null_series)
-            if total_non_null == 0: continue
-
             # Deep cleaning: remove everything except digits, dots, commas, and dashes.
             # Convert comma to dot for float parsing.
             clean_col = pl.col(col_name).str.replace_all(r"[^\d.,\-]", "").str.replace(",", ".")
             try:
-                float_series = df.select(clean_col.cast(pl.Float64, strict=False))[col_name]
+                float_series = sample_df.select(clean_col.cast(pl.Float64, strict=False))[col_name]
                 float_non_null = float_series.drop_nulls()
                 
                 # Confidence threshold: 90% of rows must be numeric.
-                if len(float_non_null) > (total_non_null * 0.90) and len(float_non_null) > 0:
+                if len(float_non_null) > (len(sample_series) * 0.90) and len(float_non_null) > 0:
                     is_int = float_non_null.mod(1.0).sum() == 0.0
                     if is_int:
                         cast_exprs.append(clean_col.cast(pl.Float64, strict=False).cast(pl.Int64, strict=False).alias(col_name))

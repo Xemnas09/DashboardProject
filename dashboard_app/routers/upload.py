@@ -3,8 +3,10 @@ Upload router: /upload, /api/upload, /api/upload/url, /api/select-sheet, /clear_
 """
 import os
 import uuid
+import asyncio
 
 from fastapi import APIRouter, Request, Response, Depends, UploadFile, File
+from starlette.requests import ClientDisconnect
 from loguru import logger
 
 from core.settings import settings
@@ -54,54 +56,72 @@ async def upload_file(
     safe_name = validate_extension(file.filename)
     filepath = os.path.join(settings.upload_folder, safe_name)
 
-    # Stream to disk in chunks (50MB limit)
-    await save_upload_chunked(file, filepath)
+    upload_success = False
+    try:
+        # Stream to disk in chunks (50MB limit)
+        await save_upload_chunked(file, filepath)
 
-    # Generate preview
-    preview_data = process_file_preview(filepath)
-    reset_stats_cache()
+        # Generate preview
+        preview_data = process_file_preview(filepath)
+        reset_stats_cache()
 
-    # Get file size in MB
-    file_size_mb = 0.0
-    if os.path.exists(filepath):
-        file_size_mb = round(os.path.getsize(filepath) / (1024 * 1024), 1)
+        # Get file size in MB
+        file_size_mb = 0.0
+        if os.path.exists(filepath):
+            file_size_mb = round(os.path.getsize(filepath) / (1024 * 1024), 1)
 
-    cache_id = user.cache_id
-    from services.data_cache import cache_manager
+        cache_id = user.cache_id
+        from services.data_cache import cache_manager
 
-    entry = CacheEntry(
-        filepath=filepath,
-        filename=file.filename,
-        schema_overrides=preview_data.get('suggested_overrides', {}) if preview_data else {},
-        preview=preview_data,
-        selected_sheet=preview_data.get('selected_sheet') if preview_data else None,
-        imported_at=datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
-        file_size_mb=file_size_mb
-    )
+        entry = CacheEntry(
+            filepath=filepath,
+            filename=file.filename,
+            schema_overrides=preview_data.get('suggested_overrides', {}) if preview_data else {},
+            preview=preview_data,
+            selected_sheet=preview_data.get('selected_sheet') if preview_data else None,
+            imported_at=datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+            file_size_mb=file_size_mb
+        )
 
-    # Handle multi-sheet Excel
-    if preview_data and preview_data.get('requires_sheet_selection'):
-        previews = get_sheet_previews_parallel(filepath)
-        entry.preview = None
-        entry.pending_sheets = preview_data['sheets']
+        # Handle multi-sheet Excel
+        if preview_data and preview_data.get('requires_sheet_selection'):
+            previews = get_sheet_previews_parallel(filepath)
+            entry.preview = None
+            entry.pending_sheets = preview_data['sheets']
+            await cache_manager.set(cache_id, entry)
+            upload_success = True
+            return {
+                "status": "requires_sheet",
+                "sheets": preview_data['sheets'],
+                "all_previews": previews,
+                "message": "Plusieurs feuilles détectées.",
+            }
+
         await cache_manager.set(cache_id, entry)
+
+        notif = notification_store.add(user.sub, f"Fichier {file.filename} importé", "info")
+        logger.info(f"File uploaded: {file.filename} → {safe_name} [user={user.sub}]")
+
+        upload_success = True
         return {
-            "status": "requires_sheet",
-            "sheets": preview_data['sheets'],
-            "all_previews": previews,
-            "message": "Plusieurs feuilles détectées.",
+            "status": "success",
+            "message": "Fichier reçu et traité avec succès !",
+            "notification": notif,
         }
-
-    await cache_manager.set(cache_id, entry)
-
-    notif = notification_store.add(user.sub, f"Fichier {file.filename} importé", "info")
-    logger.info(f"File uploaded: {file.filename} → {safe_name} [user={user.sub}]")
-
-    return {
-        "status": "success",
-        "message": "Fichier reçu et traité avec succès !",
-        "notification": notif,
-    }
+    except (asyncio.CancelledError, ClientDisconnect):
+        logger.warning(f"Upload annulé par le client : {file.filename}")
+        raise
+    except Exception as e:
+        logger.error(f"Erreur inattendue durant l'upload de {file.filename}: {e}")
+        raise
+    finally:
+        # Nettoyage du fichier incomplet / corrompu s'il y a eu un problème (ex: annulation)
+        if not upload_success and os.path.exists(filepath):
+            try:
+                os.remove(filepath)
+                logger.info(f"Fichier partiel supprimé suite à l'annulation : {filepath}")
+            except OSError:
+                pass
 
 
 # ---------------------------------------------------------------------------
@@ -217,55 +237,73 @@ async def upload_from_url(
     from services.data_cache import cache_manager
 
     # Download from URL → save to uploads/ folder
-    filepath, detected_filename = await import_from_url(
-        url=str(body.url),
-        upload_folder=settings.upload_folder,
-    )
+    filepath = None
+    upload_success = False
+    try:
+        filepath, detected_filename = await import_from_url(
+            url=str(body.url),
+            upload_folder=settings.upload_folder,
+        )
 
-    # Generate preview using the same pipeline as a normal upload
-    preview_data = process_file_preview(filepath)
-    reset_stats_cache()
+        # Generate preview using the same pipeline as a normal upload
+        preview_data = process_file_preview(filepath)
+        reset_stats_cache()
 
-    file_size_mb = 0.0
-    if os.path.exists(filepath):
-        file_size_mb = round(os.path.getsize(filepath) / (1024 * 1024), 1)
+        file_size_mb = 0.0
+        if os.path.exists(filepath):
+            file_size_mb = round(os.path.getsize(filepath) / (1024 * 1024), 1)
 
-    cache_id = user.cache_id
-    entry = CacheEntry(
-        filepath=filepath,
-        filename=detected_filename,
-        schema_overrides=preview_data.get('suggested_overrides', {}) if preview_data else {},
-        preview=preview_data,
-        selected_sheet=preview_data.get('selected_sheet') if preview_data else None,
-        imported_at=datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
-        file_size_mb=file_size_mb,
-    )
+        cache_id = user.cache_id
+        entry = CacheEntry(
+            filepath=filepath,
+            filename=detected_filename,
+            schema_overrides=preview_data.get('suggested_overrides', {}) if preview_data else {},
+            preview=preview_data,
+            selected_sheet=preview_data.get('selected_sheet') if preview_data else None,
+            imported_at=datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+            file_size_mb=file_size_mb,
+        )
 
-    # Handle multi-sheet Excel returned from URL
-    if preview_data and preview_data.get('requires_sheet_selection'):
-        from services.file_processor import get_sheet_previews_parallel
-        previews = get_sheet_previews_parallel(filepath)
-        entry.preview = None
-        entry.pending_sheets = preview_data['sheets']
+        # Handle multi-sheet Excel returned from URL
+        if preview_data and preview_data.get('requires_sheet_selection'):
+            from services.file_processor import get_sheet_previews_parallel
+            previews = get_sheet_previews_parallel(filepath)
+            entry.preview = None
+            entry.pending_sheets = preview_data['sheets']
+            await cache_manager.set(cache_id, entry)
+            upload_success = True
+            return {
+                "status": "requires_sheet",
+                "sheets": preview_data['sheets'],
+                "all_previews": previews,
+                "message": "Plusieurs feuilles détectées.",
+            }
+
         await cache_manager.set(cache_id, entry)
+
+        notif = notification_store.add(
+            user.sub,
+            f"Fichier importé depuis URL : {detected_filename}",
+            "info",
+        )
+        logger.info(f"URL import completed: {detected_filename} [user={user.sub}]")
+
+        upload_success = True
         return {
-            "status": "requires_sheet",
-            "sheets": preview_data['sheets'],
-            "all_previews": previews,
-            "message": "Plusieurs feuilles détectées.",
+            "status": "success",
+            "message": "Fichier importé et traité avec succès !",
+            "notification": notif,
         }
-
-    await cache_manager.set(cache_id, entry)
-
-    notif = notification_store.add(
-        user.sub,
-        f"Fichier importé depuis URL : {detected_filename}",
-        "info",
-    )
-    logger.info(f"URL import completed: {detected_filename} [user={user.sub}]")
-
-    return {
-        "status": "success",
-        "message": "Fichier importé et traité avec succès !",
-        "notification": notif,
-    }
+    except (asyncio.CancelledError, ClientDisconnect):
+        logger.warning(f"Importation URL annulée par le client : {body.url}")
+        raise
+    except Exception as e:
+        logger.error(f"Erreur inattendue durant l'import URL {body.url}: {e}")
+        raise
+    finally:
+        if not upload_success and filepath and os.path.exists(filepath):
+            try:
+                os.remove(filepath)
+                logger.info(f"Fichier URL partiel supprimé suite à l'annulation : {filepath}")
+            except OSError:
+                pass
