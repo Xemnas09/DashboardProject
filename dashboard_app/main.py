@@ -98,7 +98,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Datavera API",
     description="Backend API for the Datavera data analytics dashboard.",
-    version="0.3.1",
+    version="0.3.2",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",

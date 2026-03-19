@@ -1,3 +1,9 @@
+## [0.3.2] - 2026-03-19
+
+### Added
+- **Correction du Build Frontend** : Ajout de la dépendance manquante `dompurify` pour résoudre l'échec de compilation Vite (Rollup/jsPDF) sur les environnements CI persistants.
+- **Sécurité et Ergonomie d'Importation** : Implémentation d'un React Portal pour l'overlay de chargement, garantissant la neutralisation totale de l'interface (incluant la barre latérale) pendant l'importation locale ou distante.
+
 ## [0.3.1] - 2026-03-19
 
 ### Added

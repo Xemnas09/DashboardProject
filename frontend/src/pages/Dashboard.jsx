@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   UploadCloud, CheckCircle2, DatabaseIcon, BarChart3, 
   FileSpreadsheet, ArrowRight, AlertCircle, AlertTriangle, 
@@ -61,25 +62,33 @@ function EmptyState({ username, handlers }) {
 
       <div className="w-full max-w-2xl">
         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+          {/* Overlay to block sidebar and header clicks during upload */}
+          {handlers.isUploading && createPortal(
+            <div className="fixed inset-0 z-[9999] bg-white/30 backdrop-blur-[2px] cursor-wait" />,
+            document.body
+          )}
+
           {/* Tabs */}
           <div className="flex border-b border-gray-100">
             <button
               onClick={() => handlers.setActiveTab('local')}
+              disabled={handlers.isUploading}
               className={`flex-1 py-4 text-sm font-black uppercase tracking-wider transition-all ${
                 handlers.activeTab === 'local'
                   ? 'text-bank-600 border-b-2 border-bank-500 bg-bank-50/30'
                   : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
-              }`}
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               📁 Fichier Local
             </button>
             <button
               onClick={() => handlers.setActiveTab('url')}
+              disabled={handlers.isUploading}
               className={`flex-1 py-4 text-sm font-black uppercase tracking-wider transition-all ${
                 handlers.activeTab === 'url'
                   ? 'text-bank-600 border-b-2 border-bank-500 bg-bank-50/30'
                   : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
-              }`}
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               🔗 Importer via URL
             </button>
