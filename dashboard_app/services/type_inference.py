@@ -44,13 +44,13 @@ def smart_cast_to_date(col_name: str, df: Optional[pl.DataFrame] = None) -> pl.E
     Attempts to cast a column to Date by trying multiple formats and completion logics.
     Handles standard formats, partials (YYYY-MM), and text-based dates.
     
-    Args:
-        col_name: The name of the column to cast.
-        df: Optional reference DataFrame for context (not currently used for logic, but kept for interface consistency).
-        
-    Returns:
-        A Polars expression resulting in a Date column (with nulls for unparseable rows).
+    If the column is already a Date/Datetime, we preserve the date part.
     """
+    if df is not None and col_name in df.columns:
+        curr_dtype = df[col_name].dtype
+        if curr_dtype in (pl.Date, pl.Datetime):
+            return pl.col(col_name).cast(pl.Date)
+
     col_expr = pl.col(col_name).cast(pl.String)
     
     # 1. Clean the string: replace common separators with dashes
@@ -84,8 +84,6 @@ def smart_cast_to_date(col_name: str, df: Optional[pl.DataFrame] = None) -> pl.E
         # Replace month names with numbers
         for m_name, m_num in MONTH_MAP.items():
             mapped_expr = mapped_expr.str.replace(rf"\b{m_name}\b", m_num, literal=False)
-        # Handle French "1er" (first)
-        mapped_expr = mapped_expr.str.replace(r"\b1er\b", "01", literal=False)
         # Final cleanup for text-to-date conversion
         clean_mapped = mapped_expr.str.replace_all(r"[\s/.]+", "-").str.strip_chars("-")
         
@@ -93,134 +91,137 @@ def smart_cast_to_date(col_name: str, df: Optional[pl.DataFrame] = None) -> pl.E
             clean_mapped.str.to_date("%m-%Y-%d", strict=False),
             clean_mapped.str.to_date("%d-%m-%Y", strict=False),
             clean_mapped.str.to_date("%Y-%m-%d", strict=False),
-            (clean_mapped + "-01").str.to_date("%m-%Y-%d", strict=False), # Month-Year -> Month-Year-01
-            (clean_mapped + "-01").str.to_date("%Y-%m-%d", strict=False),
         ])
-    except Exception:
-        # Ignore errors during regex building
-        pass
+    except Exception: pass
 
-    # Coalesce all attempts: take the first non-null result
-    final_expr = pl.coalesce(attempts)
+    return pl.coalesce(attempts)
+
+def smart_cast_to_datetime(col_name: str, df: Optional[pl.DataFrame] = None) -> pl.Expr:
+    """
+    Attempts to cast a column to Datetime (including time).
+    If it's already Datetime, it remains untouched.
+    """
+    if df is not None and col_name in df.columns:
+        if df[col_name].dtype == pl.Datetime:
+            return pl.col(col_name)
+            
+    col_expr = pl.col(col_name).cast(pl.String)
     
-    # Final fallback attempt using default Polars heuristic if all explicit formats failed
-    return pl.when(final_expr.is_null()).then(col_expr.str.to_date(format="%Y-%m-%d", strict=False)).otherwise(final_expr)
+    # 1. Try numeric conversion (Unix Timestamps)
+    # Most common: seconds (10 digits) or milliseconds (13 digits)
+    sample = df[col_name].drop_nulls().head(100)
+    is_numeric_like = False
+    if sample.dtype.is_numeric():
+        is_numeric_like = True
+    elif sample.dtype == pl.String and len(sample) > 0:
+        if sample.str.contains(r"^\d+$").all():
+            is_numeric_like = True
+
+    if is_numeric_like:
+        num_expr = pl.col(col_name).cast(pl.Int64, strict=False)
+        # Heuristic: Unix seconds are ~10 digits (1e9), ms are ~13 digits (1.7e12).
+        # We handle seconds by multiplying by 1000 to reach ms.
+        return pl.when(num_expr > 10**11).then(
+            num_expr.cast(pl.Datetime("ms"))
+        ).otherwise(
+            (num_expr * 1000).cast(pl.Datetime("ms"))
+        )
+
+    # 2. String parsing
+    # Clean separators
+    clean_expr = col_expr.str.strip_chars().str.replace_all(r"[\/\.]", "-")
+    
+    # Try common formats that include time
+    formats = [
+        "%Y-%m-%d %H:%M:%S",
+        "%d-%m-%Y %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S", # ISO
+        "%Y-%m-%d %H:%M:%S%.f", # Precision with sub-seconds
+        "%Y-%m-%d %H:%M",
+    ]
+    
+    attempts = [clean_expr.str.to_datetime(fmt, strict=False) for fmt in formats]
+    
+    return pl.coalesce(attempts)
 
 def infer_and_cast_schema(df: pl.DataFrame) -> pl.DataFrame:
     """
     Main entry point for automatic schema discovery.
-    Iterates through all columns and applies casting expressions if a high-confidence match is found.
-    
-    Args:
-        df: The source Polars DataFrame.
-        
-    Returns:
-        A new DataFrame with inferred types applied to its columns.
     """
     cast_exprs = []
     
     for col_name in df.columns:
         series = df[col_name]
         dtype = series.dtype
-
-        # Create a small sample for heavy regex tests to prevent locking the CPU on 100M row Parquet files
         sample_series = series.drop_nulls().head(2000)
-        total_non_null = len(series.drop_nulls())
         
-        if total_non_null == 0: 
+        if len(sample_series) == 0: 
             continue
 
         sample_df = pl.DataFrame({col_name: sample_series})
 
-        # --- 1. Automatic Boolean Detection ---
-        # Only checks String columns.
-        if dtype == pl.String or dtype == pl.Utf8:
-            unique_vals = [str(x).lower().strip() for x in sample_series.unique().to_list()]
-            # Known pairs that represent binary states
-            bool_pairs = [{'oui', 'non'}, {'vrai', 'faux'}, {'yes', 'no'}, {'true', 'false'}, {'0', '1'}, {'m', 'f'}]
-            bool_trues = {'oui', 'vrai', 'yes', 'true', '1', 'm'}
-            bool_falses = {'non', 'faux', 'no', 'false', '0', 'f'}
-            
-            is_bool = False
-            if len(unique_vals) == 2 and set(unique_vals) in bool_pairs:
-                is_bool = True
-            elif len(unique_vals) == 1 and (unique_vals[0] in bool_trues or unique_vals[0] in bool_falses):
-                is_bool = True
-                
-            if is_bool:
-                cast_exprs.append(smart_cast_to_boolean(col_name).alias(col_name))
-                logger.info(f"Inferred {col_name} as Boolean")
-                continue
-
-        # --- 2. Automatic Date Detection ---
-        # Checks String columns OR numeric columns that look like Years (e.g. 2023).
-        is_potential_date = False
+        # --- 1. Boolean ---
         if dtype in (pl.String, pl.Utf8):
-            is_potential_date = True
-        elif dtype.is_numeric():
-            # Year range check: 1800 to 2100 is likely a Year, not just a random ID or count.
-            try:
-                non_null = series.drop_nulls()
-                if len(non_null) > 0:
-                    min_val = non_null.min()
-                    max_val = non_null.max()
-                    if min_val >= 1800 and max_val <= 2100:
-                        is_potential_date = True
-            except:
-                pass
-
-        if is_potential_date:
-            date_expr = smart_cast_to_date(col_name, df)
-            
-            if len(sample_series) > 0:
-                test_cast = sample_df.select(date_expr.alias("test"))["test"]
-                
-                # Confidence threshold: 70% of rows must successfully convert to be considered a Date column.
-                if test_cast.drop_nulls().len() > (len(sample_series) * 0.7):
-                    cast_exprs.append(date_expr.alias(col_name))
-                    logger.info(f"Inferred {col_name} as Date")
+            unique_vals = [str(x).lower().strip() for x in sample_series.unique().to_list()]
+            if len(unique_vals) <= 2:
+                bool_pairs = [{'oui', 'non'}, {'vrai', 'faux'}, {'yes', 'no'}, {'true', 'false'}, {'0', '1'}, {'m', 'f'}]
+                if set(unique_vals) in bool_pairs or all(v in {'oui', 'vrai', 'yes', 'true', '1', 'm', 'non', 'faux', 'no', 'false', '0', 'f'} for v in unique_vals):
+                    cast_exprs.append(smart_cast_to_boolean(col_name).alias(col_name))
                     continue
 
-        # --- 3. Smart Category/ID alignment (Refined Rule 4) ---
-        # Align with statistics tool logic: cast codes to String to prevent averaging.
-        semantic_type = classify_column(series)
-        name_lower = col_name.lower()
-        id_hints = ('id', 'code', 'zip', 'cp', 'num', 'key')
-        
-        if semantic_type == "identifier":
-             cast_exprs.append(pl.col(col_name).cast(pl.String).alias(col_name))
-             logger.info(f"Inferred {col_name} as Identifier (Casted to String)")
-             continue
-        elif semantic_type == "categorical" and any(h in name_lower for h in id_hints):
-             cast_exprs.append(pl.col(col_name).cast(pl.String).alias(col_name))
-             logger.info(f"Inferred {col_name} as Categorical Code (Casted to String)")
-             continue
+        # --- 2. Date / Datetime ---
+        if dtype in (pl.String, pl.Utf8):
+            # Safeguard: if it's purely numeric strings, verify they are long enough to be timestamps
+            # (Preventing IDs like "1", "2" to be auto-cast to 1970 dates)
+            if sample_series.str.contains(r"^\d+$").all():
+                max_val = sample_series.cast(pl.Int64, strict=False).max()
+                if max_val is not None and max_val < 100_000_000: # Below 1973 if seconds
+                    # Looks like IDs, not timestamps. Skip auto-conversion.
+                    pass
+                else:
+                    # Proceed with check
+                    pass
+            
+            # Try Datetime first (prioritize precision)
+            dt_expr = smart_cast_to_datetime(col_name, sample_df)
+            test_dt = sample_df.select(dt_expr.alias("test"))["test"].drop_nulls()
+            
+            if len(test_dt) > (len(sample_series) * 0.7):
+                # Check for significant time components
+                try:
+                    has_time = (test_dt.dt.hour() != 0).any() or (test_dt.dt.minute() != 0).any()
+                except: has_time = False
+                
+                if has_time:
+                    cast_exprs.append(dt_expr.alias(col_name))
+                    continue
+                else:
+                    # Successfully parsed but no time -> cast to Date
+                    cast_exprs.append(dt_expr.cast(pl.Date).alias(col_name))
+                    continue
 
-        # --- 4. Numeric refinement ---
-        # Only for strings that contain numbers with optional European separators.
-        if dtype == pl.String or dtype == pl.Utf8:
-            # Deep cleaning: remove everything except digits, dots, commas, and dashes.
-            # Convert comma to dot for float parsing.
+            # Fallback to Date-only formats if Datetime failed
+            date_expr = smart_cast_to_date(col_name, sample_df)
+            test_date = sample_df.select(date_expr.alias("test"))["test"].drop_nulls()
+            if len(test_date) > (len(sample_series) * 0.7):
+                cast_exprs.append(date_expr.alias(col_name))
+                continue
+
+        # --- 3. Numeric ---
+        if dtype in (pl.String, pl.Utf8):
             clean_col = pl.col(col_name).str.replace_all(r"[^\d.,\-]", "").str.replace(",", ".")
             try:
-                float_series = sample_df.select(clean_col.cast(pl.Float64, strict=False))[col_name]
-                float_non_null = float_series.drop_nulls()
-                
-                # Confidence threshold: 90% of rows must be numeric.
-                if len(float_non_null) > (len(sample_series) * 0.90) and len(float_non_null) > 0:
-                    is_int = float_non_null.mod(1.0).sum() == 0.0
+                num_series = sample_df.select(clean_col.cast(pl.Float64, strict=False))[col_name].drop_nulls()
+                if len(num_series) > (len(sample_series) * 0.9):
+                    is_int = num_series.mod(1.0).sum() == 0.0
                     if is_int:
                         cast_exprs.append(clean_col.cast(pl.Float64, strict=False).cast(pl.Int64, strict=False).alias(col_name))
                     else:
                         cast_exprs.append(clean_col.cast(pl.Float64, strict=False).alias(col_name))
-                    logger.info(f"Inferred {col_name} as Numeric")
                     continue
-            except Exception:
-                pass
+            except: pass
 
-    # Apply all collected casting expressions at once (lazy-parallelized by Polars).
     if cast_exprs:
         df = df.with_columns(cast_exprs)
-        
     return df
 

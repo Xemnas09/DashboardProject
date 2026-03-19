@@ -8,6 +8,8 @@ import sys
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
 from typing import Any
+from typing import Any, Optional, List, Dict
+import time
 
 from loguru import logger
 
@@ -15,18 +17,27 @@ from loguru import logger
 @dataclass
 class CacheEntry:
     """A single cached dataset."""
+    id: str
     filepath: str
-    filename: str                           # original filename (for display only)
-    schema_overrides: dict = field(default_factory=dict)
-    preview: dict | None = None
-    selected_sheet: str | None = None
-    pending_sheets: list[str] | None = None
+    filename: Optional[str] = None
+    file_size_mb: float = 0.0
+    imported_at: Optional[str] = None
     last_accessed: datetime = field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
-    # Metadata for dashboard summary
-    imported_at: str | None = None
-    file_size_mb: float = 0.0
+    # Selection and processing state
+    pending_sheets: List[str] = field(default_factory=list)
+    selected_sheet: Optional[str] = None
+    schema_overrides: Dict[str, str] = field(default_factory=dict)
+    preview: Optional[Dict] = None
+    
+    # Performance Burst: RAM Caching of the processed DataFrame
+    # Note: Using Any to avoid circular imports with Polars/FileProcessor
+    df: Any = None 
+    
+    # Metadata for dashboard summary to avoid re-calculation
+    summary_metadata: Optional[dict] = None
     last_anomaly_count: int = 0
+    last_llm_report: Optional[str] = None
 
 
 class DataCacheManager:
@@ -109,6 +120,11 @@ class DataCacheManager:
                 if filepath and os.path.exists(filepath):
                     try:
                         os.remove(filepath)
+                        # Also remove the IPC cache if it exists
+                        ipc_path = f"{filepath}.ipc"
+                        if os.path.exists(ipc_path):
+                            os.remove(ipc_path)
+                            logger.debug(f"Deleted expired IPC cache: {ipc_path}")
                         logger.debug(f"Deleted expired file: {filepath}")
                     except OSError as e:
                         logger.warning(f"Failed to delete {filepath}: {e}")

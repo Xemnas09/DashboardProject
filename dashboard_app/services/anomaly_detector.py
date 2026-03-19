@@ -10,15 +10,20 @@ from sklearn.ensemble import IsolationForest
 
 class AnomalyDetector:
     def detect(self, df: pl.DataFrame, columns: list[str], method: str, threshold: float) -> tuple[list[dict], list[str]]:
-        # Filtre sur les colonnes existantes
-        working_cols = [c for c in columns if c in df.columns]
+        """
+        PhD-Level Anomaly Detection Engine.
         
-        # Séparation Numérique / Non-Numérique
+        Methods:
+          - zscore: Modified Z-Score (using Median and MAD). Robust to outliers.
+          - iqr: Tukey's Fences. Non-parametric and robust.
+          - isolation_forest: Multivariate Isolation Forest. Detects structural anomalies.
+        """
+        working_cols = [c for c in columns if c in df.columns]
         numeric_cols = [c for c in working_cols if df[c].dtype.is_numeric()]
         non_numeric_cols = [c for c in working_cols if not df[c].dtype.is_numeric()]
         
         skipped_for_method = []
-        anomalies_map = {} # row_index -> {values: {}, scores: {}, flags: []}
+        anomalies_map = {} 
 
         def _add_anomaly(row_idx, col, val, score):
             if row_idx not in anomalies_map:

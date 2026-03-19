@@ -61,8 +61,8 @@ async def upload_file(
         # Stream to disk in chunks (50MB limit)
         await save_upload_chunked(file, filepath)
 
-        # Generate preview
-        preview_data = process_file_preview(filepath)
+        # Generate preview & Hydrate RAM Cache
+        preview_data = await process_file_preview(user.cache_id, filepath)
         reset_stats_cache()
 
         # Get file size in MB
@@ -74,6 +74,7 @@ async def upload_file(
         from services.data_cache import cache_manager
 
         entry = CacheEntry(
+            id=cache_id,
             filepath=filepath,
             filename=file.filename,
             schema_overrides=preview_data.get('suggested_overrides', {}) if preview_data else {},
@@ -119,6 +120,8 @@ async def upload_file(
         if not upload_success and os.path.exists(filepath):
             try:
                 os.remove(filepath)
+                if os.path.exists(f"{filepath}.ipc"):
+                    os.remove(f"{filepath}.ipc")
                 logger.info(f"Fichier partiel supprimé suite à l'annulation : {filepath}")
             except OSError:
                 pass
@@ -141,7 +144,7 @@ async def select_sheet(
     if not entry.filepath:
         raise ValidationException("Chemin du fichier introuvable")
 
-    preview_data = process_file_preview(entry.filepath, sheet_name=body.sheet_name)
+    preview_data = await process_file_preview(user.cache_id, entry.filepath, sheet_name=body.sheet_name)
     reset_stats_cache()
 
     entry.preview = preview_data
@@ -176,7 +179,7 @@ async def sheet_preview(
         raise ValidationException("Aucun fichier en attente")
 
     # Lightweight preview for the specific sheet
-    preview_data = process_file_preview(entry.filepath, sheet_name=body.sheet_name, row_limit=10)
+    preview_data = await process_file_preview(user.cache_id, entry.filepath, sheet_name=body.sheet_name, row_limit=10)
     
     if not preview_data:
         raise ValidationException("Impossible de générer l'aperçu de la feuille")
@@ -246,7 +249,7 @@ async def upload_from_url(
         )
 
         # Generate preview using the same pipeline as a normal upload
-        preview_data = process_file_preview(filepath)
+        preview_data = await process_file_preview(user.cache_id, filepath)
         reset_stats_cache()
 
         file_size_mb = 0.0
@@ -255,6 +258,7 @@ async def upload_from_url(
 
         cache_id = user.cache_id
         entry = CacheEntry(
+            id=cache_id,
             filepath=filepath,
             filename=detected_filename,
             schema_overrides=preview_data.get('suggested_overrides', {}) if preview_data else {},
@@ -304,6 +308,8 @@ async def upload_from_url(
         if not upload_success and filepath and os.path.exists(filepath):
             try:
                 os.remove(filepath)
+                if os.path.exists(f"{filepath}.ipc"):
+                    os.remove(f"{filepath}.ipc")
                 logger.info(f"Fichier URL partiel supprimé suite à l'annulation : {filepath}")
             except OSError:
                 pass

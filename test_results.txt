@@ -1,0 +1,12 @@
+Column               | DType      | Semantic Type
+--------------------------------------------------
+binary_int           | Int64      | boolean
+binary_float         | Float64    | boolean
+low_card_int         | Int64      | categorical
+low_card_float       | Float64    | categorical
+high_card_int        | Int64      | identifier
+high_card_float      | Float64    | numeric
+id_col               | Int64      | identifier
+price_col            | Float64    | numeric
+date_col             | Object     | categorical
+datetime_col         | Object     | categorical

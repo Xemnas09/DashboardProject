@@ -23,42 +23,58 @@ async def get_dashboard_summary(user: TokenPayload = Depends(get_current_user)):
     if entry.pending_sheets and not entry.selected_sheet:
         return {"has_data": False}
 
-    df = read_cached_df(entry.filepath, entry.selected_sheet, entry.schema_overrides)
+    # 1. Fast Path: Use pre-calculated metadata
+    if entry.summary_metadata:
+        return {
+            "has_data": True,
+            "filename": entry.filename,
+            "imported_at": entry.imported_at,
+            "file_size_mb": entry.file_size_mb,
+            "anomaly_count": entry.last_anomaly_count,
+            **entry.summary_metadata
+        }
+
+    # 2. Slow Path (Safe Fallback): Compute using RAM-Cached DF if available
+    df = entry.df
+    if df is None:
+        df = read_cached_df(entry.filepath, entry.selected_sheet, entry.schema_overrides)
+    
     if df is None:
         return {"has_data": False}
 
+    # Optimized stats using native Polars aggregations (no Python loops)
     total = len(df)
     col_count = len(df.columns)
+    null_cells = int(df.null_count().sum_horizontal().sum())
+    null_rate = round((null_cells / (total * col_count)) * 100, 1) if total * col_count > 0 else 0
 
-    # Numeric vs categorical
-    numeric_cols = [c for c in df.columns if df[c].dtype.is_numeric()]
-    categorical_cols = [c for c in df.columns if not df[c].dtype.is_numeric()]
-
-    # Global null rate
-    total_cells = total * col_count
-    null_cells = sum(int(df[c].null_count()) for c in df.columns)
-    null_rate = round((null_cells / total_cells) * 100, 1) if total_cells > 0 else 0
-
-    # Column warnings — high null rate columns (> 10%)
+    # Quick Column warnings (top 5 high null rate)
+    stats = df.null_count()
     col_warnings = [
-        c for c in df.columns
-        if (int(df[c].null_count()) / total) > 0.1
-    ] if total > 0 else []
+        col for col in df.columns 
+        if (int(stats[col][0]) / total) > 0.1
+    ][:5] if total > 0 else []
 
-    # Quality score (heuristic)
+    # Quality score
     quality_score = max(0, round(100 - null_rate - (len(col_warnings) * 2)))
+    
+    # Store in cache for next hit
+    entry.summary_metadata = {
+        "row_count": total,
+        "col_count": col_count,
+        "numeric_count": len([c for c in df.columns if df[c].dtype.is_numeric()]),
+        "categorical_count": len([c for c in df.columns if not df[c].dtype.is_numeric()]),
+        "null_rate": null_rate,
+        "quality_score": quality_score,
+        "col_warnings": col_warnings
+    }
+    await cache_manager.set(user.cache_id, entry)
 
     return {
         "has_data": True,
         "filename": entry.filename,
-        "imported_at": entry.imported_at or datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+        "imported_at": entry.imported_at,
         "file_size_mb": entry.file_size_mb,
-        "row_count": total,
-        "col_count": col_count,
-        "numeric_count": len(numeric_cols),
-        "categorical_count": len(categorical_cols),
-        "null_rate": null_rate,
-        "quality_score": quality_score,
-        "col_warnings": col_warnings[:5],  # max 5 for UI clarity
         "anomaly_count": entry.last_anomaly_count,
+        **entry.summary_metadata
     }

@@ -298,7 +298,16 @@ function DataState({ summary, username, onNewUpload }) {
           { label: 'Lignes', value: summary.row_count.toLocaleString('fr-FR'), sub: 'enregistrements', icon: Database, color: 'bank' },
           { label: 'Colonnes', value: summary.col_count, sub: `${summary.numeric_count} NUM · ${summary.categorical_count} CAT`, icon: Layers, color: 'violet' },
           { label: 'Valeurs nulles', value: `${summary.null_rate}%`, sub: summary.null_rate < 5 ? 'Excellent' : summary.null_rate < 15 ? 'Acceptable' : 'À corriger', icon: AlertCircle, color: summary.null_rate < 5 ? 'emerald' : summary.null_rate < 15 ? 'amber' : 'red' },
-          { label: 'Anomalies', value: summary.anomaly_count > 0 ? summary.anomaly_count.toLocaleString('fr-FR') : '—', sub: summary.anomaly_count > 0 ? 'détectées' : 'Aucune détectée', icon: ShieldAlert, color: summary.anomaly_count > 0 ? 'red' : 'emerald' },
+          { label: 'Anomalies', value: summary.anomaly_count > 0 ? summary.anomaly_count.toLocaleString('fr-FR') : '—', sub: (
+            <div className="flex flex-col gap-1">
+              <span>{summary.anomaly_count > 0 ? 'détectées' : 'Aucune détectée'}</span>
+              {summary.anomaly_count > 0 && (
+                <Link to="/database" className="text-red-500 hover:text-red-700 font-black uppercase tracking-tighter flex items-center gap-1 mt-1 group-hover:translate-x-1 transition-all">
+                  Voir <ArrowRight size={10} />
+                </Link>
+              )}
+            </div>
+          ), icon: ShieldAlert, color: summary.anomaly_count > 0 ? 'red' : 'emerald' },
         ].map((kpi, i) => (
           <KpiCard key={i} {...kpi} />
         ))}

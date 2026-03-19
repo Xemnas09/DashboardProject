@@ -37,7 +37,12 @@ from core.exceptions import (
     ValidationException,
     JsonStructureException,
 )
-from services.type_inference import infer_and_cast_schema, smart_cast_to_boolean, smart_cast_to_date
+from services.type_inference import (
+    infer_and_cast_schema,
+    smart_cast_to_boolean,
+    smart_cast_to_date,
+    smart_cast_to_datetime
+)
 from services.column_classifier import classify_column
 
 
@@ -343,7 +348,11 @@ def first_row_looks_like_data(df: pl.DataFrame) -> bool:
 # ---------------------------------------------------------------------------
 # Core format reader
 # ---------------------------------------------------------------------------
-def read_format(filepath: str, content: bytes, sheet_name: Optional[str] = None) -> Tuple[pl.DataFrame, Optional[List[str]]]:
+def read_format(
+    filepath: str, 
+    content: Optional[bytes] = None, 
+    sheet_name: Optional[str] = None
+) -> Tuple[pl.DataFrame, Optional[List[str]]]:
     """
     Step 1 of the pipeline.
 
@@ -368,6 +377,11 @@ def read_format(filepath: str, content: bytes, sheet_name: Optional[str] = None)
     ext = Path(filepath).suffix.lower()
 
     if ext in (".csv", ".tsv"):
+        # If content not provided, read a sample for detection
+        if content is None:
+            with open(filepath, "rb") as f:
+                content = f.read() # For CSV/TSV we still need detection for now
+        
         # Detect encoding and strip BOM
         raw = strip_bom(content)
         encoding = detect_encoding(raw)
@@ -395,7 +409,10 @@ def read_format(filepath: str, content: bytes, sheet_name: Optional[str] = None)
 
     elif ext in (".xlsx", ".xls"):
         try:
-            workbook = CalamineWorkbook.from_object(BytesIO(content))
+            if content is not None:
+                workbook = CalamineWorkbook.from_object(BytesIO(content))
+            else:
+                workbook = CalamineWorkbook.from_path(filepath)
             sheet_names = workbook.sheet_names
         except Exception as e:
             msg = str(e).lower()
@@ -411,7 +428,10 @@ def read_format(filepath: str, content: bytes, sheet_name: Optional[str] = None)
 
         active_sheet = sheet_name if sheet_name else sheet_names[0]
         try:
-            df = pl.read_excel(content, sheet_name=active_sheet, engine="calamine")
+            if content is not None:
+                df = pl.read_excel(content, sheet_name=active_sheet, engine="calamine")
+            else:
+                df = pl.read_excel(filepath, sheet_name=active_sheet, engine="calamine")
         except Exception as e:
             raise ValidationException(f"Erreur de lecture de la feuille '{active_sheet}' : {e}")
 
@@ -431,6 +451,9 @@ def read_format(filepath: str, content: bytes, sheet_name: Optional[str] = None)
 
     elif ext == ".json":
         try:
+            if content is None:
+                with open(filepath, "rb") as f:
+                    content = f.read()
             parsed = _json.loads(content.decode("utf-8", errors="replace"))
         except Exception as e:
             raise ValidationException(f"JSON invalide ou non décodable : {e}")
@@ -469,7 +492,10 @@ def read_format(filepath: str, content: bytes, sheet_name: Optional[str] = None)
 
     elif ext == ".parquet":
         try:
-            df = pl.read_parquet(BytesIO(content))
+            if content is not None:
+                df = pl.read_parquet(BytesIO(content))
+            else:
+                df = pl.read_parquet(filepath)
         except Exception as e:
             raise ValidationException(f"Fichier Parquet corrompu ou illisible : {e}")
         return df, None
@@ -513,7 +539,8 @@ def classify_column(series: pl.Series) -> str:
 # ---------------------------------------------------------------------------
 # Schema Inference & Application
 # ---------------------------------------------------------------------------
-def process_file_preview(
+async def process_file_preview(
+    cache_id: str,
     filepath: str,
     sheet_name: Optional[str] = None,
     schema_overrides: Optional[Dict[str, str]] = None,
@@ -552,13 +579,11 @@ def process_file_preview(
                 f"Le fichier '{Path(filepath).name}' est vide (0 octet)."
             )
 
-        with open(filepath, "rb") as f:
-            content = f.read()
-
         filename = Path(filepath).name
+        ext = Path(filepath).suffix.lower()
 
         # ── Step 1: Read ────────────────────────────────────────────────────
-        df, sheet_names = read_format(filepath, content, sheet_name)
+        df, sheet_names = read_format(filepath, content=None, sheet_name=sheet_name)
 
         # Handle multi-sheet Excel: signal to UI
         if sheet_names is not None:
@@ -586,10 +611,21 @@ def process_file_preview(
         original_schema = {col: str(dtype) for col, dtype in zip(df.columns, df.dtypes)}
         df = infer_and_cast_schema(df)
 
+        # ── Save optimized IPC cache ─────────────────────────────────────────
+        if not sheet_names: # Fast path for summary/database queries
+            try:
+                cache_path = f"{filepath}.ipc"
+                df.write_ipc(cache_path)
+                logger.info(f"Saved optimized IPC cache: {cache_path}")
+            except Exception as e:
+                logger.warning(f"Failed to save IPC cache: {e}")
+
         suggested_overrides = {}
         for col in df.columns:
             new_type = str(df[col].dtype)
-            if "Date" in new_type or "Datetime" in new_type:
+            if "Datetime" in new_type:
+                suggested_overrides[col] = "Datetime"
+            elif "Date" in new_type:
                 suggested_overrides[col] = "Date"
             elif "Bool" in new_type:
                 suggested_overrides[col] = "Boolean"
@@ -621,6 +657,8 @@ def process_file_preview(
                         cast_exprs.append(smart_cast_to_boolean(col).alias(col))
                     elif target == 'Date':
                         cast_exprs.append(smart_cast_to_date(col, df).alias(col))
+                    elif target == 'Datetime':
+                        cast_exprs.append(smart_cast_to_datetime(col, df).alias(col))
             if cast_exprs:
                 df = df.with_columns(cast_exprs)
 
@@ -645,27 +683,42 @@ def process_file_preview(
 
         result = {
             'requires_sheet_selection': False,
-            'columns': [{
-                'field': col,
-                'title': col,
-                'dtype': str(df[col].dtype),
-                'is_numeric': df[col].dtype.is_numeric(),
-                'semantic_type': classify_column(df[col]),
-                'is_identifier': classify_column(df[col]) == "identifier",
-            } for col in df.columns],
+            'columns': columns_info,
             'data': safe_df.to_dicts(),
             'total_rows': df.height,
             'selected_sheet': sheet_name,
             'suggested_overrides': suggested_overrides,
-            'header_warning': header_warning,  # True = first row might be data
+            'header_warning': header_warning,
         }
-        logger.success(f"Preview generated: {len(df.columns)} cols, {df.height} rows")
+
+        # ── Performance Layer: Hydrate RAM Cache & Calculate Summary ─────────
+        from .data_cache import cache_manager
+        entry = await cache_manager.get(cache_id)
+        if entry:
+            entry.df = df # Store full Dataframe in RAM
+            entry.preview = result # Store preview
+            
+            # Pre-calculate expensive stats for the 26s bottleneck
+            total = len(df)
+            col_count = len(df.columns)
+            # Use Polars native aggregation for speed
+            null_cells = int(df.null_count().sum_horizontal().sum())
+            null_rate = round((null_cells / (total * col_count)) * 100, 1) if total * col_count > 0 else 0
+            
+            entry.summary_metadata = {
+                "row_count": total,
+                "col_count": col_count,
+                "null_rate": null_rate,
+                "numeric_count": len([c for c in df.columns if df[c].dtype.is_numeric()]),
+                "categorical_count": len([c for c in df.columns if not df[c].dtype.is_numeric()])
+            }
+            await cache_manager.set(cache_id, entry)
+
+        logger.success(f"Preview generated & RAM Cached: {len(df.columns)} cols, {df.height} rows")
         return result
 
-    except (ValidationException, JsonStructureException):
-        raise  # Re-raise structured exceptions so the router can handle them
     except Exception as e:
-        logger.error(f"Error processing preview: {e}", exc_info=True)
+        logger.error(f"Error processing preview for {filename}: {e}", exc_info=True)
         return None
 
 
@@ -700,32 +753,50 @@ def read_cached_df(
         return None
 
     try:
-        with open(filepath, "rb") as f:
-            content = f.read()
+        cache_path = f"{filepath}.ipc"
+        
+        # ── Fast Path: Read from IPC Cache ───────────────────────────────────
+        # For Excel files needing specific sheet selection, we might still fallback 
+        # to the slow path if the cache doesn't match the expectation.
+        df = None
+        if os.path.exists(cache_path) and not selected_sheet:
+            try:
+                df = pl.read_ipc(cache_path)
+            except Exception as e:
+                logger.warning(f"Failed to read IPC cache {cache_path}: {e}")
 
-        filename = Path(filepath).name
-        ext = Path(filepath).suffix.lower()
+        # ── Slow Path: Process from Scratch ──────────────────────────────────
+        if df is None:
+            filename = Path(filepath).name
+            ext = Path(filepath).suffix.lower()
 
-        # ── Step 1: Read ─────────────────────────────────────────────────────
-        df, sheet_names = read_format(filepath, content, selected_sheet)
+            if ext == ".parquet":
+                try:
+                    df = pl.read_parquet(filepath)
+                    sheet_names = None
+                except Exception as e:
+                    raise ValidationException(f"Fichier Parquet corrompu ou illisible : {e}")
+            else:
+                # ── Step 1: Read ─────────────────────────────────────────────────────
+                df, sheet_names = read_format(filepath, content=None, sheet_name=selected_sheet)
 
-        # If Excel needs sheet selection but none provided, use first sheet
-        if sheet_names is not None:
-            df, _ = read_format(filepath, content, sheet_names[0])
+                # If Excel needs sheet selection but none provided, use first sheet
+                if sheet_names is not None:
+                    df, _ = read_format(filepath, content=None, sheet_name=sheet_names[0])
 
-        # ── Step 2: Clean column names ────────────────────────────────────────
-        df = clean_column_names(df)
+            # ── Step 2: Clean column names ────────────────────────────────────────
+            df = clean_column_names(df)
 
-        # ── Step 3: Validate ──────────────────────────────────────────────────
-        validate_dataframe(df, filename)
+            # ── Step 3: Validate ──────────────────────────────────────────────────
+            validate_dataframe(df, filename)
 
-        # ── Step 4: Excel error cleanup ───────────────────────────────────────
-        if ext in (".xlsx", ".xls"):
-            df = clean_excel_errors(df)
+            # ── Step 4: Excel error cleanup ───────────────────────────────────────
+            if ext in (".xlsx", ".xls"):
+                df = clean_excel_errors(df)
 
-        # ── Step 5: Parquet type flattening ───────────────────────────────────
-        if ext == ".parquet":
-            df = flatten_parquet_types(df)
+            # ── Step 5: Parquet type flattening ───────────────────────────────────
+            if ext == ".parquet":
+                df = flatten_parquet_types(df)
 
         # ── Apply schema overrides ────────────────────────────────────────────
         if overrides:
@@ -748,6 +819,8 @@ def read_cached_df(
                         cast_exprs.append(smart_cast_to_boolean(col).alias(col))
                     elif target == 'Date':
                         cast_exprs.append(smart_cast_to_date(col, df).alias(col))
+                    elif target == 'Datetime':
+                        cast_exprs.append(smart_cast_to_datetime(col, df).alias(col))
             if cast_exprs:
                 df = df.with_columns(cast_exprs)
 

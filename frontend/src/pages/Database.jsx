@@ -73,6 +73,7 @@ const getTypeBadge = (dtype) => {
     if (dt.includes('String') || dt.includes('Utf8'))
         return { label: 'TXT', color: 'bg-amber-50 text-amber-400 border-amber-100' };
     if (dt.includes('Bool')) return { label: 'BOOL', color: 'bg-green-50 text-green-400 border-green-100' };
+    if (dt.includes('Datetime')) return { label: 'TIME', color: 'bg-fuchsia-50 text-fuchsia-400 border-fuchsia-100' };
     if (dt.includes('Date')) return { label: 'DATE', color: 'bg-rose-50 text-rose-400 border-rose-100' };
     return fallback;
 };
@@ -81,7 +82,8 @@ const TYPE_LABELS = {
     'Int64': 'Nombre Entier',
     'Float64': 'Décimal / Prix',
     'String': 'Texte / Catégorie',
-    'Date': 'Date / Temps',
+    'Date': 'Date (Jour)',
+    'Datetime': 'Horodatage (Temps)',
     'Boolean': 'Oui / Non'
 };
 
@@ -409,21 +411,6 @@ const VariablesModal = ({ isOpen, onClose, columnsInfo, onTypeChange, onRecommen
                 warning: "changer un type ne modifie pas vos données source, uniquement leur interprétation dans cet outil."
             }}
         >
-            {/* AI Suggest Button */}
-            <div className="pb-2">
-                <button
-                    onClick={onRecommendAI}
-                    disabled={isSaving}
-                    className="w-full py-3 bg-bank-50 hover:bg-bank-100 text-bank-600 rounded-xl border border-bank-200 flex items-center justify-center gap-3 transition-all active:scale-95 group"
-                >
-                    <Sparkles className="w-4 h-4 group-hover:animate-pulse" />
-                    <span className="text-[11px] font-black uppercase tracking-widest">Calculer avec l'IA</span>
-                </button>
-                <p className="text-[9px] font-bold text-gray-400 mt-2 text-center uppercase tracking-tighter">Gemini analyse les données pour recommander les types optimaux</p>
-            </div>
-
-            <div className="h-px bg-gray-100 my-4"></div>
-
             <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
                 {Array.isArray(columnsInfo) && columnsInfo.length > 0 ? (
                     columnsInfo.map(col => (
@@ -481,6 +468,23 @@ const AnomaliesModal = ({ isOpen, onClose, columns, selectedCols, onToggleCol, m
             }}
         >
             <div className="space-y-8">
+                <div className="flex items-center justify-between mb-2">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Variables Numériques</p>
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={() => columns.forEach(c => !selectedCols.includes(c.field) && onToggleCol(c.field))}
+                            className="text-[9px] font-black text-bank-600 bg-bank-50 px-2 py-1 rounded-lg hover:bg-bank-100 transition-all uppercase tracking-tighter"
+                        >
+                            Tout sélectionner
+                        </button>
+                        <button 
+                            onClick={() => selectedCols.forEach(c => onToggleCol(c))}
+                            className="text-[9px] font-black text-gray-400 bg-gray-50 px-2 py-1 rounded-lg hover:bg-gray-100 transition-all uppercase tracking-tighter"
+                        >
+                            Désélectionner
+                        </button>
+                    </div>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                     {Array.isArray(columns) && columns.map(col => (
                         <button
@@ -945,6 +949,18 @@ const TYPE_CONFIG = {
         color: 'bg-green-100 text-green-700',
         accentColor: 'bg-green-400',
         description: 'Variable booléenne'
+    },
+    date: {
+        label: 'DATE',
+        color: 'bg-rose-100 text-rose-700',
+        accentColor: 'bg-rose-400',
+        description: 'Variable temporelle (Date)'
+    },
+    datetime: {
+        label: 'TIME',
+        color: 'bg-fuchsia-100 text-fuchsia-700',
+        accentColor: 'bg-fuchsia-400',
+        description: 'Horodatage avec précision temporelle'
     }
 };
 
@@ -1185,6 +1201,14 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
                                         <StatCard label="Valeurs nulles" value={currentColStats.metrics.nulls} />
                                     </div>
                                 )}
+                                
+                                {(currentColStats.type === 'date' || currentColStats.type === 'datetime') && (
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        <StatCard label="Date Début" value={currentColStats.metrics.min} accent={true} />
+                                        <StatCard label="Date Fin" value={currentColStats.metrics.max} accent={true} />
+                                        <StatCard label="Amplitude" value={currentColStats.metrics.duration || "N/A"} />
+                                    </div>
+                                )}
 
                                 {/* Interpretation block */}
                                 {currentColStats.type === 'continuous' && (
@@ -1219,6 +1243,11 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
                                         </div>
                                     )}
                                     {currentColStats.type === 'categorical' && currentColStats.distribution && (
+                                        <div className="h-[400px] w-full">
+                                            <ReactECharts option={getCategoricalOption(currentColStats.distribution)} style={{ height: '100%', width: '100%' }} />
+                                        </div>
+                                    )}
+                                    {(currentColStats.type === 'date' || currentColStats.type === 'datetime') && currentColStats.distribution && (
                                         <div className="h-[400px] w-full">
                                             <ReactECharts option={getCategoricalOption(currentColStats.distribution)} style={{ height: '100%', width: '100%' }} />
                                         </div>

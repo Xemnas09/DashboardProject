@@ -18,7 +18,8 @@ from services.file_processor import (
     process_file_preview,
     read_cached_df,
     apply_filters,
-    classify_column
+    classify_column,
+    smart_cast_to_datetime
 )
 from services.expression_parser import parse_expression
 from services.notifications import notification_store
@@ -31,12 +32,21 @@ def reset_stats_cache():
     global _stats_cache
     _stats_cache = None
 
+# Force reset on reload to pick up logic changes
+reset_stats_cache()
+
 
 def _get_df(entry):
-    """Read the full dataframe from a cache entry."""
+    """Read the full dataframe from a cache entry with RAM-first priority."""
+    if entry.df is not None:
+        return entry.df
+    
     df = read_cached_df(entry.filepath, entry.selected_sheet, entry.schema_overrides)
     if df is None:
         raise NotFoundException("Impossible de lire les données")
+    
+    # Hydrate RAM cache for next time if it was missing
+    entry.df = df
     return df
 
 
@@ -56,6 +66,8 @@ async def database_view(
     df = _get_df(entry)
 
     # 2. Prepare Preview
+    # We cast ALL columns to String for the JSON response to avoid serialization errors 
+    # (e.g. for Datetime or complex types common in Parquet/Excel).
     data_preview = {
         'columns': [{'field': c, 'title': c} for c in df.columns],
         'columns_info': [{
@@ -64,7 +76,7 @@ async def database_view(
             'is_numeric': df[c].dtype.is_numeric(),
             'is_identifier': classify_column(df[c]) == "identifier",
         } for c in df.columns],
-        'data': df.head(2000).to_dicts(),
+        'data': df.head(2000).select(pl.all().cast(pl.String)).to_dicts(),
         'total_rows': len(df),
     }
     return {"status": "success", "data_preview": data_preview}
@@ -93,17 +105,12 @@ async def database_recast(
     if not modifications:
         return {"status": "success", "message": "Aucune modification"}
 
-    # Load the dataframe
-    if filepath.endswith('.csv'):
-        with open(filepath, 'rb') as f:
-            df = pl.read_csv(f.read(), ignore_errors=True)
-    elif filepath.endswith('.xlsx'):
-        if selected_sheet:
-            df = pl.read_excel(filepath, sheet_name=selected_sheet)
-        else:
-            df = pl.read_excel(filepath)
-    else:
-        raise ValidationException("Format non supporté")
+    # Load the dataframe (consistent with current session state)
+    try:
+        df = _get_df(entry)
+    except Exception as e:
+        logger.error("Failed to load df for recast: {}", e)
+        raise ValidationException(f"Impossible de charger les données : {str(e)}")
 
     # Build cast expressions with defensive cleaning
     expressions = []
@@ -147,7 +154,11 @@ async def database_recast(
             
         elif target_type == 'Date':
             # Attempt parsing. Polars handles many standard formats automatically.
-            expressions.append(clean_str.str.to_date(strict=False).alias(col_name))
+            expressions.append(smart_cast_to_date(col_name, df).alias(col_name))
+            
+        elif target_type == 'Datetime':
+            # Attempt parsing with time precision
+            expressions.append(smart_cast_to_datetime(col_name, df).alias(col_name))
 
     if not expressions:
         return {"status": "success", "message": "Aucune modification applicable"}
@@ -156,7 +167,7 @@ async def database_recast(
     try:
         test_df = df.with_columns(expressions)
     except Exception as e:
-        logger.error(f"Cast failure: {str(e)}")
+        logger.error("Cast failure: {}", e)
         raise ValidationException(f"Erreur technique lors de la conversion : {str(e)}")
 
     for mod in modifications:
@@ -192,6 +203,11 @@ async def database_recast(
         df.write_csv(temp_filepath)
     elif filepath.endswith('.xlsx'):
         df.write_excel(temp_filepath, worksheet=selected_sheet or 'Sheet1')
+    elif filepath.endswith('.parquet'):
+        df.write_parquet(temp_filepath)
+    else:
+        # Fallback for unexpected formats, try to save what we can
+        df.write_csv(temp_filepath)
 
     # Atomic replacement
     backup_path = filepath + ".old"
@@ -201,14 +217,36 @@ async def database_recast(
     os.rename(temp_filepath, filepath)
     os.remove(backup_path)
 
-    # Refresh preview
-    entry.preview = process_file_preview(
+    # Refresh preview & Hydrate RAM Cache
+    preview_data = await process_file_preview(
+        user.cache_id,
         filepath,
         sheet_name=selected_sheet,
         schema_overrides=entry.schema_overrides,
     )
+    
+    # Update RAM Cache and Metadata
+    entry.df = df
+    entry.preview = preview_data
+    
+    # Pre-calculate summary stats for Dashboard
+    total = len(df)
+    col_count = len(df.columns)
+    null_cells = int(df.null_count().sum_horizontal().sum())
+    null_rate = round((null_cells / (total * col_count)) * 100, 1) if total * col_count > 0 else 0
+    entry.summary_metadata = {
+        "row_count": total,
+        "col_count": col_count,
+        "null_rate": null_rate,
+        "numeric_count": len([c for c in df.columns if df[c].dtype.is_numeric()]),
+        "categorical_count": len([c for c in df.columns if not df[c].dtype.is_numeric()])
+    }
+    
     await cache_manager.set(user.cache_id, entry)
-    reset_stats_cache()
+    
+    # CRITICAL: Invalidate stats cache so the statistics tool re-calculates with new types
+    global _stats_cache
+    _stats_cache = None
 
     msg = f"{len(modifications)} variables re-typées"
     if warnings:
@@ -380,14 +418,36 @@ async def create_expression(
     elif filepath.endswith('.xlsx'):
         df.write_excel(filepath)
 
-    # Refresh preview
-    entry.preview = process_file_preview(
+    # Refresh preview & Hydrate RAM Cache
+    preview_data = await process_file_preview(
+        user.cache_id,
         filepath,
         sheet_name=entry.selected_sheet,
         schema_overrides=entry.schema_overrides,
     )
+    
+    # Update RAM Cache and Metadata
+    entry.df = df
+    entry.preview = preview_data
+    
+    # Pre-calculate summary stats for Dashboard
+    total = len(df)
+    col_count = len(df.columns)
+    null_cells = int(df.null_count().sum_horizontal().sum())
+    null_rate = round((null_cells / (total * col_count)) * 100, 1) if total * col_count > 0 else 0
+    entry.summary_metadata = {
+        "row_count": total,
+        "col_count": col_count,
+        "null_rate": null_rate,
+        "numeric_count": len([c for c in df.columns if df[c].dtype.is_numeric()]),
+        "categorical_count": len([c for c in df.columns if not df[c].dtype.is_numeric()])
+    }
+    
     await cache_manager.set(user.cache_id, entry)
-    reset_stats_cache()
+    
+    # Invalidate stats cache
+    global _stats_cache
+    _stats_cache = None
 
     notif = notification_store.add(user.sub, f'Champ calculé "{new_col_name}" créé', "success")
 
@@ -574,6 +634,31 @@ async def get_column_stats(
                         "count": int(dist_map.get(b_idx, 0))
                     })
         
+        elif col_type in ["date", "datetime"]:
+            # Native temporal metrics
+            metrics.update({
+                "min": str(series.min()),
+                "max": str(series.max()),
+                "mode": str(series.mode()[0]) if not series.mode().is_empty() else "—"
+            })
+            
+            # Duration (only for datetime with time)
+            if col_type == "datetime" and series.min() is not None and series.max() is not None:
+                duration = series.max() - series.min()
+                metrics["duration"] = str(duration)
+            
+            # Distribution (Top 10 values for now)
+            counts = series.value_counts().sort(by="count", descending=True).head(10)
+            non_null_count = total_rows - null_count
+            for row in counts.to_dicts():
+                val = row[col]
+                if val is None: continue
+                dist_data.append({
+                    "value": str(val),
+                    "count": int(row["count"]),
+                    "pct": round((int(row["count"]) / non_null_count * 100), 1) if non_null_count > 0 else 0
+                })
+
         elif col_type in ["discrete", "categorical"]:
             mode_list = series.mode().to_list()
             mode_val = str(mode_list[0]) if mode_list else "—"
@@ -582,13 +667,14 @@ async def get_column_stats(
             })
             
             # Distribution Top 10
+            # For categorical, we use str(val) to ensure JSON serialization
             counts = series.value_counts().sort(by="count", descending=True).head(10)
             non_null_count = total_rows - null_count
             for row in counts.to_dicts():
                 val = row[col]
                 if val is None: continue
                 dist_data.append({
-                    "value": str(val) if not isinstance(val, (int, float, bool)) else val,
+                    "value": str(val),
                     "count": int(row["count"]),
                     "pct": round((int(row["count"]) / non_null_count * 100), 1) if non_null_count > 0 else 0
                 })
