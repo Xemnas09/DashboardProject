@@ -11,35 +11,53 @@ The backend is built with FastAPI, SQLAlchemy, asyncpg, and PyJWT.
 ### Directory Structure
 ```text
 dashboard_app/
-├── core/                   # System Foundation
-│   ├── settings.py         # Environment variables & Pydantic BaseSettings
-│   ├── database.py         # SQLAlchemy async engine & session management
-│   ├── security.py         # Password hashing & JWT token validation
-│   └── exceptions.py       # Custom HTTP exceptions and error handlers
+├── core/                   # ── INFRASTRUCTURE LAYER ──
+│   ├── settings.py         #   Pydantic-settings loaded from .env
+│   ├── database.py         #   SQLAlchemy async engine & session management
+│   ├── security.py         #   Password hashing & JWT token validation
+│   ├── exceptions.py       #   Centralized exception hierarchy (AppException)
+│   └── dependencies.py     #   FastAPI Depends(): JWT auth, RBAC, rate limiter
 │
-├── api/                    # API Entrypoints
-│   ├── auth/               # Domain: Authentication & Sessions
-│   │   ├── router.py       # Login, token issuance
-│   │   ├── schemas.py      # Login credentials validation
-│   │   └── services.py     # Revoked tokens logic
+├── api/                    # ── INTERFACE LAYER (DDD) ──
+│   ├── router.py           #   Central router aggregating all domain routers
+│   ├── auth/               #   Domain: Authentication & Sessions
+│   │   ├── router.py       #     Login, logout, refresh, ws-token
+│   │   ├── schemas.py      #     Login credentials validation
+│   │   └── token_service.py#     Token revocation with in-memory cache
 │   │
-│   ├── users/              # Domain: User Management & RBAC
-│   │   ├── router.py       # CRUD endpoints
-│   │   ├── models.py       # SQLAlchemy ORM definitions
-│   │   ├── schemas.py      # Pydantic serialization
-│   │   └── crud.py         # Database interactions
+│   ├── users/              #   Domain: User Management & RBAC
+│   │   ├── router.py       #     CRUD endpoints
+│   │   ├── schemas.py      #     Pydantic serialization
+│   │   └── crud.py         #     Database interactions
 │   │
-│   └── realtime/           # Domain: WebSockets & Broadcasting
-│       ├── router.py       # WS connection endpoints
-│       └── manager.py      # ConnectionManager singleton (presence, broadcast)
+│   └── realtime/           #   Domain: WebSockets
+│       └── router.py       #     WS endpoint, ping/pong
 │
-├── services/               # Shared Business Logic (Service Layer)
-│   ├── file_processor.py   # Lock-free reading & preview generation (Calamine)
-│   ├── type_inference.py   # Advanced casting heuristics (Date, Bool, Numeric)
-│   ├── column_classifier.py# Semantic labeling (NUM, CAT, ID)
-│   ├── data_service.py     # Batch operations & atomic saving
-│   ├── anomaly_detector.py # Isolation Forest & IQR outliers
-│   └── llm_interpreter.py  # LLM interpretation of data patterns
+├── routers/                # ── APPLICATION LAYER ──
+│   ├── upload.py           #   File upload (local + URL)
+│   ├── database.py         #   Data view, recast, expressions
+│   ├── reports.py          #   Charts, pivots, LLM interpretation
+│   ├── dashboard.py        #   Dashboard summary endpoint
+│   └── notifications.py    #   Read/history notifications
+│
+├── services/               # ── DOMAIN SERVICES ──
+│   ├── file_processor.py   #   File reading pipeline (CSV, TSV, XLSX, JSON, Parquet)
+│   ├── url_importer.py     #   URL-based file import with streaming
+│   ├── data_cache.py       #   In-memory data cache with TTL eviction
+│   ├── type_inference.py   #   Advanced casting heuristics
+│   ├── column_classifier.py#   Semantic labeling (NUM, CAT, ID)
+│   ├── expression_parser.py#   Safe math expression → Polars expression
+│   ├── anomaly_detector.py #   Statistical anomaly detection (IQR, Z-Score)
+│   ├── connection_manager.py#  WebSocket manager (presence, broadcast)
+│   ├── notifications.py    #   In-memory notification store
+│   └── llm_interpreter.py  #   LLM interpretation of data patterns
+│
+├── schemas/                # ── DATA TRANSFER OBJECTS ──
+│   └── [domain].py         #   Pydantic models per domain
+│
+├── models/                 # ── PERSISTENCE LAYER ──
+│   ├── user.py             #   User SQLAlchemy model
+│   └── revoked_token.py    #   RevokedToken SQLAlchemy model
 │
 └── main.py                 # Application factory & global router registry
 ```

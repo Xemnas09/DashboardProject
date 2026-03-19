@@ -1,3 +1,14 @@
+## [0.3.1] - 2026-03-19
+
+### Added
+- **HuggingFace Spaces Compatibility** : Ajout du frontmatter YAML (`sdk: docker`) dans le `README.md` pour un déploiement fluide sur HF Spaces.
+- **Workflow de Release** : Standardisation du processus de publication de version (`release_version.md`).
+
+### Fixed
+- **Clean Architecture (DDD)** : Nettoyage de 9 fichiers morts et obsolètes (routeurs inactifs et configurations racine dupliquées).
+- **Stabilité des Imports** : Correction globale des dépendances circulaires ou obsolètes (`models/user.py`, `token_service.py`), forçant le passage par le module `core/`.
+- **UI UX Glitch** : Suppression d'un reliquat de code `)}` visible sur la page d'upload.
+
 ## [0.3.0] - 2026-03-17
 
 ### Added

@@ -185,11 +185,13 @@ async def test_upload_exe_rejected(auth_client):
     assert r.json()["code"] == "INVALID_FILE_TYPE"
 
 
-async def test_upload_xls_rejected(auth_client):
+async def test_upload_corrupt_xls(auth_client):
+    """XLS is now allowed, so a bad file hits the parser, returning 400 instead of 415."""
     files = {"file": ("old.xls", io.BytesIO(b"bad"), "application/vnd.ms-excel")}
     r = await auth_client.post("/upload", files=files)
-    assert r.status_code == 415
-    assert r.json()["code"] == "INVALID_FILE_TYPE"
+    assert r.status_code == 400
+    assert r.json()["code"] == "VALIDATION_ERROR"
+    assert "Excel" in r.json()["message"]
 
 
 async def test_upload_txt_rejected(auth_client):
@@ -222,11 +224,142 @@ async def test_error_format_415(auth_client):
     b = r.json()
     assert b["status"] == "error"
     assert b["code"] == "INVALID_FILE_TYPE"
-    assert "CSV" in b["message"] and "XLSX" in b["message"]
+    assert "CSV" in b["message"] and "Parquet" in b["message"]
 
 
 # ===========================================================================
-# 5. NOTIFICATIONS
+# 5. NEW FORMATS & CSV/EXCEL ROBUSTNESS
+# ===========================================================================
+
+async def test_upload_tsv(auth_client):
+    content = b"col1\tcol2\nval1\tval2\n"
+    files = {"file": ("data.tsv", io.BytesIO(content), "text/tab-separated-values")}
+    r = await auth_client.post("/upload", files=files)
+    assert r.status_code == 200
+
+async def test_upload_json_array(auth_client):
+    content = b'[{"id":1, "name":"A"}, {"id":2, "name":"B"}]'
+    files = {"file": ("data.json", io.BytesIO(content), "application/json")}
+    r = await auth_client.post("/upload", files=files)
+    assert r.status_code == 200
+
+async def test_upload_json_nested_rejected(auth_client):
+    content = b'[{"id":1, "data":{"nested":true}}]'
+    files = {"file": ("data.json", io.BytesIO(content), "application/json")}
+    r = await auth_client.post("/upload", files=files)
+    assert r.status_code == 422
+    assert r.json()["code"] == "JSON_STRUCTURE_ERROR"
+
+async def test_upload_json_not_array(auth_client):
+    content = b'{"data": [{"id":1}]}'
+    files = {"file": ("data.json", io.BytesIO(content), "application/json")}
+    r = await auth_client.post("/upload", files=files)
+    assert r.status_code == 422
+    assert r.json()["code"] == "JSON_STRUCTURE_ERROR"
+
+async def test_upload_parquet(auth_client):
+    import polars as pl
+    df = pl.DataFrame({"idx": [1, 2, 3]})
+    buf = io.BytesIO()
+    df.write_parquet(buf)
+    buf.seek(0)
+    files = {"file": ("data.parquet", buf, "application/octet-stream")}
+    r = await auth_client.post("/upload", files=files)
+    assert r.status_code == 200
+
+async def test_upload_csv_semicolon(auth_client):
+    content = b"a;b;c\n1;2;3"
+    files = {"file": ("data.csv", io.BytesIO(content), "text/csv")}
+    r = await auth_client.post("/upload", files=files)
+    assert r.status_code == 200
+
+async def test_upload_csv_latin1(auth_client):
+    content = "café,thé\n1,2".encode("latin-1")
+    files = {"file": ("data.csv", io.BytesIO(content), "text/csv")}
+    r = await auth_client.post("/upload", files=files)
+    assert r.status_code == 200
+
+async def test_upload_csv_bom(auth_client):
+    content = b"\xef\xbb\xbfColA,ColB\n1,2"
+    files = {"file": ("data.csv", io.BytesIO(content), "text/csv")}
+    r = await auth_client.post("/upload", files=files)
+    assert r.status_code == 200
+    
+    r_db = await auth_client.get("/api/database?limit=1")
+    assert r_db.status_code == 200
+    assert r_db.json()["data_preview"]["columns"][0]["field"] == "ColA"  # BOM stripped
+
+async def test_upload_csv_duplicate_cols(auth_client):
+    content = b"id,id,val\n1,2,3"
+    files = {"file": ("data.csv", io.BytesIO(content), "text/csv")}
+    r = await auth_client.post("/upload", files=files)
+    assert r.status_code == 200
+    
+    r_db = await auth_client.get("/api/database?limit=1")
+    assert r_db.status_code == 200
+    cols = [c["field"] for c in r_db.json()["data_preview"]["columns"]]
+    assert cols == ["id", "id_duplicated_0", "val"]
+
+async def test_upload_csv_empty_file(auth_client):
+    files = {"file": ("empty.csv", io.BytesIO(b""), "text/csv")}
+    r = await auth_client.post("/upload", files=files)
+    assert r.status_code == 400
+    assert r.json()["code"] == "VALIDATION_ERROR"
+
+async def test_upload_csv_header_only(auth_client):
+    files = {"file": ("header.csv", io.BytesIO(b"a,b,c\n"), "text/csv")}
+    r = await auth_client.post("/upload", files=files)
+    assert r.status_code == 400
+    assert r.json()["code"] == "VALIDATION_ERROR"
+
+async def test_upload_xlsx_password(auth_client):
+    # Just a dummy bytes block mimicking encrypted excel or forcing Calamine password error
+    # Instead of mocking Calamine, we'll just test the code branch if possible,
+    # or rely on the generic corrupt file message. Let's just test that it fails 400.
+    files = {"file": ("locked.xlsx", io.BytesIO(b"PK\x03\x04 encrypted"), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+    r = await auth_client.post("/upload", files=files)
+    assert r.status_code == 400
+    assert r.json()["code"] == "VALIDATION_ERROR"
+
+
+# ===========================================================================
+# 6. URL IMPORT
+# ===========================================================================
+
+import respx
+import httpx
+
+@respx.mock
+async def test_url_import_direct_csv(auth_client):
+    url = "https://example.com/data.csv"
+    respx.get(url).respond(status_code=200, content=b"id,name\n1,test", headers={"Content-Type": "text/csv"})
+    r = await auth_client.post("/api/upload/url", json={"url": url})
+    assert r.status_code == 200
+    assert r.json()["status"] == "success"
+
+@respx.mock
+async def test_url_import_invalid_url(auth_client):
+    url = "https://example.com/notfound.csv"
+    respx.get(url).respond(status_code=404)
+    r = await auth_client.post("/api/upload/url", json={"url": url})
+    assert r.status_code == 502
+    assert r.json()["code"] == "URL_IMPORT_ERROR"
+
+@respx.mock
+async def test_url_import_unsupported_type(auth_client):
+    url = "https://example.com/page.html"
+    respx.get(url).respond(status_code=200, content=b"<html></html>", headers={"Content-Type": "text/html"})
+    r = await auth_client.post("/api/upload/url", json={"url": url})
+    assert r.status_code == 415
+    assert r.json()["code"] == "INVALID_FILE_TYPE"
+
+async def test_url_import_malformed_url(auth_client):
+    r = await auth_client.post("/api/upload/url", json={"url": "not-a-url"})
+    assert r.status_code == 422  # Pydantic validation error
+
+
+# ===========================================================================
+# 7. NOTIFICATIONS & DOCS
 # ===========================================================================
 
 async def test_notifications_history(auth_client):
@@ -234,20 +367,15 @@ async def test_notifications_history(auth_client):
     assert r.status_code == 200
     assert isinstance(r.json()["history"], list)
 
-
 async def test_mark_notifications_read(auth_client):
     r = await auth_client.post("/api/notifications/read")
     assert r.status_code == 200
     assert r.json()["status"] == "success"
 
-
-# ===========================================================================
-# 6. DOCS
-# ===========================================================================
-
 async def test_swagger_docs(client):
     r = await client.get("/docs")
     assert r.status_code == 200
+
 
 
 async def test_openapi_all_endpoints(client):
@@ -256,10 +384,9 @@ async def test_openapi_all_endpoints(client):
     paths = list(r.json()["paths"].keys())
     expected = [
         "/login", "/logout", "/api/status", "/api/auth/refresh",
-        "/upload", "/api/select-sheet", "/clear_data",
+        "/upload", "/api/upload/url", "/api/select-sheet", "/clear_data",
         "/api/database", "/api/database/recast",
         "/api/reports/columns", "/api/chart-data", "/api/pivot-data",
-        "/api/calculated-field",
         "/api/notifications/read", "/api/notifications/history",
         "/api/cache/status",
     ]

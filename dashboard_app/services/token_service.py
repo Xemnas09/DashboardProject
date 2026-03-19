@@ -13,7 +13,7 @@ from datetime import datetime
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database import AsyncSessionLocal
+from core.database import AsyncSessionLocal
 from models.revoked_token import RevokedToken
 
 logger = logging.getLogger(__name__)

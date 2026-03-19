@@ -1,5 +1,5 @@
 """
-Upload router: /upload, /api/select-sheet, /clear_data
+Upload router: /upload, /api/upload, /api/upload/url, /api/select-sheet, /clear_data
 """
 import os
 import uuid
@@ -9,7 +9,7 @@ from loguru import logger
 
 from core.settings import settings
 from api.auth.schemas import TokenPayload
-from schemas.upload import SheetSelectRequest
+from schemas.upload import SheetSelectRequest, UrlImportRequest
 from core.dependencies import get_current_user, limiter
 from core.exceptions import ValidationException
 from datetime import datetime, timezone
@@ -192,3 +192,80 @@ async def clear_data(user: TokenPayload = Depends(get_current_user)):
         notification_store.add(user.sub, "Données supprimées", "warning")
 
     return {"status": "success"}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/upload/url
+# ---------------------------------------------------------------------------
+@router.post("/api/upload/url")
+@limiter.limit("5/minute")
+async def upload_from_url(
+    request: Request,
+    body: UrlImportRequest,
+    user: TokenPayload = Depends(get_current_user),
+):
+    """
+    Import a dataset from a remote URL.
+
+    Supports:
+      - Direct file links (CSV, TSV, XLSX, XLS, JSON, Parquet)
+      - Public Google Sheets URLs (auto-converted to CSV export)
+
+    Rate-limited to 5 requests per minute (URL downloads are heavier than uploads).
+    """
+    from services.url_importer import import_from_url
+    from services.data_cache import cache_manager
+
+    # Download from URL → save to uploads/ folder
+    filepath, detected_filename = await import_from_url(
+        url=str(body.url),
+        upload_folder=settings.upload_folder,
+    )
+
+    # Generate preview using the same pipeline as a normal upload
+    preview_data = process_file_preview(filepath)
+    reset_stats_cache()
+
+    file_size_mb = 0.0
+    if os.path.exists(filepath):
+        file_size_mb = round(os.path.getsize(filepath) / (1024 * 1024), 1)
+
+    cache_id = user.cache_id
+    entry = CacheEntry(
+        filepath=filepath,
+        filename=detected_filename,
+        schema_overrides=preview_data.get('suggested_overrides', {}) if preview_data else {},
+        preview=preview_data,
+        selected_sheet=preview_data.get('selected_sheet') if preview_data else None,
+        imported_at=datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+        file_size_mb=file_size_mb,
+    )
+
+    # Handle multi-sheet Excel returned from URL
+    if preview_data and preview_data.get('requires_sheet_selection'):
+        from services.file_processor import get_sheet_previews_parallel
+        previews = get_sheet_previews_parallel(filepath)
+        entry.preview = None
+        entry.pending_sheets = preview_data['sheets']
+        await cache_manager.set(cache_id, entry)
+        return {
+            "status": "requires_sheet",
+            "sheets": preview_data['sheets'],
+            "all_previews": previews,
+            "message": "Plusieurs feuilles détectées.",
+        }
+
+    await cache_manager.set(cache_id, entry)
+
+    notif = notification_store.add(
+        user.sub,
+        f"Fichier importé depuis URL : {detected_filename}",
+        "info",
+    )
+    logger.info(f"URL import completed: {detected_filename} [user={user.sub}]")
+
+    return {
+        "status": "success",
+        "message": "Fichier importé et traité avec succès !",
+        "notification": notif,
+    }

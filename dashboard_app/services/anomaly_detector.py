@@ -1,3 +1,10 @@
+"""
+Anomaly Detection Service.
+
+Provides statistical anomaly detection on Polars DataFrames using configurable
+methods (IQR, Z-Score). Results are returned as structured dictionaries ready
+for API serialization and optional LLM interpretation.
+"""
 import polars as pl
 from sklearn.ensemble import IsolationForest
 

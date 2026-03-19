@@ -51,7 +51,11 @@ async def init(session_factory):
     # Using Alembic explicitly ensures `revoked_tokens` and version history is strictly applied
     from alembic.config import Config
     from alembic import command
+    from core.database import Base
     
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
     alembic_cfg = Config("alembic.ini")
     
     # Run migrations synchronously inside the async init function

@@ -1,3 +1,10 @@
+"""
+WebSocket Connection Manager.
+
+Thread-safe singleton managing all active WebSocket sessions with support for
+multi-tab connections per user, presence tracking, targeted messaging,
+broadcast, and administrative force-disconnect.
+"""
 import asyncio
 from datetime import datetime
 from fastapi import WebSocket

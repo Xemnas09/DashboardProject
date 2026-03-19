@@ -73,7 +73,7 @@ class InvalidFileTypeException(AppException):
     def __init__(self) -> None:
         super().__init__(
             "INVALID_FILE_TYPE",
-            "Seuls les fichiers CSV et XLSX sont autorisés.",
+            "Format non supporté. Formats acceptés : CSV, TSV, XLSX, XLS, JSON, Parquet.",
             415,
         )
 
@@ -94,3 +94,28 @@ class LLMUnavailableException(AppException):
     
     def __init__(self, message: str = "Le service d'interprétation LLM est actuellement indisponible.") -> None:
         super().__init__(code="LLM_UNAVAILABLE", message=message, status_code=503)
+
+
+class UrlImportException(AppException):
+    """Exception raised when a URL-based import fails due to a network or HTTP error (HTTP 502)."""
+
+    def __init__(self, message: str = "Impossible d'accéder à l'URL fournie.") -> None:
+        super().__init__(code="URL_IMPORT_ERROR", message=message, status_code=502)
+
+
+class UrlContentTypeException(AppException):
+    """Exception raised when the URL response has an unsupported content type (HTTP 415)."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            code="INVALID_FILE_TYPE",
+            message="L'URL ne pointe pas vers un fichier supporté (CSV, TSV, XLSX, XLS, JSON, Parquet).",
+            status_code=415,
+        )
+
+
+class JsonStructureException(AppException):
+    """Exception raised when a JSON file cannot be parsed as a flat tabular array (HTTP 422)."""
+
+    def __init__(self, message: str = "Le fichier JSON doit être un tableau d'objets plats (liste de lignes).") -> None:
+        super().__init__(code="JSON_STRUCTURE_ERROR", message=message, status_code=422)

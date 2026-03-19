@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     # JWT
     jwt_secret: str = "dev-secret-change-me-in-production"
     jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 30
+    access_token_expire_minutes: int = 240
     refresh_token_expire_days: int = 7
     gemini_api_key: str | None = None
 

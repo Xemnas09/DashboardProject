@@ -56,28 +56,62 @@ function EmptyState({ username, handlers }) {
       <div className="text-center">
         <p className="text-[10px] font-black uppercase tracking-[0.3em] text-bank-400 mb-2">Tableau de Bord</p>
         <h1 className="text-4xl font-black text-gray-900 tracking-tight">Bienvenue, {username}</h1>
-        <p className="text-gray-400 mt-2 font-medium">Importez un fichier pour commencer votre analyse</p>
+        <p className="text-gray-400 mt-2 font-medium">Importez des données pour commencer votre analyse</p>
       </div>
 
       <div className="w-full max-w-2xl">
         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-          <div
-            onDragEnter={handlers.handleDrag}
-            onDragLeave={handlers.handleDrag}
-            onDragOver={handlers.handleDrag}
-            onDrop={handlers.handleDrop}
-            onClick={() => handlers.fileInputRef.current.click()}
-            className={`p-16 text-center cursor-pointer transition-all duration-300 ${handlers.dragActive ? 'bg-bank-50/80 border-bank-400' : 'hover:bg-gray-50/50'}`}
-          >
-            <input
-              ref={handlers.fileInputRef}
-              type="file"
-              className="hidden"
-              onChange={handlers.handleChange}
-              accept=".csv,.xlsx,.xls"
-            />
+          {/* Tabs */}
+          <div className="flex border-b border-gray-100">
+            <button
+              onClick={() => handlers.setActiveTab('local')}
+              className={`flex-1 py-4 text-sm font-black uppercase tracking-wider transition-all ${
+                handlers.activeTab === 'local'
+                  ? 'text-bank-600 border-b-2 border-bank-500 bg-bank-50/30'
+                  : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              📁 Fichier Local
+            </button>
+            <button
+              onClick={() => handlers.setActiveTab('url')}
+              className={`flex-1 py-4 text-sm font-black uppercase tracking-wider transition-all ${
+                handlers.activeTab === 'url'
+                  ? 'text-bank-600 border-b-2 border-bank-500 bg-bank-50/30'
+                  : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              🔗 Importer via URL
+            </button>
+          </div>
 
-            {!handlers.isUploading ? (
+          {handlers.activeTab === 'local' ? (
+            <>
+              <div
+                onDragEnter={handlers.handleDrag}
+                onDragLeave={handlers.handleDrag}
+                onDragOver={handlers.handleDrag}
+                onDrop={handlers.handleDrop}
+                onClick={!handlers.isUploading ? () => handlers.fileInputRef.current.click() : undefined}
+                className={`p-16 text-center transition-all duration-300 ${!handlers.isUploading ? 'cursor-pointer hover:bg-gray-50/50' : ''} ${handlers.dragActive ? 'bg-bank-50/80 border-bank-400' : ''}`}
+              >
+                <input
+                  ref={handlers.fileInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={handlers.handleChange}
+                  accept=".csv,.tsv,.xlsx,.xls,.json,.parquet"
+                />
+
+                {handlers.uploadSuccess ? (
+                  <div className="py-8 flex flex-col items-center justify-center animate-fade-in-up">
+                    <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
+                      <CheckCircle2 className="w-10 h-10 text-emerald-500" />
+                    </div>
+                    <h3 className="text-xl font-black text-emerald-600 mb-1">Succès !</h3>
+                    <p className="text-gray-400 text-sm font-medium">Chargement du tableau de bord...</p>
+                  </div>
+                ) : !handlers.isUploading ? (
               <>
                 <div className="relative mx-auto w-24 h-24 mb-8">
                   <div className="absolute inset-0 bg-bank-100 rounded-3xl animate-pulse opacity-60" />
@@ -107,12 +141,61 @@ function EmptyState({ username, handlers }) {
                 <p className="text-gray-400 text-xs mt-2 font-medium">Analyse Polars en cours</p>
               </div>
             )}
-          </div>
-          <div className="px-6 py-3 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between">
+              </div>
+          </>
+          ) : (
+            <div className="p-10 flex flex-col items-center justify-center text-center">
+              {handlers.uploadSuccess ? (
+                  <div className="py-8 flex flex-col items-center justify-center animate-fade-in-up">
+                    <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
+                      <CheckCircle2 className="w-10 h-10 text-emerald-500" />
+                    </div>
+                    <h3 className="text-xl font-black text-emerald-600 mb-1">Succès !</h3>
+                    <p className="text-gray-400 text-sm font-medium">Chargement du tableau de bord...</p>
+                  </div>
+              ) : !handlers.isUploading ? (
+                <>
+                  <div className="w-16 h-16 bg-bank-50 rounded-2xl flex items-center justify-center mb-6">
+                    <AlertCircle className="w-8 h-8 text-bank-600" />
+                  </div>
+                  <h3 className="text-xl font-black text-gray-900 mb-2">Lien vers vos données</h3>
+                  <p className="text-gray-500 text-sm font-medium mb-8 max-w-md">
+                    Collez un lien direct vers un fichier ou un lien de partage Google Sheets (accès public requis).
+                  </p>
+                  
+                  <div className="w-full relative">
+                    <input
+                      type="url"
+                      placeholder="https://docs.google.com/spreadsheets/d/..."
+                      value={handlers.urlInput}
+                      onChange={(e) => handlers.setUrlInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handlers.urlInput && handlers.handleUrlSubmit()}
+                      className="w-full px-5 py-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-bank-500 focus:bg-white outline-none transition-all pr-32 font-medium text-gray-700"
+                    />
+                    <button
+                      onClick={handlers.handleUrlSubmit}
+                      disabled={!handlers.urlInput}
+                      className="absolute right-2 top-2 bottom-2 px-6 bg-bank-600 text-white font-black text-sm rounded-xl hover:bg-bank-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Importer
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="py-12">
+                  <div className="w-14 h-14 rounded-full border-[3px] border-bank-200 border-t-bank-600 animate-spin mx-auto mb-5" />
+                  <p className="text-bank-600 font-black text-sm uppercase tracking-wider">Téléchargement en cours...</p>
+                  <p className="text-gray-400 text-xs mt-2 font-medium">Récupération des données depuis l'URL</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="px-6 py-4 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between">
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Formats supportés</span>
-            <div className="flex gap-2">
-              {['CSV', 'XLSX', 'XLS'].map(fmt => (
-                <span key={fmt} className="px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-[10px] font-black text-gray-400 uppercase tracking-wider">{fmt}</span>
+            <div className="flex flex-wrap gap-1.5 justify-end">
+              {['CSV', 'TSV', 'XLSX', 'XLS', 'JSON', 'Parquet'].map(fmt => (
+                <span key={fmt} className="px-2 py-0.5 bg-white border border-gray-200 rounded-md text-[9px] font-black text-gray-400 uppercase tracking-wider">{fmt}</span>
               ))}
             </div>
           </div>
@@ -240,6 +323,8 @@ export default function Dashboard({ addNotification }) {
     const [selectedSheet, setSelectedSheet] = useState(null);
     const [sheetPreview, setSheetPreview] = useState(null);
     const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+    const [activeTab, setActiveTab] = useState('local');
+    const [urlInput, setUrlInput] = useState('');
     const fileInputRef = useRef(null);
 
     const { currentUser } = useAuth();
@@ -332,6 +417,49 @@ export default function Dashboard({ addNotification }) {
         }
     };
 
+    const handleUrlSubmit = async () => {
+        if (!urlInput.trim()) return;
+        
+        try {
+            new URL(urlInput); // basic validation
+        } catch {
+            addNotification('URL invalide. Veuillez vérifier le lien.', 'error');
+            return;
+        }
+
+        setIsUploading(true);
+        setUploadSuccess(false);
+
+        try {
+            const res = await customFetch('/api/upload/url', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: urlInput }),
+                credentials: 'include',
+            });
+            const result = await res.json();
+
+            if (res.ok) {
+                if (result.status === 'requires_sheet') {
+                    setPendingSheets(result.sheets);
+                    if (result.sheets.length > 0) setSelectedSheet(result.sheets[0]);
+                    addNotification(`${result.sheets.length} feuilles détectées`, 'info');
+                } else if (result.status === 'success') {
+                    setUploadSuccess(true);
+                    setUrlInput('');
+                    addNotification('Fichier importé avec succès depuis l\'URL', 'success');
+                }
+            } else {
+                throw new Error(result.message || 'Erreur inconnue');
+            }
+        } catch (err) {
+            console.error(err);
+            addNotification(err.message, 'error');
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
     const handleSheetPreviewFetch = async (sheetName) => {
         if (!sheetName) return;
         setIsPreviewLoading(true);
@@ -404,8 +532,9 @@ export default function Dashboard({ addNotification }) {
                 <EmptyState 
                     username={username} 
                     handlers={{
-                        handleDrag, handleDrop, handleChange, isUploading,
-                        dragActive, fileInputRef
+                        handleDrag, handleDrop, handleChange, isUploading, uploadSuccess,
+                        dragActive, fileInputRef,
+                        activeTab, setActiveTab, urlInput, setUrlInput, handleUrlSubmit
                     }} 
                 />
             )}
