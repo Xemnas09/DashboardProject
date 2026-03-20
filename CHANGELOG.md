@@ -1,3 +1,17 @@
+## [0.4.2] - 2026-03-20
+### Added
+- **Moteur Statistique Scientifique (v0.5.x)** : Ajout des indicateurs avancés (Écart-type, Quartiles, Mode, Amplitude) pour une analyse de données rigoureuse.
+- **Interprétation Automatique** : Système d'insights dynamiques basé sur les métriques scientifiques (détection d'outliers, asymétrie).
+
+### Improved
+- **Smart Chart UX** : Labels prioritaires (Top 10), formatage compact (344k), et zoom adaptatif pour les graphiques haute densité.
+- **Restauration de Cohérence** : Préservation des labels booléens d'origine (0/1) et correction des étiquettes "undefined".
+
+## [0.4.1] - 2026-03-20
+### Added
+- **Moteur Apache Arrow** : Migration vers le format Arrow IPC pour un transfert de données ultra-rapide entre le serveur et le client.
+- **Dépollution du Système** : Suppression massive de fichiers temporaires pour un environnement de production sain.
+
 ## [0.3.3] - 2026-03-20
 
 ### Added
@@ -48,6 +62,15 @@
 - **Moteur d'Inférence Sémantique** : Classification intelligente (**NUM**, **CAT**, **ID**) et consolidation automatique des variables discrètes.
 - **Sélecteur d'Export PDF** : Interface de sélection des colonnes.
 
+### Fixed
+- **Migration AgGrid v31+** : Résolution du crash "Page Blanche".
+- **Stabilité Excel** : Moteur de lecture Calamine.
+
+## [0.1.0] - 2026-03-12
+### Added
+- **Modernisation du Backend** : Migration vers PyJWT et unification du typage (smart casting).
+- **Domain-Driven Design** : Refonte de l'architecture pour une meilleure maintenabilité.
+- **Stabilité Windows** : Système de sauvegarde atomique contre les verrous de fichiers.
 ### Fixed
 - **Migration AgGrid v31+** : Résolution du crash "Page Blanche".
 - **Stabilité Excel** : Moteur de lecture Calamine.

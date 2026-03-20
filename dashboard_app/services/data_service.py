@@ -8,6 +8,7 @@ import time
 import polars as pl
 from loguru import logger
 from typing import List, Dict, Any, Optional, Tuple
+import datetime
 
 from services.type_inference import smart_cast_to_date, smart_cast_to_boolean
 from services.column_classifier import classify_column
@@ -65,18 +66,33 @@ def compute_column_stats(df: pl.DataFrame) -> Dict[str, Any]:
             modalities = series.drop_nulls().unique().to_list()
             if len(modalities) == 2:
                 m1, m2 = modalities[0], modalities[1]
-                pos_markers = ["1", "true", "yes", "oui", "vrai", "t", "y", "o"]
-                m1_str, m2_str = str(m1).lower(), str(m2).lower()
-                if m1_str in pos_markers or (m2_str not in pos_markers and m1_str > m2_str):
-                    label_true, label_false = m1, m2
+                pos_markers = ["1", "true", "yes", "oui", "vrai", "t", "y", "o", True, 1]
+                
+                # Check for original values if the current series is already boolean
+                if m1 is True or m1 is False:
+                    # If it's already boolean, we need to compare to actual True/False for counts
+                    label_true, label_false = ("1", "0") if m1 is True else ("0", "1")
+                    true_count = int(series.sum()) if m1 is True else int((~series).sum())
+                    false_count = int((~series).sum()) if m1 is True else int(series.sum())
                 else:
-                    label_true, label_false = m2, m1
-                true_count = int((series == label_true).sum())
-                false_count = int((series == label_false).sum())
+                    m1_str, m2_str = str(m1).lower(), str(m2).lower()
+                    if m1_str in [str(x).lower() for x in pos_markers] or (m2_str not in [str(x).lower() for x in pos_markers] and m1_str > m2_str):
+                        label_true, label_false = m1, m2
+                    else:
+                        label_true, label_false = m2, m1
+                    
+                    # Safe comparison for non-boolean types
+                    true_count = int((series == label_true).sum())
+                    false_count = int((series == label_false).sum())
             else:
-                label_true, label_false = modalities[0] if modalities else "Vrai", "N/A"
-                true_count = int((series == label_true).sum()) if modalities else 0
-                false_count = 0
+                label_true = modalities[0] if modalities else "Vrai"
+                label_false = "Autre" if modalities else "N/A"
+                if series.dtype == pl.Boolean:
+                    true_count = int(series.sum())
+                    false_count = int((~series).sum())
+                else:
+                    true_count = int((series == label_true).sum()) if modalities else 0
+                    false_count = 0
             
             non_null_count = total_rows - null_count
             metrics.update({
@@ -91,26 +107,38 @@ def compute_column_stats(df: pl.DataFrame) -> Dict[str, Any]:
                 "max": float(series.max()) if series.max() is not None else 0.0,
                 "mean": float(series.mean()) if series.mean() is not None else 0.0,
                 "median": float(series.median()) if series.median() is not None else 0.0,
+                "std": float(series.std()) if series.std() is not None else 0.0,
+                "q1": float(series.quantile(0.25)) if series.quantile(0.25) is not None else 0.0,
+                "q3": float(series.quantile(0.75)) if series.quantile(0.75) is not None else 0.0,
+                "mode": float(series.mode()[0]) if not series.drop_nulls().is_empty() and series.mode().len() > 0 else 0.0,
             })
             # Histogram bins (20 bins)
             clean_series = series.drop_nulls()
             if not clean_series.is_empty() and series.min() != series.max():
                 h_min, h_max = float(series.min()), float(series.max())
                 step = (h_max - h_min) / 20
-                bin_df = clean_series.to_frame().with_columns(
-                    ((pl.col(col) - h_min) / step).floor().cast(pl.Int32).clip(0, 19).alias("bin_idx")
-                )
-                hist_counts = bin_df.group_by("bin_idx").len().sort("bin_idx")
-                dist_map = {int(row["bin_idx"]): int(row["len"]) for row in hist_counts.to_dicts()}
-                for b_idx in range(20):
-                    start = h_min + b_idx * step
-                    end = h_min + (b_idx + 1) * step
-                    lbl = f"{start:.1f}-{end:.1f}"
-                    cnt = int(dist_map.get(b_idx, 0))
-                    dist_data.append({"value": lbl, "count": cnt, "pct": round((cnt/(total_rows-null_count)*100),1) if total_rows>null_count else 0})
+                if step > 0:
+                    bin_df = clean_series.to_frame().with_columns(
+                        ((pl.col(col) - h_min) / step).floor().cast(pl.Int32).clip(0, 19).alias("bin_idx")
+                    )
+                    hist_counts = bin_df.group_by("bin_idx").len().sort("bin_idx")
+                    dist_map = {int(row["bin_idx"]): int(row["len"]) for row in hist_counts.to_dicts()}
+                    for b_idx in range(20):
+                        start = h_min + b_idx * step
+                        end = h_min + (b_idx + 1) * step
+                        lbl = f"{start:.1f}-{end:.1f}"
+                        cnt = int(dist_map.get(b_idx, 0))
+                        dist_data.append({"value": lbl, "count": cnt, "pct": round((cnt/(total_rows-null_count)*100),1) if total_rows>null_count else 0})
+                else:
+                    dist_data.append({"value": str(h_min), "count": len(clean_series), "pct": 100.0})
 
         elif col_type in ["date", "datetime"]:
-            metrics.update({"min": str(series.min()), "max": str(series.max())})
+            diff = series.max() - series.min() if series.max() is not None and series.min() is not None else None
+            metrics.update({
+                "min": str(series.min()), 
+                "max": str(series.max()),
+                "duration": str(diff) if diff is not None else "N/A"
+            })
             # Temporal bins (20 bins)
             clean_series = series.drop_nulls()
             if not clean_series.is_empty() and series.min() != series.max():
@@ -123,7 +151,6 @@ def compute_column_stats(df: pl.DataFrame) -> Dict[str, Any]:
                         ((pl.col("ts" if col=="ts" else col) - ms_min) / ms_step).floor().cast(pl.Int32).clip(0, 19).alias("bin_idx")
                     ).group_by("bin_idx").len().sort("bin_idx")
                     dist_map = {int(row["bin_idx"]): int(row["len"]) for row in hist_counts.to_dicts()}
-                    import datetime
                     for b_idx in range(20):
                         b_ms = ms_min + b_idx * ms_step
                         try:
@@ -136,6 +163,9 @@ def compute_column_stats(df: pl.DataFrame) -> Dict[str, Any]:
         elif col_type == "categorical":
             counts = series.value_counts().sort(by="count", descending=True).head(10)
             non_null_count = total_rows - null_count
+            metrics.update({
+                "mode": str(series.mode()[0]) if not series.drop_nulls().is_empty() and series.mode().len() > 0 else "N/A",
+            })
             for row in counts.to_dicts():
                 if row[col] is None: continue
                 dist_data.append({

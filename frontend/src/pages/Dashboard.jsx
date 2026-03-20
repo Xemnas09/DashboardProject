@@ -296,7 +296,23 @@ function DataState({ summary, username, onNewUpload }) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: 'Lignes', value: summary.row_count.toLocaleString('fr-FR'), sub: 'enregistrements', icon: Database, color: 'bank' },
-          { label: 'Colonnes', value: summary.col_count, sub: `${summary.numeric_count} NUM · ${summary.categorical_count} CAT`, icon: Layers, color: 'violet' },
+          { 
+            label: 'Colonnes', 
+            value: summary.col_count, 
+            sub: (() => {
+              const tc = summary.type_counts;
+              if (!tc) return `${summary.numeric_count} NUM · ${summary.categorical_count} CAT`;
+              const parts = [];
+              if (tc.numeric) parts.push(`${tc.numeric} NUM`);
+              if (tc.categorical) parts.push(`${tc.categorical} CAT`);
+              if (tc.datetime || tc.date) parts.push(`${(tc.datetime || 0) + (tc.date || 0)} TIME`);
+              if (tc.id) parts.push(`${tc.id} ID`);
+              if (tc.boolean) parts.push(`${tc.boolean} BOOL`);
+              return parts.length > 0 ? parts.join(' · ') : 'Aucune donnée';
+            })(),
+            icon: Layers, 
+            color: 'violet' 
+          },
           { label: 'Valeurs nulles', value: `${summary.null_rate}%`, sub: summary.null_rate < 5 ? 'Excellent' : summary.null_rate < 15 ? 'Acceptable' : 'À corriger', icon: AlertCircle, color: summary.null_rate < 5 ? 'emerald' : summary.null_rate < 15 ? 'amber' : 'red' },
           { label: 'Anomalies', value: summary.anomaly_count > 0 ? summary.anomaly_count.toLocaleString('fr-FR') : '—', sub: (
             <div className="flex flex-col gap-1">

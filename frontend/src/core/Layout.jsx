@@ -28,7 +28,8 @@ export default function Layout({ theme, setTheme }) {
     const [tempTheme, setTempTheme] = useState(theme);
 
     const { notifHistory } = useRealtime();
-    const unreadCount = notifHistory.length > 0 ? 1 : 0; // Simple indicator if there are any session notifications
+    const [lastSeenNotifCount, setLastSeenNotifCount] = useState(0);
+    const unreadCount = notifHistory.length > lastSeenNotifCount;
 
     const [showHistoryModal, setShowHistoryModal] = useState(false);
 
@@ -163,7 +164,11 @@ export default function Layout({ theme, setTheme }) {
                         <div className="flex items-center gap-3">
                             {/* Notification Bell */}
                             <div className="relative">
-                                <button onClick={() => setShowNotifMenu(!showNotifMenu)} className="p-2.5 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all relative">
+                                <button onClick={() => { 
+                                    const nextState = !showNotifMenu;
+                                    setShowNotifMenu(nextState);
+                                    if (nextState) setLastSeenNotifCount(notifHistory.length);
+                                }} className="p-2.5 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all relative">
                                     <Bell size={20} />
                                     {unreadCount > 0 && <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white animate-pulse"></span>}
                                 </button>

@@ -45,13 +45,15 @@ async def get_dashboard_summary(user: TokenPayload = Depends(get_current_user)):
     null_rate = round((null_cells / (total * col_count)) * 100, 1) if total * col_count > 0 else 0
 
     # Variable counts using unified classification
-    cat_count = 0
-    num_count = 0
+    type_counts = {"numeric": 0, "categorical": 0, "datetime": 0, "date": 0, "boolean": 0, "id": 0}
     for c in df.columns:
-        if classify_column(df[c]) in ["continuous", "discrete", "numeric"]:
-            num_count += 1
+        ctype = classify_column(df[c])
+        if ctype in ["continuous", "discrete"]:
+            type_counts["numeric"] += 1
+        elif ctype in type_counts:
+            type_counts[ctype] += 1
         else:
-            cat_count += 1
+            type_counts["categorical"] += 1
 
     # Quick Column warnings (top 5 high null rate)
     stats = df.null_count()
@@ -67,8 +69,9 @@ async def get_dashboard_summary(user: TokenPayload = Depends(get_current_user)):
     entry.summary_metadata = {
         "row_count": total,
         "col_count": col_count,
-        "numeric_count": num_count,
-        "categorical_count": cat_count,
+        "type_counts": type_counts,
+        "numeric_count": type_counts["numeric"], # backwards compatibility
+        "categorical_count": type_counts["categorical"],
         "null_rate": null_rate,
         "quality_score": quality_score,
         "col_warnings": col_warnings

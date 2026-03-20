@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import {
     useReactTable,
     getCoreRowModel,
@@ -47,6 +48,7 @@ import { Link } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { tableFromIPC } from 'apache-arrow';
 import { customFetch } from '../features/auth/session';
 
 const CUSTOM_STYLES = `
@@ -92,10 +94,11 @@ const TYPE_LABELS = {
 // ─── STABLE SUB-COMPONENTS ────────────────────────
 
 const Modal = ({ isOpen, onClose, title, icon: Icon, children, infoBlock, maxWidth = "max-w-2xl" }) => {
+    const [isMaximized, setIsMaximized] = useState(false);
     if (!isOpen) return null;
     return (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 md:p-12 overflow-y-auto">
-            <div className={`bg-white rounded-[2rem] shadow-2xl ${maxWidth} w-full flex flex-col h-fit max-h-[90vh] animate-modal relative overflow-hidden`}>
+        <div className={`fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center animate-in fade-in duration-200 ${isMaximized ? 'p-0' : 'p-4 md:p-12'}`}>
+            <div className={`bg-white shadow-2xl w-full flex flex-col animate-modal relative overflow-hidden transition-all duration-300 ${isMaximized ? 'h-full rounded-none' : `rounded-[2rem] ${maxWidth} h-fit max-h-[90vh]`}`}>
                 <div className="h-16 px-8 flex items-center justify-between border-b border-gray-100 shrink-0">
                     <div className="flex items-center gap-3">
                         {Icon && (
@@ -105,9 +108,18 @@ const Modal = ({ isOpen, onClose, title, icon: Icon, children, infoBlock, maxWid
                         )}
                         <h3 className="text-sm font-black text-gray-900 uppercase tracking-tight">{title}</h3>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-50 rounded-xl transition-all text-gray-400">
-                        <X className="w-5 h-5" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setIsMaximized(!isMaximized)}
+                            title={isMaximized ? "Réduire" : "Agrandir"}
+                            className="p-2 hover:bg-gray-50 rounded-xl transition-all text-gray-400 hover:text-gray-600"
+                        >
+                            {isMaximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+                        </button>
+                        <button onClick={onClose} className="p-2 hover:bg-rose-50 rounded-xl transition-all text-gray-400 hover:text-rose-500">
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-8 pt-6">
@@ -261,7 +273,7 @@ const Header = ({ rowCount, loadedRows, activeToolTab, onOpenToolTab, onOpenStat
     );
 };
 
-const Toolbar = ({ searchQuery, setSearchQuery, pageSize, setPageSize, totalRows, loadedRows }) => (
+const Toolbar = ({ searchQuery, setSearchQuery, pageSize, setPageSize, totalRows, loadedRows, onToggleFullscreen, isMaximized }) => (
     <div className="h-12 flex items-center justify-between px-6 bg-gray-50 border-b border-gray-200 relative z-20 shrink-0">
         <div className="flex items-center gap-4 flex-1">
             <div className="relative w-full max-w-sm">
@@ -290,8 +302,17 @@ const Toolbar = ({ searchQuery, setSearchQuery, pageSize, setPageSize, totalRows
         </div>
 
         <div className="flex items-center gap-6">
-            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest hidden sm:block">
-                <span className="text-slate-900">{totalRows?.toLocaleString()}</span> lignes &middot; <span className="text-emerald-500">{loadedRows}</span> chargées
+            <div className="hidden sm:flex items-center gap-4">
+                {!isMaximized && (
+                    <button
+                        onClick={onToggleFullscreen}
+                        title="Plein écran (Données)"
+                        className="p-1.5 hover:bg-gray-200 rounded-lg text-gray-400 hover:text-gray-600 transition-all border border-gray-100 bg-white shadow-sm flex items-center gap-1.5 px-3"
+                    >
+                        <Maximize2 size={12} />
+                        <span className="text-[9px] font-black uppercase tracking-tighter">Plein écran</span>
+                    </button>
+                )}
             </div>
             <button className="md:hidden p-2 text-gray-400">
                 <Menu className="w-5 h-5" />
@@ -299,6 +320,15 @@ const Toolbar = ({ searchQuery, setSearchQuery, pageSize, setPageSize, totalRows
         </div>
     </div>
 );
+
+const FullscreenPortal = ({ children }) => {
+    return ReactDOM.createPortal(
+        <div className="fixed inset-0 z-[9999] bg-white flex flex-col animate-in fade-in zoom-in duration-300">
+            {children}
+        </div>,
+        document.body
+    );
+};
 
 const Footer = ({ currentPage, totalPages, pageSize, totalRows, loadedRows, table, isMobile }) => {
     const startRow = totalRows > 0 ? (currentPage - 1) * pageSize + 1 : 0;
@@ -473,13 +503,13 @@ const AnomaliesModal = ({ isOpen, onClose, columns, selectedCols, onToggleCol, m
                 <div className="flex items-center justify-between mb-2">
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Variables Numériques</p>
                     <div className="flex gap-2">
-                        <button 
+                        <button
                             onClick={() => columns.forEach(c => !selectedCols.includes(c.field) && onToggleCol(c.field))}
                             className="text-[9px] font-black text-bank-600 bg-bank-50 px-2 py-1 rounded-lg hover:bg-bank-100 transition-all uppercase tracking-tighter"
                         >
                             Tout sélectionner
                         </button>
-                        <button 
+                        <button
                             onClick={() => selectedCols.forEach(c => onToggleCol(c))}
                             className="text-[9px] font-black text-gray-400 bg-gray-50 px-2 py-1 rounded-lg hover:bg-gray-100 transition-all uppercase tracking-tighter"
                         >
@@ -969,11 +999,21 @@ const TYPE_CONFIG = {
 const formatNumber = (val) => {
     if (val === null || val === undefined) return '—';
     if (typeof val !== 'number') return String(val);
-    if (Math.abs(val) >= 1_000_000)
-        return val.toLocaleString('fr-FR', { maximumFractionDigits: 0 });
-    if (Math.abs(val) >= 1_000)
-        return val.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
-    return val.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
+    return val.toLocaleString('fr-FR');
+};
+
+const nFormatter = (num, digits = 1) => {
+    const lookup = [
+        { value: 1, symbol: "" },
+        { value: 1e3, symbol: "k" },
+        { value: 1e6, symbol: "M" },
+        { value: 1e9, symbol: "G" }
+    ];
+    const rx = /\.0+$|(\.[0-9]*[1-9])0+$/;
+    var item = lookup.slice().reverse().find(function (item) {
+        return num >= item.value;
+    });
+    return item ? (num / item.value).toFixed(digits).replace(rx, "$1") + item.symbol : "0";
 };
 
 function StatCard({ label, value, subtitle, accent = false }) {
@@ -1024,24 +1064,140 @@ function InterpretationBlock({ mean, std, nullPct, q1, q3 }) {
     );
 }
 
-const getHistogramOption = (bins) => ({
-    backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis', backgroundColor: '#1f2937', borderColor: '#1f2937', textStyle: { color: '#fff', fontSize: 12 }, formatter: (params) => `<b>${params[0].name}</b><br/>Fréquence : <b>${params[0].value.toLocaleString('fr-FR')}</b>` },
-    grid: { left: 55, right: 20, top: 15, bottom: 65 },
-    xAxis: { type: 'category', data: bins.map(b => b.range), axisLabel: { rotate: 35, fontSize: 10, color: '#6b7280', formatter: (val) => { const num = parseFloat(val.split('-')[0]); return isNaN(num) ? val : num.toLocaleString('fr-FR', { maximumFractionDigits: 0 }); } }, axisLine: { lineStyle: { color: '#e5e7eb' } } },
-    yAxis: { type: 'value', axisLabel: { fontSize: 10, color: '#6b7280', formatter: (v) => v.toLocaleString('fr-FR') }, splitLine: { lineStyle: { color: '#f3f4f6' } } },
-    series: [{ type: 'bar', data: bins.map(b => b.count), itemStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#7c3aed' }, { offset: 1, color: '#c4b5fd' }] }, borderRadius: [4, 4, 0, 0] }, emphasis: { itemStyle: { color: '#6d28d9' } } }],
-    dataZoom: [{ type: 'inside', start: 0, end: 100 }, { type: 'slider', height: 16, bottom: 5, borderColor: '#e5e7eb', fillerColor: 'rgba(124, 58, 237, 0.1)', handleStyle: { color: '#7c3aed' } }]
-});
+const getHistogramOption = (bins) => {
+    const isCrowded = bins.length > 15;
+    const topIndices = isCrowded ? bins.map((b, i) => ({ count: b.count, i })).sort((a, b) => b.count - a.count).slice(0, 10).map(x => x.i) : [];
 
-const getDiscreteOption = (values) => ({
-    backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis', backgroundColor: '#1f2937', borderColor: '#1f2937', textStyle: { color: '#fff' }, formatter: (params) => `Valeur <b>${params[0].name}</b><br/>Occurrences : <b>${params[0].value.toLocaleString('fr-FR')}</b><br/>Proportion : <b>${values[params[0].dataIndex].pct}%</b>` },
-    grid: { left: 45, right: 20, top: 30, bottom: 40 },
-    xAxis: { type: 'category', data: values.map(v => String(v.value)), axisLabel: { fontSize: 11, color: '#374151', fontWeight: 'bold' } },
-    yAxis: { type: 'value', axisLabel: { fontSize: 10, color: '#6b7280', formatter: (v) => v.toLocaleString('fr-FR') }, splitLine: { lineStyle: { color: '#f3f4f6' } } },
-    series: [{ type: 'bar', data: values.map(v => v.count), itemStyle: { color: '#7c3aed', borderRadius: [4, 4, 0, 0] }, label: { show: true, position: 'top', fontSize: 10, color: '#6b7280', formatter: (p) => `${p.value.toLocaleString('fr-FR')} (${values[p.dataIndex].pct}%)` } }]
-});
+    return {
+        backgroundColor: 'transparent',
+        tooltip: {
+            trigger: 'axis',
+            backgroundColor: 'rgba(31, 41, 55, 0.95)',
+            borderColor: '#374151',
+            borderRadius: 12,
+            textStyle: { color: '#fff', fontSize: 11, fontWeight: '600' },
+            formatter: (params) => `
+                <div style="padding: 4px;">
+                    <div style="color: #9ca3af; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px;">Plage de données</div>
+                    <div style="font-size: 13px; font-weight: 900; color: #fff; margin-bottom: 8px;">${params[0].name}</div>
+                    <div style="height: 1px; background: rgba(255,255,255,0.1); margin-bottom: 8px;"></div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #7c3aed;"></span>
+                        <span style="color: #d1d5db;">Fréquence :</span>
+                        <span style="font-weight: 900; color: #fff;">${params[0].value.toLocaleString('fr-FR')}</span>
+                    </div>
+                </div>
+            `
+        },
+        grid: { left: 55, right: 20, top: 25, bottom: isCrowded ? 80 : 65 },
+        xAxis: {
+            type: 'category',
+            data: bins.map(b => b.value),
+            axisLabel: {
+                rotate: 35,
+                fontSize: 10,
+                color: '#6b7280',
+                formatter: (val) => {
+                    const num = parseFloat(val.split('-')[0]);
+                    return isNaN(num) ? val : nFormatter(num);
+                }
+            },
+            axisLine: { lineStyle: { color: '#e5e7eb' } }
+        },
+        yAxis: {
+            type: 'value',
+            axisLabel: { fontSize: 10, color: '#6b7280', formatter: (v) => nFormatter(v) },
+            splitLine: { lineStyle: { color: '#f3f4f6', type: 'dashed' } }
+        },
+        series: [{
+            type: 'bar',
+            data: bins.map(b => b.count),
+            itemStyle: {
+                color: {
+                    type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+                    colorStops: [{ offset: 0, color: '#7c3aed' }, { offset: 1, color: '#c4b5fd' }]
+                },
+                borderRadius: [6, 6, 0, 0]
+            },
+            label: {
+                show: true,
+                position: 'top',
+                rotate: isCrowded ? 45 : 0,
+                fontSize: 9,
+                color: '#4b5563',
+                fontWeight: 'bold',
+                fontFamily: 'Inter',
+                distance: 10,
+                formatter: (p) => {
+                    if (isCrowded && !topIndices.includes(p.dataIndex)) return '';
+                    return nFormatter(p.value);
+                }
+            },
+            labelLayout: { hideOverlap: true },
+            emphasis: { itemStyle: { color: '#6d28d9', shadowBlur: 10, shadowColor: 'rgba(124, 58, 237, 0.4)' } }
+        }],
+        dataZoom: [
+            { type: 'inside', start: 0, end: bins.length > 25 ? 40 : 100 },
+            { type: 'slider', height: 16, bottom: 5, borderColor: '#e5e7eb', fillerColor: 'rgba(124, 58, 237, 0.1)', handleStyle: { color: '#7c3aed' } }
+        ]
+    };
+};
+
+const getDiscreteOption = (values) => {
+    const isCrowded = values.length > 12;
+    const topIndices = isCrowded ? values.map((v, i) => ({ count: v.count, i })).sort((a, b) => b.count - a.count).slice(0, 10).map(x => x.i) : [];
+
+    return ({
+        backgroundColor: 'transparent',
+        tooltip: {
+            trigger: 'axis',
+            backgroundColor: 'rgba(31, 41, 55, 0.95)',
+            borderColor: '#374151',
+            borderRadius: 12,
+            textStyle: { color: '#fff' },
+            formatter: (params) => `
+                <div style="padding: 4px;">
+                    <div style="font-size: 13px; font-weight: 900; color: #fff; margin-bottom: 8px;">${params[0].name}</div>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <div style="display: flex; justify-between; gap: 12px;">
+                            <span style="color: #9ca3af; font-size: 10px; text-transform: uppercase;">Occurrences</span>
+                            <span style="font-weight: 900; color: #fff; margin-left: auto;">${params[0].value.toLocaleString('fr-FR')}</span>
+                        </div>
+                        <div style="display: flex; justify-between; gap: 12px;">
+                            <span style="color: #9ca3af; font-size: 10px; text-transform: uppercase;">Proportion</span>
+                            <span style="font-weight: 900; color: #a5b4fc; margin-left: auto;">${values[params[0].dataIndex].pct}%</span>
+                        </div>
+                    </div>
+                </div>
+            `
+        },
+        grid: { left: 55, right: 20, top: 30, bottom: isCrowded ? 60 : 40 },
+        xAxis: { type: 'category', data: values.map(v => String(v.value)), axisLabel: { rotate: isCrowded ? 45 : 0, fontSize: 10, color: '#374151', fontWeight: 'bold' } },
+        yAxis: { type: 'value', axisLabel: { fontSize: 10, color: '#6b7280', formatter: (v) => nFormatter(v) }, splitLine: { lineStyle: { color: '#f3f4f6' } } },
+        series: [{
+            type: 'bar',
+            data: values.map(v => v.count),
+            itemStyle: { color: '#7c3aed', borderRadius: [6, 6, 0, 0] },
+            label: {
+                show: true,
+                position: 'top',
+                rotate: isCrowded ? 45 : 0,
+                fontSize: 9,
+                color: '#6b7280',
+                distance: 10,
+                formatter: (p) => {
+                    if (isCrowded && !topIndices.includes(p.dataIndex)) return '';
+                    return `${nFormatter(p.value)} (${values[p.dataIndex].pct}%)`;
+                }
+            },
+            labelLayout: { hideOverlap: true }
+        }],
+        dataZoom: values.length > 20 ? [
+            { type: 'inside', start: 0, end: 50 },
+            { type: 'slider', height: 16, bottom: 5, borderColor: '#e5e7eb', fillerColor: 'rgba(124, 58, 237, 0.1)', handleStyle: { color: '#7c3aed' } }
+        ] : []
+    });
+};
 
 const getCategoricalOption = (topValues) => ({
     backgroundColor: 'transparent',
@@ -1109,8 +1265,8 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <button 
-                            onClick={() => setIsMaximized(!isMaximized)} 
+                        <button
+                            onClick={() => setIsMaximized(!isMaximized)}
                             title={isMaximized ? "Réduire" : "Agrandir"}
                             className="p-2 rounded-xl border border-transparent hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-all"
                         >
@@ -1213,7 +1369,7 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
                                         <StatCard label="Valeurs nulles" value={currentColStats.metrics.nulls} />
                                     </div>
                                 )}
-                                
+
                                 {(currentColStats.type === 'date' || currentColStats.type === 'datetime') && (
                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                         <StatCard label="Date Début" value={currentColStats.metrics.min} accent={true} />
@@ -1223,7 +1379,7 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
                                 )}
 
                                 {/* Interpretation block */}
-                                {currentColStats.type === 'continuous' && (
+                                {(currentColStats.type === 'continuous' || currentColStats.type === 'discrete') && (
                                     <InterpretationBlock
                                         mean={currentColStats.metrics.mean}
                                         std={currentColStats.metrics.std}
@@ -1326,6 +1482,7 @@ export default function Database({ addNotification }) {
 
     const [anomalyMethod, setAnomalyMethod] = useState('zscore');
     const [anomalyThreshold, setAnomalyThreshold] = useState(3.0);
+    const [isTableMaximized, setIsTableMaximized] = useState(false);
     const [anomalyResult, setAnomalyResult] = useState(null);
     const [anomalyLoading, setAnomalyLoading] = useState(false);
     const [isAnomalyBannerExpanded, setIsAnomalyBannerExpanded] = useState(false);
@@ -1445,6 +1602,14 @@ export default function Database({ addNotification }) {
                 cell: ({ getValue }) => {
                     const value = getValue();
 
+                    // Better boolean display for 0/1
+                    if (typeof value === 'boolean') {
+                        const boolValue = value;
+                        const isOriginalNumeric = info?.dtype?.includes('int') || info?.dtype?.includes('float');
+                        const displayValue = isOriginalNumeric ? (boolValue ? '1' : '0') : String(boolValue);
+                        return <span className="text-[11px] font-bold text-gray-700">{displayValue}</span>;
+                    }
+
                     if (value === null || value === undefined || value === '')
                         return <span className="text-gray-200 text-xs italic font-medium">—</span>;
 
@@ -1524,13 +1689,51 @@ export default function Database({ addNotification }) {
     const fetchDataPreview = async () => {
         setLoading(true);
         try {
+            // --- GAME CHANGER: Try Apache Arrow (Binary) First ---
+            let arrowSuccess = false;
+            try {
+                const arrowRes = await customFetch('/api/database/arrow');
+                if (arrowRes.ok) {
+                    console.time("Arrow-Engine-Parse");
+                    const buffer = await arrowRes.arrayBuffer();
+                    const table = tableFromIPC(new Uint8Array(buffer));
+
+                    // Fetch basic metadata (columns info) which is small
+                    const metaRes = await customFetch('/api/database');
+                    const metaData = await metaRes.json();
+
+                    if (metaData.status === 'success' && metaData.data_preview) {
+                        const jsonData = [];
+                        // Extract data from Arrow table
+                        for (let i = 0; i < table.numRows; i++) {
+                            const row = table.get(i);
+                            jsonData.push(row ? row.toJSON() : {});
+                        }
+
+                        setDataPreview({
+                            ...metaData.data_preview,
+                            data: jsonData
+                        });
+                        console.timeEnd("Arrow-Engine-Parse");
+                        console.log(`%c[Arrow-Engine] %cLoaded ${table.numRows} rows instantly`, "color: #10b981; font-weight: bold", "color: #6b7280");
+                        arrowSuccess = true;
+                    }
+                }
+            } catch (arrowErr) {
+                console.warn("[Arrow-Engine] Failed to load binary data, falling back to JSON:", arrowErr);
+                arrowSuccess = false;
+            }
+
+            if (arrowSuccess) return;
+
+            // --- FALLBACK: Standard JSON ---
             const res = await customFetch(`/api/database?full_data=true`);
             if (res.ok) {
                 const data = await res.json();
                 setDataPreview(data.data_preview);
             }
         } catch (e) {
-            console.error(e);
+            console.error("[Database] Critical fetch error:", e);
             addNotification("Impossible de charger les données.", "error");
         } finally {
             setLoading(false);
@@ -1854,6 +2057,71 @@ export default function Database({ addNotification }) {
 
     // gridRef based pagination handlers removed
 
+    const renderTable = () => {
+        if (!dataPreview) return null;
+        return (
+            <>
+                <table className="w-full border-separate border-spacing-0">
+                    <thead>
+                        {table?.getHeaderGroups?.()?.map(hg => (
+                            <tr key={hg.id}>
+                                {hg.headers.map((header, i) => {
+                                    const meta = header.column.columnDef.meta;
+                                    return (
+                                        <th
+                                            key={header.id}
+                                            className={`px-4 py-2 bg-gray-50 border-b-2 border-gray-100 first:border-l-0 last:border-r-0 ${i > 0 ? 'border-l border-gray-100' : ''} ${meta?.isId ? 'min-w-[64px]' : 'min-w-[100px]'} ${meta?.isNumeric ? 'text-right' : 'text-left'} sticky top-0 ${meta?.isId ? 'left-0 z-40 bg-gray-50 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]' : 'z-30 bg-gray-50'}`}
+                                        >
+                                            {flexRender(header.column.columnDef.header, header.getContext())}
+                                        </th>
+                                    );
+                                })}
+                            </tr>
+                        ))}
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                        {table?.getRowModel?.()?.rows?.map((row, rowIdx) => {
+                            const originalIdx = row.index;
+                            const isAnomaly = anomalyIndices.has(originalIdx);
+                            const isFaded = anomalyResult && !isAnomaly && !showAnomaliesOnly;
+                            const isEven = rowIdx % 2 === 0;
+
+                            return (
+                                <tr
+                                    key={row.id}
+                                    className={`group transition-all duration-100 ${isAnomaly ? 'bg-[#fff1f2] border-l-[3px] border-l-rose-400 hover:bg-[#ffe4e6]' : isEven ? 'bg-white hover:bg-[#f5f3ff]' : 'bg-[#f9fafb] hover:bg-[#f5f3ff]'} ${isFaded ? 'opacity-25' : ''}`}
+                                >
+                                    {row.getVisibleCells().map((cell, cellIdx) => {
+                                        const meta = cell.column.columnDef.meta;
+                                        return (
+                                            <td
+                                                key={cell.id}
+                                                className={`px-4 py-2.5 text-xs ${cellIdx > 0 ? 'border-l border-gray-50' : ''} ${meta?.isNumeric ? 'text-right' : 'text-left'} ${meta?.isId ? `sticky left-0 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)] ${isAnomaly ? 'bg-[#fff1f2]' : isEven ? 'bg-white' : 'bg-[#f9fafb]'} group-hover:bg-[#f5f3ff]` : ''}`}
+                                            >
+                                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                            </td>
+                                        );
+                                    })}
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+
+                {table?.getRowModel?.()?.rows?.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+                        <div className="w-16 h-16 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-center mb-4">
+                            <Search size={24} className="opacity-30" />
+                        </div>
+                        <p className="text-sm font-bold text-gray-500 uppercase tracking-tighter">Aucun résultat</p>
+                        <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase tracking-widest">Essayez de modifier votre recherche</p>
+                    </div>
+                )}
+
+            </>
+        );
+    };
+
     if (loading) {
         return (
             <div className="h-full flex items-center justify-center bg-gray-50">
@@ -1891,6 +2159,8 @@ export default function Database({ addNotification }) {
                 }}
                 totalRows={table?.getFilteredRowModel?.()?.rows?.length || 0}
                 loadedRows={dataPreview?.data?.length}
+                isMaximized={isTableMaximized}
+                onToggleFullscreen={() => setIsTableMaximized(true)}
             />
 
             <div className="flex-1 flex flex-col relative overflow-hidden bg-gray-50">
@@ -1901,64 +2171,23 @@ export default function Database({ addNotification }) {
                     onExport={handleExportAnomalies}
                 />
 
-                <div className="flex-1 overflow-auto rounded-t-2xl border-x border-t border-gray-100 shadow-sm relative mx-4 mt-2 mb-0 bg-white scrollbar-thin">
-                    <table className="w-full border-collapse">
-                        <thead className="sticky top-0 z-10">
-                            {table?.getHeaderGroups?.()?.map(hg => (
-                                <tr key={hg.id}>
-                                    {hg.headers.map((header, i) => {
-                                        const meta = header.column.columnDef.meta;
-                                        return (
-                                            <th
-                                                key={header.id}
-                                                className={`px-4 py-2 bg-gray-50 border-b-2 border-gray-100 first:border-l-0 last:border-r-0 ${i > 0 ? 'border-l border-gray-100' : ''} ${meta?.isId ? 'w-16 min-w-[64px]' : 'min-w-[100px]'} ${meta?.isNumeric ? 'text-right' : 'text-left'} ${meta?.isId ? 'sticky left-0 top-0 z-30 bg-gray-50 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]' : 'sticky top-0 z-20 bg-gray-50'}`}
-                                            >
-                                                {flexRender(header.column.columnDef.header, header.getContext())}
-                                            </th>
-                                        );
-                                    })}
-                                </tr>
-                            ))}
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                            {table?.getRowModel?.()?.rows?.map((row, rowIdx) => {
-                                const originalIdx = row.index;
-                                const isAnomaly = anomalyIndices.has(originalIdx);
-                                const isFaded = anomalyResult && !isAnomaly && !showAnomaliesOnly;
-                                const isEven = rowIdx % 2 === 0;
-
-                                return (
-                                    <tr
-                                        key={row.id}
-                                        className={`group transition-all duration-100 ${isAnomaly ? 'bg-rose-50/80 border-l-[3px] border-l-rose-400 hover:bg-rose-50' : isEven ? 'bg-white hover:bg-violet-50/30' : 'bg-gray-50/50 hover:bg-violet-50/30'} ${isFaded ? 'opacity-25' : ''}`}
-                                    >
-                                        {row.getVisibleCells().map((cell, cellIdx) => {
-                                            const meta = cell.column.columnDef.meta;
-                                            return (
-                                                <td
-                                                    key={cell.id}
-                                                    className={`px-4 py-2.5 text-xs ${cellIdx > 0 ? 'border-l border-gray-50' : ''} ${meta?.isNumeric ? 'text-right' : 'text-left'} ${meta?.isId ? `sticky left-0 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.04)] bg-inherit group-hover:bg-violet-50/30` : ''}`}
-                                                >
-                                                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                                </td>
-                                            );
-                                        })}
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-
-                    {table?.getRowModel?.()?.rows?.length === 0 && (
-                        <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-                            <div className="w-16 h-16 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-center mb-4">
-                                <Search size={24} className="opacity-30" />
-                            </div>
-                            <p className="text-sm font-bold text-gray-500 uppercase tracking-tighter">Aucun résultat</p>
-                            <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase tracking-widest">Essayez de modifier votre recherche</p>
-                        </div>
-                    )}
+                <div className={`flex-1 overflow-auto border-gray-100 shadow-sm relative transition-all duration-500 ${isTableMaximized ? 'opacity-0 pointer-events-none' : 'rounded-t-2xl border-x border-t mx-4 mt-2 mb-0 bg-white'}`}>
+                    {renderTable()}
                 </div>
+
+                {!isTableMaximized && (
+                    <div className="mx-4 bg-white border-x border-b rounded-b-2xl shadow-sm border-gray-100 overflow-hidden shrink-0">
+                        <Footer
+                            currentPage={(table?.getState?.()?.pagination?.pageIndex || 0) + 1}
+                            totalPages={table?.getPageCount?.() || 1}
+                            pageSize={pageSize}
+                            totalRows={dataPreview?.total_rows}
+                            loadedRows={table?.getFilteredRowModel?.()?.rows?.length || 0}
+                            table={table}
+                            isMobile={isMobile}
+                        />
+                    </div>
+                )}
 
                 {/* MODALS */}
                 <VariablesModal
@@ -2030,15 +2259,39 @@ export default function Database({ addNotification }) {
 
             </div>
 
-            <Footer
-                currentPage={(table?.getState?.()?.pagination?.pageIndex || 0) + 1}
-                totalPages={table?.getPageCount?.() || 1}
-                pageSize={pageSize}
-                totalRows={dataPreview?.total_rows}
-                loadedRows={table?.getFilteredRowModel?.()?.rows?.length || 0}
-                table={table}
-                isMobile={isMobile}
-            />
+            {isTableMaximized && (
+                <FullscreenPortal>
+                    <div className="h-16 px-8 flex items-center justify-between border-b border-gray-100 shrink-0 bg-white">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-slate-900 text-white rounded-xl">
+                                <Maximize2 size={18} />
+                            </div>
+                            <span className="text-sm font-black text-slate-900 uppercase tracking-tight">Vue Immersion Données</span>
+                        </div>
+                        <button
+                            onClick={() => setIsTableMaximized(false)}
+                            className="p-2.5 bg-slate-900 text-white rounded-2xl shadow-xl hover:bg-slate-800 transition-all flex items-center gap-2 px-5 group"
+                        >
+                            <Minimize2 size={16} />
+                            <span className="text-xs font-black uppercase tracking-widest">Réduire</span>
+                        </button>
+                    </div>
+                    <div className="flex-1 overflow-auto p-0 bg-white">
+                        {renderTable()}
+                    </div>
+                    <div className="bg-white border-t border-gray-100 shrink-0">
+                        <Footer
+                            currentPage={(table?.getState?.()?.pagination?.pageIndex || 0) + 1}
+                            totalPages={table?.getPageCount?.() || 1}
+                            pageSize={pageSize}
+                            totalRows={dataPreview?.total_rows}
+                            loadedRows={table?.getFilteredRowModel?.()?.rows?.length || 0}
+                            table={table}
+                            isMobile={isMobile}
+                        />
+                    </div>
+                </FullscreenPortal>
+            )}
 
             {/* DELETE MODAL */}
             {showDeleteConfirm && (

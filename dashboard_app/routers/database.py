@@ -3,9 +3,9 @@ Database router: /api/database, /api/database/recast, /api/calculated-field
 """
 import os
 import shutil
-
+import io
 import polars as pl
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Request, Depends, Response
 from loguru import logger
 
 from api.auth.schemas import TokenPayload
@@ -77,6 +77,34 @@ async def database_view(
     await cache_manager.set(user.cache_id, entry)
 
     return {"status": "success", "data_preview": data_preview}
+
+
+# ---------------------------------------------------------------------------
+# GET /api/database/arrow
+# ---------------------------------------------------------------------------
+@router.get("/api/database/arrow")
+async def database_arrow_view(
+    user: TokenPayload = Depends(get_current_user),
+):
+    from services.data_cache import cache_manager
+    entry = await cache_manager.get(user.cache_id)
+    if not entry:
+        raise SessionExpiredException()
+
+    df = get_df_for_user(entry)
+    
+    # We send the head(2000) just like the JSON preview, but in Arrow format
+    # This is much faster than to_dicts() + JSON serialization
+    buffer = io.BytesIO()
+    df.head(2000).write_ipc(buffer)
+    
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/vnd.apache.arrow.file",
+        headers={
+            "Content-Disposition": f'attachment; filename="{entry.filename or "data"}.arrow"'
+        }
+    )
 
 
 # ---------------------------------------------------------------------------

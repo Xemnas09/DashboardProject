@@ -7,7 +7,7 @@ sdk: docker
 pinned: false
 ---
 
-# Datavera v0.3.2
+# Datavera v0.4.2
 
 Datavera est une plateforme moderne d'analyse et d'exploration de données haute performance, conçue pour transformer des fichiers bruts (CSV, Excel) en insights exploitables avec une interface glassmorphic ultra-fluide.
 

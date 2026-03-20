@@ -108,3 +108,8 @@ frontend/src/
 - **Zero-Flash Auth**: User data is read synchronously from `sessionStorage` during the initial render before React paints the screen.
 - **Context Separation**: `AuthContext` (stable, slow) is strictly separated from `RealtimeContext` (volatile, fast). This prevents the entire UI tree from re-rendering when a WebSocket ping is received.
 - **Deduplication**: In development (`StrictMode`), `useWebSocketInit` relies on connection locks (`isConnecting`) to prevent dual-socket mounting.
+
+### Technical Refinements (v0.3.3) 
+- **Unified Classification**: The backend and frontend now share the same column_classifier.py logic for consistent data types.
+- **Immersion Portals**: Immersive modes use React Portals to cover the entire viewport with a system-level z-index (9999).
+- **Hybrid Caching**: Data access is optimized via RAM (session) and IPC (Parquet/Arrow disk) caching layers.
