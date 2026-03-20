@@ -21,33 +21,14 @@ from services.file_processor import (
     classify_column,
     smart_cast_to_datetime
 )
+from services.data_service import get_df_for_user, compute_column_stats, detect_anomalies_service
 from services.expression_parser import parse_expression
 from services.notifications import notification_store
 
 router = APIRouter(tags=["Database"])
-_stats_cache = None
 
 
-def reset_stats_cache():
-    global _stats_cache
-    _stats_cache = None
-
-# Force reset on reload to pick up logic changes
-reset_stats_cache()
-
-
-def _get_df(entry):
-    """Read the full dataframe from a cache entry with RAM-first priority."""
-    if entry.df is not None:
-        return entry.df
-    
-    df = read_cached_df(entry.filepath, entry.selected_sheet, entry.schema_overrides)
-    if df is None:
-        raise NotFoundException("Impossible de lire les données")
-    
-    # Hydrate RAM cache for next time if it was missing
-    entry.df = df
-    return df
+# Shared utility removed - using services.data_service.get_df_for_user
 
 
 # ---------------------------------------------------------------------------
@@ -63,22 +44,38 @@ async def database_view(
     if not entry:
         return {"status": "success", "data_preview": None}
 
-    df = _get_df(entry)
+    # --- PERFORMANCE: Return cached preview if available ---
+    cached_db_prev = getattr(entry, 'db_preview', None)
+    if cached_db_prev is not None:
+        return {"status": "success", "data_preview": cached_db_prev}
 
-    # 2. Prepare Preview
-    # We cast ALL columns to String for the JSON response to avoid serialization errors 
-    # (e.g. for Datetime or complex types common in Parquet/Excel).
-    data_preview = {
-        'columns': [{'field': c, 'title': c} for c in df.columns],
-        'columns_info': [{
+    df = get_df_for_user(entry)
+
+    # Build preview (expensive: classify + cast + to_dicts)
+    # classify_column() is called ONCE per column, result reused for is_identifier
+    columns_info = []
+    for c in df.columns:
+        col_type = classify_column(df[c])
+        columns_info.append({
             'name': c,
             'dtype': str(df[c].dtype),
+            'type': col_type,
             'is_numeric': df[c].dtype.is_numeric(),
-            'is_identifier': classify_column(df[c]) == "identifier",
-        } for c in df.columns],
+            'is_identifier': col_type == "identifier",
+        })
+
+    # Build preview data (Optimized select)
+    data_preview = {
+        'columns': [{'field': c, 'title': c} for c in df.columns],
+        'columns_info': columns_info,
         'data': df.head(2000).select(pl.all().cast(pl.String)).to_dicts(),
         'total_rows': len(df),
     }
+
+    # Cache the preview for subsequent requests
+    entry.db_preview = data_preview
+    await cache_manager.set(user.cache_id, entry)
+
     return {"status": "success", "data_preview": data_preview}
 
 
@@ -107,7 +104,7 @@ async def database_recast(
 
     # Load the dataframe (consistent with current session state)
     try:
-        df = _get_df(entry)
+        df = get_df_for_user(entry)
     except Exception as e:
         logger.error("Failed to load df for recast: {}", e)
         raise ValidationException(f"Impossible de charger les données : {str(e)}")
@@ -154,11 +151,11 @@ async def database_recast(
             
         elif target_type == 'Date':
             # Attempt parsing. Polars handles many standard formats automatically.
-            expressions.append(smart_cast_to_date(col_name, df).alias(col_name))
+            expressions.append(smart_cast_to_date(col_name).alias(col_name))
             
         elif target_type == 'Datetime':
             # Attempt parsing with time precision
-            expressions.append(smart_cast_to_datetime(col_name, df).alias(col_name))
+            expressions.append(smart_cast_to_datetime(col_name).alias(col_name))
 
     if not expressions:
         return {"status": "success", "message": "Aucune modification applicable"}
@@ -242,11 +239,10 @@ async def database_recast(
         "categorical_count": len([c for c in df.columns if not df[c].dtype.is_numeric()])
     }
     
+    # CRITICAL: Invalidate caches so tools re-calculate with new types
+    entry.db_preview = None
+    entry.stats_cache = None
     await cache_manager.set(user.cache_id, entry)
-    
-    # CRITICAL: Invalidate stats cache so the statistics tool re-calculates with new types
-    global _stats_cache
-    _stats_cache = None
 
     msg = f"{len(modifications)} variables re-typées"
     if warnings:
@@ -295,7 +291,7 @@ async def ai_suggest_types(
         series = df[col]
         stats = {
             "null_count": int(series.null_count()),
-            "unique_count": int(series.n_unique()),
+            "unique_count": int(series.drop_nulls().n_unique()),
             "dtype": str(series.dtype)
         }
         # Numeric stats for extra precision
@@ -443,11 +439,10 @@ async def create_expression(
         "categorical_count": len([c for c in df.columns if not df[c].dtype.is_numeric()])
     }
     
+    # Invalidate caches after schema change
+    entry.db_preview = None
+    entry.stats_cache = None
     await cache_manager.set(user.cache_id, entry)
-    
-    # Invalidate stats cache
-    global _stats_cache
-    _stats_cache = None
 
     notif = notification_store.add(user.sub, f'Champ calculé "{new_col_name}" créé', "success")
 
@@ -524,166 +519,20 @@ async def detect_anomalies(
 async def get_column_stats(
     user: TokenPayload = Depends(get_current_user)
 ):
-    global _stats_cache
-    
-    if _stats_cache is not None:
-        return {"status": "success", "stats": _stats_cache}
-
     from services.data_cache import cache_manager
     entry = await cache_manager.get(user.cache_id)
     if not entry:
         return {"status": "success", "stats": {}}
 
-    df = _get_df(entry)
+    # --- PERFORMANCE: Return cached stats if available ---
+    cached_stats = getattr(entry, 'stats_cache', None)
+    if cached_stats is not None:
+        return {"status": "success", "stats": cached_stats}
 
-    stats = {}
-    total_rows = len(df)
-
-    for i, col in enumerate(df.columns):
-        series = df[col]
-        null_count = int(series.null_count())
-        null_pct = round((null_count / total_rows) * 100, 1) if total_rows > 0 else 0
-        unique_count = int(series.n_unique())
-        
-        # 1. Determine Type using unified logic
-        col_type = classify_column(series)
-        is_identifier = col_type == "identifier"
-        
-        # 2. Base metrics
-        metrics = {
-            "count": total_rows,
-            "nulls": null_count,
-            "null_pct": null_pct,
-            "uniques": unique_count,
-            "type": col_type,
-            "is_identifier": is_identifier,
-        }
-        
-        dist_data = []
-
-        if col_type == "identifier":
-            metrics.update({
-                "min": float(series.min()) if series.dtype.is_numeric() else str(series.min()),
-                "max": float(series.max()) if series.dtype.is_numeric() else str(series.max()),
-            })
-            # No dist needed for ID as per prompt
-
-        elif col_type == "boolean":
-            # Dynamic label detection
-            modalities = series.drop_nulls().unique().to_list()
-            if len(modalities) == 2:
-                m1, m2 = modalities[0], modalities[1]
-                pos_markers = ["1", "true", "yes", "oui", "vrai", "t", "y", "o"]
-                m1_str = str(m1).lower()
-                m2_str = str(m2).lower()
-                
-                if m1_str in pos_markers or (m2_str not in pos_markers and m1_str > m2_str):
-                    label_true, label_false = m1, m2
-                else:
-                    label_true, label_false = m2, m1
-                
-                true_count = int((series == label_true).sum())
-                false_count = int((series == label_false).sum())
-            elif len(modalities) == 1:
-                label_true = modalities[0]
-                label_false = "N/A"
-                true_count = int((series == label_true).sum())
-                false_count = 0
-            else:
-                label_true, label_false = "Vrai", "Faux"
-                true_count = 0
-                false_count = 0
-            
-            non_null_count = total_rows - null_count
-            metrics.update({
-                "label_true": str(label_true),
-                "label_false": str(label_false),
-                "true_count": true_count,
-                "true_pct": round((true_count / non_null_count * 100), 1) if non_null_count > 0 else 0,
-                "false_count": false_count,
-                "false_pct": round((false_count / non_null_count * 100), 1) if non_null_count > 0 else 0,
-            })
-
-        elif col_type == "continuous":
-            metrics.update({
-                "min": float(series.min()) if series.min() is not None else 0.0,
-                "max": float(series.max()) if series.max() is not None else 0.0,
-                "mean": float(series.mean()) if series.mean() is not None else 0.0,
-                "median": float(series.median()) if series.median() is not None else 0.0,
-                "std": float(series.std()) if series.std() is not None else 0.0,
-                "q1": float(series.quantile(0.25)) if series.quantile(0.25) is not None else 0.0,
-                "q3": float(series.quantile(0.75)) if series.quantile(0.75) is not None else 0.0,
-            })
-            
-            # Histogram
-            clean_series = series.drop_nulls()
-            if not clean_series.is_empty() and series.min() != series.max():
-                h_min, h_max = float(series.min()), float(series.max())
-                step = (h_max - h_min) / 20
-                bin_df = clean_series.to_frame().with_columns(
-                    ((pl.col(col) - h_min) / step).floor().cast(pl.Int32).clip(0, 19).alias("bin_idx")
-                )
-                hist_counts = bin_df.group_by("bin_idx").len().sort("bin_idx")
-                dist_map = {int(row["bin_idx"]): int(row["len"]) for row in hist_counts.to_dicts()}
-                for b_idx in range(20):
-                    start = h_min + b_idx * step
-                    end = h_min + (b_idx + 1) * step
-                    dist_data.append({
-                        "name": f"{start:.2f}-{end:.2f}",
-                        "range": f"{start:.1f}-{end:.1f}",
-                        "count": int(dist_map.get(b_idx, 0))
-                    })
-        
-        elif col_type in ["date", "datetime"]:
-            # Native temporal metrics
-            metrics.update({
-                "min": str(series.min()),
-                "max": str(series.max()),
-                "mode": str(series.mode()[0]) if not series.mode().is_empty() else "—"
-            })
-            
-            # Duration (only for datetime with time)
-            if col_type == "datetime" and series.min() is not None and series.max() is not None:
-                duration = series.max() - series.min()
-                metrics["duration"] = str(duration)
-            
-            # Distribution (Top 10 values for now)
-            counts = series.value_counts().sort(by="count", descending=True).head(10)
-            non_null_count = total_rows - null_count
-            for row in counts.to_dicts():
-                val = row[col]
-                if val is None: continue
-                dist_data.append({
-                    "value": str(val),
-                    "count": int(row["count"]),
-                    "pct": round((int(row["count"]) / non_null_count * 100), 1) if non_null_count > 0 else 0
-                })
-
-        elif col_type in ["discrete", "categorical"]:
-            mode_list = series.mode().to_list()
-            mode_val = str(mode_list[0]) if mode_list else "—"
-            metrics.update({
-                "mode": mode_val,
-            })
-            
-            # Distribution Top 10
-            # For categorical, we use str(val) to ensure JSON serialization
-            counts = series.value_counts().sort(by="count", descending=True).head(10)
-            non_null_count = total_rows - null_count
-            for row in counts.to_dicts():
-                val = row[col]
-                if val is None: continue
-                dist_data.append({
-                    "value": str(val),
-                    "count": int(row["count"]),
-                    "pct": round((int(row["count"]) / non_null_count * 100), 1) if non_null_count > 0 else 0
-                })
-
-        stats[col] = {
-            "type": col_type,
-            "metrics": metrics,
-            "distribution": dist_data
-        }
-
-    _stats_cache = stats
-    return {"status": "success", "stats": _stats_cache}
+    df = get_df_for_user(entry)
+    stats = compute_column_stats(df)
+    
+    # Cache stats per-session
+    entry.stats_cache = stats
+    await cache_manager.set(user.cache_id, entry)
+    return {"status": "success", "stats": stats}

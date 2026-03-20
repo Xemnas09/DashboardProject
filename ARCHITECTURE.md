@@ -33,14 +33,15 @@ dashboard_app/
 │   └── realtime/           #   Domain: WebSockets
 │       └── router.py       #     WS endpoint, ping/pong
 │
-├── routers/                # ── APPLICATION LAYER ──
+├── routers/                # ── APPLICATION LAYER (Thin Controllers) ──
 │   ├── upload.py           #   File upload (local + URL)
-│   ├── database.py         #   Data view, recast, expressions
-│   ├── reports.py          #   Charts, pivots, LLM interpretation
-│   ├── dashboard.py        #   Dashboard summary endpoint
+│   ├── database.py         #   View & Anomaly entrypoints (delegates to services)
+│   ├── reports.py          #   Charts & Pivots entrypoints (delegates to services)
+│   ├── dashboard.py        #   Dashboard summary (delegates to services)
 │   └── notifications.py    #   Read/history notifications
 │
-├── services/               # ── DOMAIN SERVICES ──
+├── services/               # ── DOMAIN SERVICES (Business Logic) ──
+│   ├── data_service.py     #   Central computing engine (Stats, Anomaly logic)
 │   ├── file_processor.py   #   File reading pipeline (CSV, TSV, XLSX, JSON, Parquet)
 │   ├── url_importer.py     #   URL-based file import with streaming
 │   ├── data_cache.py       #   In-memory data cache with TTL eviction

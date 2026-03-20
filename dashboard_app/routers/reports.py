@@ -11,17 +11,14 @@ from api.auth.schemas import TokenPayload
 from schemas.reports import ChartDataRequest, PivotDataRequest, LLMInterpretRequest, RecommendRequest, RecommendResponse
 from core.dependencies import get_current_user, limiter
 from core.exceptions import ValidationException, NotFoundException, SessionExpiredException
-from services.file_processor import read_cached_df, apply_filters
+from services.file_processor import read_cached_df, apply_filters, classify_column
+from services.data_service import get_df_for_user
 from services.llm_interpreter import llm_interpreter
 
 router = APIRouter(tags=["Reports"])
 
 
-def _get_df(entry):
-    df = read_cached_df(entry.filepath, entry.selected_sheet, entry.schema_overrides)
-    if df is None:
-        raise NotFoundException("Impossible de lire les données")
-    return df
+# Shared utility removed - using services.data_service.get_df_for_user
 
 
 # ---------------------------------------------------------------------------
@@ -35,13 +32,15 @@ async def reports_columns(user: TokenPayload = Depends(get_current_user)):
 
     row_count = 0
     if entry:
-        df = _get_df(entry)
+        df = get_df_for_user(entry)
         row_count = len(df)
         for col in df.columns:
+            col_type = classify_column(df[col])
             columns_info.append({
                 'name': col,
                 'dtype': str(df[col].dtype),
-                'is_numeric': df[col].dtype.is_numeric(),
+                'type': col_type,
+                'is_numeric': col_type in ["continuous", "discrete", "numeric"],
             })
 
     return {"status": "success", "columns_info": columns_info, "row_count": row_count}
@@ -57,7 +56,7 @@ async def unique_values(column: str, user: TokenPayload = Depends(get_current_us
     if not entry:
         raise SessionExpiredException()
     
-    df = _get_df(entry)
+    df = get_df_for_user(entry)
     if column not in df.columns:
         raise ValidationException(f"Colonne '{column}' introuvable")
     
@@ -105,7 +104,7 @@ async def chart_data(
     if not x_col:
         raise ValidationException("Veuillez sélectionner au moins la variable X")
 
-    df = _get_df(entry)
+    df = get_df_for_user(entry)
     df = apply_filters(df, filters)
 
     if len(df) == 0:
@@ -272,7 +271,7 @@ async def pivot_data(
     if not row_cols or not value_cols:
         raise ValidationException("Sélectionnez au moins une ligne et une valeur")
 
-    df = _get_df(entry)
+    df = get_df_for_user(entry)
     df = apply_filters(df, filters)
 
     if len(df) == 0:

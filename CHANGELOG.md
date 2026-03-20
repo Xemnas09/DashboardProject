@@ -1,3 +1,16 @@
+## [0.3.3] - 2026-03-20
+
+### Added
+- **Refactorisation DDD Majeure** : Centralisation complète de la logique métier (calculs, statistiques, anomalies) dans `services/data_service.py` pour une maintenance simplifiée.
+- **Unification de la Classification** : Le moteur `classify_column` est désormais utilisé universellement par tous les modules pour une cohérence totale des types de données.
+- **Optimisation du Cache** : Gestion centralisée du cache RAM et IPC (disque) pour une performance maximale sur les gros volumes.
+- **UI UX - Plein Écran** : Ajout d'un mode "Agrandir" pour le modal de statistiques, améliorant la lisibilité des distributions complexes.
+
+### Fixed
+- **Correction des Graphiques Temporels** : Restauration de la logique de distribution pour les colonnes `date` et `datetime`, avec correction de la précision des labels (ISO).
+- **Allègement des Routeurs** : Réduction massive de la dette technique dans `database.py`, `reports.py` et `dashboard.py` (transformés en contrôleurs fins).
+- **Nettoyage du Projet** : Suppression des scripts de test orphelins et des journaux d'erreurs d'initialisation à la racine.
+
 ## [0.3.2] - 2026-03-19
 
 ### Added

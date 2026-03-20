@@ -154,6 +154,11 @@ async def log_requests(request: Request, call_next):
     response = await call_next(request)
     duration_ms = (time.perf_counter() - start) * 1000
 
+    # Skip JWT decode for static files (performance: avoid useless crypto on every asset)
+    path = request.url.path
+    if path.startswith("/assets") or path.endswith((".js", ".css", ".ico", ".png", ".woff2")):
+        return response
+
     user = "anonymous"
     token = None
     auth_header = request.headers.get("Authorization")

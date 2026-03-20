@@ -507,33 +507,7 @@ def read_format(
 # ---------------------------------------------------------------------------
 # Column classifier (local copy — kept for backward compat)
 # ---------------------------------------------------------------------------
-def classify_column(series: pl.Series) -> str:
-    """
-    Unified classification rule for column types.
-    Identifies 'identifier' based on uniqueness and naming hints.
-    """
-    dtype = series.dtype
-    is_int = dtype in (pl.Int8, pl.Int16, pl.Int32, pl.Int64,
-                       pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64)
-    is_float = dtype in (pl.Float32, pl.Float64)
-
-    if is_int or is_float:
-        total = len(series)
-        if total == 0:
-            return "continuous"
-        unique_ratio = series.n_unique() / total
-        name_lower = series.name.lower()
-        name_hints = any(kw in name_lower for kw in
-                         ['id', 'index', 'idx', 'key', 'code', 'num', 'no'])
-        if unique_ratio > 0.95 or (unique_ratio > 0.80 and name_hints):
-            return "identifier"
-        if is_int and series.n_unique() <= 20:
-            return "discrete"
-        return "continuous"
-
-    if dtype == pl.Boolean:
-        return "boolean"
-    return "categorical"
+# DELETED LOCAL REDUNDANT CLASSIFIER
 
 
 # ---------------------------------------------------------------------------
@@ -656,9 +630,9 @@ async def process_file_preview(
                     elif target == 'Boolean':
                         cast_exprs.append(smart_cast_to_boolean(col).alias(col))
                     elif target == 'Date':
-                        cast_exprs.append(smart_cast_to_date(col, df).alias(col))
+                        cast_exprs.append(smart_cast_to_date(col).alias(col))
                     elif target == 'Datetime':
-                        cast_exprs.append(smart_cast_to_datetime(col, df).alias(col))
+                        cast_exprs.append(smart_cast_to_datetime(col).alias(col))
             if cast_exprs:
                 df = df.with_columns(cast_exprs)
 
@@ -818,9 +792,9 @@ def read_cached_df(
                     elif target == 'Boolean':
                         cast_exprs.append(smart_cast_to_boolean(col).alias(col))
                     elif target == 'Date':
-                        cast_exprs.append(smart_cast_to_date(col, df).alias(col))
+                        cast_exprs.append(smart_cast_to_date(col).alias(col))
                     elif target == 'Datetime':
-                        cast_exprs.append(smart_cast_to_datetime(col, df).alias(col))
+                        cast_exprs.append(smart_cast_to_datetime(col).alias(col))
             if cast_exprs:
                 df = df.with_columns(cast_exprs)
 

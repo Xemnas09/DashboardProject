@@ -36,6 +36,8 @@ class CacheEntry:
     
     # Metadata for dashboard summary to avoid re-calculation
     summary_metadata: Optional[dict] = None
+    stats_cache: Optional[Dict] = None  # Per-session stats cache
+    db_preview: Optional[Dict] = None   # Cached output of database_view (different format from preview)
     last_anomaly_count: int = 0
     last_llm_report: Optional[str] = None
 

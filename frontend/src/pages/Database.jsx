@@ -38,7 +38,9 @@ import {
     Settings2,
     Settings,
     FileType2,
-    Save
+    Save,
+    Maximize2,
+    Minimize2
 } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
 import { Link } from 'react-router-dom';
@@ -1061,6 +1063,7 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(false);
     const [selectedCol, setSelectedCol] = useState(null);
+    const [isMaximized, setIsMaximized] = useState(false);
 
     useEffect(() => {
         if (isOpen && columns?.length > 0 && !selectedCol) {
@@ -1092,8 +1095,8 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
     const config = currentColStats ? TYPE_CONFIG[currentColStats.type] : null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="flex flex-col bg-white rounded-3xl shadow-2xl w-full max-w-5xl h-[85vh] overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className={`fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200 ${isMaximized ? 'p-0' : 'p-4 md:p-6'}`}>
+            <div className={`flex flex-col bg-white shadow-2xl w-full overflow-hidden animate-in zoom-in-95 duration-200 ${isMaximized ? 'h-full rounded-none' : 'max-w-5xl h-[85vh] rounded-3xl'}`}>
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
                     <div className="flex items-center gap-3">
@@ -1105,9 +1108,18 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
                             <p className="text-xs text-gray-400 font-medium">Calculées sur l'intégralité du dataset</p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-all">
-                        <X size={20} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button 
+                            onClick={() => setIsMaximized(!isMaximized)} 
+                            title={isMaximized ? "Réduire" : "Agrandir"}
+                            className="p-2 rounded-xl border border-transparent hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-all"
+                        >
+                            {isMaximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+                        </button>
+                        <button onClick={onClose} className="p-2 rounded-xl hover:bg-red-50 text-gray-400 hover:text-red-500 transition-all">
+                            <X size={20} />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Body */}

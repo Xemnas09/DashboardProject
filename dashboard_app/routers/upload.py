@@ -23,7 +23,6 @@ from services.file_processor import (
 )
 from services.data_cache import CacheEntry
 from services.notifications import notification_store
-from routers.database import reset_stats_cache
 
 router = APIRouter(tags=["Upload"])
 
@@ -63,7 +62,6 @@ async def upload_file(
 
         # Generate preview & Hydrate RAM Cache
         preview_data = await process_file_preview(user.cache_id, filepath)
-        reset_stats_cache()
 
         # Get file size in MB
         file_size_mb = 0.0
@@ -145,8 +143,9 @@ async def select_sheet(
         raise ValidationException("Chemin du fichier introuvable")
 
     preview_data = await process_file_preview(user.cache_id, entry.filepath, sheet_name=body.sheet_name)
-    reset_stats_cache()
 
+    setattr(entry, 'stats_cache', None)  # Invalidate stats
+    setattr(entry, 'db_preview', None)   # Invalidate database view cache
     entry.preview = preview_data
     entry.selected_sheet = body.sheet_name
     # Populate overrides from the new sheet's inference if high confidence
@@ -173,7 +172,7 @@ async def sheet_preview(
     body: SheetSelectRequest,
     user: TokenPayload = Depends(get_current_user),
 ):
-    from main import cache_manager
+    from services.data_cache import cache_manager
     entry = await cache_manager.get(user.cache_id)
     if not entry or not entry.filepath:
         raise ValidationException("Aucun fichier en attente")
@@ -211,7 +210,6 @@ async def clear_data(user: TokenPayload = Depends(get_current_user)):
             except OSError:
                 pass
         await cache_manager.delete(user.cache_id)
-        reset_stats_cache()
         notification_store.add(user.sub, "Données supprimées", "warning")
 
     return {"status": "success"}
@@ -250,7 +248,6 @@ async def upload_from_url(
 
         # Generate preview using the same pipeline as a normal upload
         preview_data = await process_file_preview(user.cache_id, filepath)
-        reset_stats_cache()
 
         file_size_mb = 0.0
         if os.path.exists(filepath):

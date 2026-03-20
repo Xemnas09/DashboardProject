@@ -1,103 +1,118 @@
 """
-Statistical logic to classify Polars DataFrame columns into semantic types.
-
-This module maps raw data types (Dtypes) to meaningful semantic roles:
-- **identifier**: Unique or near-unique keys (IDs, UUIDs, PKs).
-- **numeric**: Measures that take any value (floats or high-cardinality ints).
-- **boolean**: True/False logic (detects 0/1 disguised as numeric).
-- **categorical**: Shared qualitative attributes or low-cardinality numeric sets.
-- **date**: Temporal information (Date/Datetime).
+Scientific Variable Classifier for Polars DataFrames.
+Implements a hierarchical decision tree based on statistical first principles.
+Uses shared configuration constants for cross-module consistency.
 """
 
 import polars as pl
+import re
 from loguru import logger
+from .data_types_config import (
+    BOOLEAN_TRUE_MARKERS, 
+    BOOLEAN_FALSE_MARKERS, 
+    CARDINALITY_THRESHOLD,
+    MEASURE_KEYWORDS,
+    ID_KEYWORDS
+)
 
 def classify_column(series: pl.Series) -> str:
     """
-    Classifies a Polars Series into a semantic type based on its data and name.
-    
-    Args:
-        series: The Polars Series to analyze.
-        
-    Returns:
-        A string representing the semantic category.
+    Classifies a Polars Series into a semantic type using a 
+    cardinality-first hierarchical approach.
     """
     dtype = series.dtype
-    is_int = dtype in (pl.Int8, pl.Int16, pl.Int32, pl.Int64,
-                       pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64)
-    is_float = dtype in (pl.Float32, pl.Float64)
-
-    # Simple type-based mapping
+    name_lower = series.name.lower()
+    
+    # 0. Basic Clean / Prep
+    total = len(series)
+    if total == 0:
+        return "numeric"
+        
+    non_null_series = series.drop_nulls()
+    non_null_total = len(non_null_series)
+    if non_null_total == 0:
+        return "categorical"
+        
+    unique_count = int(non_null_series.n_unique())
+    unique_ratio = unique_count / non_null_total
+    
+    # --- LEVEL 1: NATIVE TYPES ---
     if dtype == pl.Boolean:
         return "boolean"
-        
     if dtype == pl.Date:
         return "date"
     if dtype == pl.Datetime:
         return "datetime"
-
-    # Numeric logic (Heuristic based)
-    if is_int or is_float:
-        total = len(series)
-        if total == 0:
-            return "numeric"
-            
-        non_null_series = series.drop_nulls()
-        non_null_total = len(non_null_series)
-        if non_null_total == 0:
-            return "numeric"
-            
-        unique_count = non_null_series.n_unique()
-        unique_ratio = unique_count / non_null_total
         
-        name_lower = series.name.lower()
-        
-        # --- PHASE 2: Boolean (0/1) Detection ---
-        if unique_count == 2:
-            unique_vals = set(non_null_series.unique().to_list())
-            # Handle float/int 0 and 1
-            if unique_vals <= {0, 1, 0.0, 1.0}:
-                return "boolean"
-                
-        # --- PHASE 3: Identifier Detection ---
-        # IDs are usually highly unique and have specific keywords in their name.
-        # IDs are NEVER floats (prices, weights, rates).
-        id_keywords = ['id', 'uuid', 'ref', 'pk', 'code', 'index', 'key', 'idx', 'num', 'no']
-        has_id_name = any(kw in name_lower for kw in id_keywords)
-        
-        # Measures/Prices should NOT be classified as IDs even if unique.
-        measure_keywords = ['prix', 'price', 'age', 'valeur', 'value', 'amount', 'montant', 'taux', 'rate', 'ht', 'ttc']
-        has_measure_name = any(kw in name_lower for kw in measure_keywords)
-
-        is_id = False
-        if is_int: # Only integers or strings can be IDs
-            # Rule 1.1: Perfect uniqueness
-            if unique_ratio == 1.0:
-                if non_null_total > 50 or has_id_name:
-                    is_id = True
-                elif not has_measure_name and non_null_total > 5:
-                     is_id = True
-            
-            # Rule 1.2: Near-perfect uniqueness (98%+)
-            elif unique_ratio > 0.98:
-                if non_null_total > 500:
-                    is_id = True
-                elif has_id_name and non_null_total > 50:
-                    is_id = True
-
-        if is_id:
-            return "identifier"
-            
-        # --- PHASE 4: Cardinality-based Classification ---
-        # If it's a measure (age, price), it stays numeric (NUM) even if low cardinality (rare but possible).
-        if has_measure_name:
-            return "numeric"
-            
-        # Hard Cardinality Rule: Any numeric with few unique values is Categorical.
-        if unique_count <= 20:
+    # --- LEVEL 1.5: STRING-BASED TEMPORAL DETECTION ---
+    # Even if stored as strings, they should be flagged if they look like dates
+    if dtype in (pl.String, pl.Utf8):
+        sample_vals = [str(x) for x in non_null_series.head(10).to_list()]
+        if not sample_vals:
             return "categorical"
             
-        return "numeric"
+        # Simple regex for YYYY-MM-DD or DD/MM/YYYY or ISO 
+        # Support for -, /, ., and space as separators
+        date_pattern = r"^(\d{4}[-\/\.\s]\d{1,2}[-\/\.\s]\d{1,2})|(\d{1,2}[-\/\.\s]\d{1,2}[-\/\.\s]\d{4})$"
+        time_pattern = r"\d{1,2}:\d{1,2}(:\d{1,2})?" # Has time component
+        
+        # New: Detection for numeric strings (likely Unix timestamps)
+        is_unix_candidate = all(v.isdigit() and len(v) >= 10 for v in sample_vals if v)
+        
+        # Also check for month names (Janvier, etc.)
+        months = ["janv", "fevr", "f\u00e9vr", "mars", "avr", "mai", "juin", "juil", "aout", "ao\u00fbt", "sept", "oct", "nov", "dec"]
+        
+        matches_date = all(re.search(date_pattern, v) for v in sample_vals if v)
+        has_month_name = any(any(m in v.lower() for m in months) for v in sample_vals if v)
+        
+        if matches_date or has_month_name or is_unix_candidate:
+            has_time = is_unix_candidate or any(re.search(time_pattern, v) for v in sample_vals if v)
+            if has_time:
+                return "datetime"
+            return "date"
 
-    # Default fallback for String/Object columns
-    return "categorical"
+    # --- LEVEL 2: SEMANTIC BINARY ---
+    if unique_count == 2:
+        # Convert unique values to lowercase strings for marker matching
+        unique_vals = {str(v).lower() for v in non_null_series.unique().to_list()}
+        
+        # If both values are recognized as boolean-like using shared markers
+        if any(v in BOOLEAN_TRUE_MARKERS for v in unique_vals) and \
+           any(v in BOOLEAN_FALSE_MARKERS for v in unique_vals):
+            return "boolean"
+        
+    # --- LEVEL 3: QUALITATIVE / CATEGORICAL ---
+    is_explicit_measure = any(kw in name_lower for kw in MEASURE_KEYWORDS)
+    is_id_name = any(kw in name_lower for kw in ID_KEYWORDS)
+    
+    if unique_count <= CARDINALITY_THRESHOLD and not is_explicit_measure and not is_id_name:
+        return "categorical"
+    
+    # Highly unique strings (IDs) vs Categorical strings
+    if dtype in (pl.String, pl.Utf8):
+        if is_explicit_measure:
+            # Only suggest numeric if it actually looks like numbers (sample check)
+            if any(re.search(r"\d", str(x)) for x in non_null_series.head(10).to_list()):
+                return "numeric"
+        
+        if is_id_name:
+            # IDs in strings should only be "discrete" (intended for Int64) 
+            # if they are purely numeric strings. Otherwise they are categorical codes.
+            if all(str(x).isdigit() for x in non_null_series.head(10).to_list()):
+                return "discrete"
+        
+        if unique_ratio > 0.95:
+            return "identifier"
+        return "categorical"
+
+    # --- LEVEL 4: QUANTITATIVE ---
+    if dtype.is_integer():
+        is_id_name = any(kw in name_lower for kw in ID_KEYWORDS)
+        if is_id_name and unique_ratio > 0.95:
+            return "identifier"
+        return "discrete"
+
+    if dtype.is_float():
+        return "continuous"
+        
+    return "numeric"
