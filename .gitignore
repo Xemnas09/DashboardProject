@@ -28,6 +28,7 @@ dashboard_app/uploads/*
 !dashboard_app/uploads/.gitkeep
 dashboard_app/cache.json
 dashboard_app/pytest_output.txt
+*.parquet
 
 # === Frontend (Node/Vite) ===
 frontend/node_modules/
