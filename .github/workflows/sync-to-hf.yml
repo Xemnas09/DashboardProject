@@ -24,6 +24,9 @@ jobs:
             --path uploads/ \
             --path dashboard_app/uploads/ \
             --path dashboard_app/static/ \
+            --path-glob "*.parquet" \
+            --path-glob "*.db" \
+            --path-glob "*.sqlite*" \
             --force
 
       - name: Push to Hugging Face Space
