@@ -1,3 +1,13 @@
+## [0.5.2] - 2026-03-28
+### Fixed
+- **Fichier Mort Backend** : Suppression de `formula_parser.py` (doublon non importé de `expression_parser.py`).
+- **SDK Gemini** : Migration `google-generativeai` de `0.8.3` vers `>=1.0.0` (compatibilité `gemini-3.1-flash-preview`).
+- **Modèle IA** : Correction du modèle Gemini → `gemini-3.1-flash-preview`.
+- **Cohérence Cache/Token** : Cache TTL aligné de 2h → 8h pour éviter les SESSION_EXPIRED après inactivité.
+- **Sécurité Production** : Ajout d'un `model_validator` qui empêche le démarrage en production avec le JWT secret par défaut.
+- **Dépendance Morte Frontend** : Suppression de `recharts` (remplacé par ECharts).
+- **Import Dupliqué** : Nettoyage du double `from typing import Any` dans `data_cache.py`.
+
 ## [0.5.1] - 2026-03-28
 ### Fixed
 - **Migration DDD Complétée** : Correction des imports dans `Login.jsx` et `AdminUsers.jsx` (de `contexts/` et `utils/` vers `features/auth/` et `features/realtime/`).

@@ -4,6 +4,7 @@ All configuration flows through this single Settings instance.
 """
 from pathlib import Path
 from typing import Literal
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,7 +21,7 @@ class Settings(BaseSettings):
     max_upload_size_mb: int = 50
 
     # Cache
-    cache_ttl_hours: int = 2
+    cache_ttl_hours: int = 8   # Aligned with refresh token (24h)
     cache_cleanup_interval_minutes: int = 30
 
     # Logging
@@ -60,6 +61,13 @@ class Settings(BaseSettings):
         return self.max_upload_size_mb * 1024 * 1024
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", env_file_encoding="utf-8")
+
+    @model_validator(mode='after')
+    def check_production_secrets(self):
+        if self.environment == "production":
+            if self.jwt_secret == "dev-secret-change-me-in-production":
+                raise ValueError("JWT_SECRET must be changed in production. Set JWT_SECRET in your .env file.")
+        return self
 
     @property
     def async_database_url(self) -> str:
