@@ -35,7 +35,8 @@ dashboard_app/
 │
 ├── routers/                # ── APPLICATION LAYER (Thin Controllers) ──
 │   ├── upload.py           #   File upload (local + URL)
-│   ├── database.py         #   View & Anomaly entrypoints (delegates to services)
+│   ├── database.py         #   View & Data entrypoints (delegates to services)
+│   ├── anomalies.py        #   Anomaly detection & LLM interpretation
 │   ├── reports.py          #   Charts & Pivots entrypoints (delegates to services)
 │   ├── dashboard.py        #   Dashboard summary (delegates to services)
 │   └── notifications.py    #   Read/history notifications
@@ -48,10 +49,10 @@ dashboard_app/
 │   ├── type_inference.py   #   Advanced casting heuristics
 │   ├── column_classifier.py#   Semantic labeling (NUM, CAT, ID)
 │   ├── expression_parser.py#   Safe math expression → Polars expression
-│   ├── anomaly_detector.py #   Statistical anomaly detection (IQR, Z-Score)
+│   ├── anomaly_detector.py #   Scientific anomaly engine (Z-Score, IQR, Isolation Forest)
 │   ├── connection_manager.py#  WebSocket manager (presence, broadcast)
 │   ├── notifications.py    #   In-memory notification store
-│   └── llm_interpreter.py  #   LLM interpretation of data patterns
+│   └── llm_interpreter.py  #   LLM interpretation via Gemini (charts + anomalies)
 │
 ├── schemas/                # ── DATA TRANSFER OBJECTS ──
 │   └── [domain].py         #   Pydantic models per domain
@@ -113,3 +114,9 @@ frontend/src/
 - **Unified Classification**: The backend and frontend now share the same column_classifier.py logic for consistent data types.
 - **Immersion Portals**: Immersive modes use React Portals to cover the entire viewport with a system-level z-index (9999).
 - **Hybrid Caching**: Data access is optimized via RAM (session) and IPC (Parquet/Arrow disk) caching layers.
+
+### Anomaly Detection Engine (v0.5.0)
+- **Three Methods**: Z-Score (scipy), IQR (Tukey's Fences), Isolation Forest (RobustScaler + sklearn).
+- **Dedicated Router**: `routers/anomalies.py` with `/api/anomalies/detect` and `/api/anomalies/interpret`.
+- **Enriched Response**: Normalized 0→1 scores, severity classification, contributing columns, human-readable labels, normal ranges.
+- **Async LLM**: Non-blocking Gemini interpretation loaded via separate endpoint.

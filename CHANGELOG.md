@@ -1,3 +1,19 @@
+## [0.5.0] - 2026-03-28
+### Added
+- **Refonte Détection d'Anomalies v2.0** : Moteur scientifique complet avec 3 méthodes de détection (Z-Score scipy, IQR Tukey, Isolation Forest + RobustScaler).
+- **Router Dédié** : Nouveau `routers/anomalies.py` avec endpoints `POST /api/anomalies/detect` et `POST /api/anomalies/interpret` (interprétation LLM async via Gemini).
+- **Réponse Enrichie** : Scores normalisés 0→1, classification de sévérité (Critique/Modéré/Faible), colonnes contributives, score humain (ex: "×4.2 la médiane"), et plages normales (médiane, Q1, Q3).
+- **AnomalyConfigModal** : Interface de configuration avec cartes de méthode (recommandation automatique), sélecteur de sensibilité (Strict/Standard/Large), et sélecteur de colonnes.
+- **AnomalyResultsModal** : Modal résultats avec en-tête sombre, badges de sévérité, interprétation IA asynchrone (skeleton loader), tableau enrichi avec filtrage par sévérité, export CSV, et bouton "Voir dans la table".
+
+### Improved
+- **Séparation Architecturale** : Code anomalie extrait de `database.py` vers un router/service/schema dédié.
+- **Modal** : Ajout du prop `noPadding` pour les rendus edge-to-edge.
+
+### Fixed
+- **Doublon Endpoint** : Suppression du doublon `GET /api/database/stats` dans `database.py`.
+- **Dépendance** : Ajout de `scipy==1.13.0` aux requirements.
+
 ## [0.4.2] - 2026-03-20
 ### Added
 - **Moteur Statistique Scientifique (v0.5.x)** : Ajout des indicateurs avancés (Écart-type, Quartiles, Mode, Amplitude) pour une analyse de données rigoureuse.
