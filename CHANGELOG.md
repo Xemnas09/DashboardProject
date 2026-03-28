@@ -1,3 +1,11 @@
+## [0.5.1] - 2026-03-28
+### Fixed
+- **Migration DDD Complétée** : Correction des imports dans `Login.jsx` et `AdminUsers.jsx` (de `contexts/` et `utils/` vers `features/auth/` et `features/realtime/`).
+- **Nettoyage de 9 Fichiers Morts** : Suppression de `App.jsx`, `Layout.jsx`, `AuthContext.jsx`, `RealtimeContext.jsx`, `session.js`, `OnlineUsers.jsx`, `WSInitializer.jsx`, `useWebSocketInit.js`, `CardView.jsx` (dossiers `contexts/`, `utils/`, `hooks/` supprimés).
+- **Sécurité Token** : Réduction du refresh token de 7 jours à 24 heures.
+- **Modèle Gemini** : Migration de `gemini-2.5-flash-lite` (déprécié) vers `gemini-2.0-flash` (stable, même free tier).
+- **Sémantique Icône** : Remplacement de `ShieldCheck` par `ShieldAlert` dans les modals anomalie (cohérence sémantique : alerte vs validation).
+
 ## [0.5.0] - 2026-03-28
 ### Added
 - **Refonte Détection d'Anomalies v2.0** : Moteur scientifique complet avec 3 méthodes de détection (Z-Score scipy, IQR Tukey, Isolation Forest + RobustScaler).

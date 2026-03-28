@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, User, ArrowRight, Shield, Sparkles } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../features/auth/AuthContext';
 
-import { customFetch, storeToken } from '../utils/session';
+import { customFetch, storeToken } from '../features/auth/session';
 
 export default function Login({ addNotification }) {
     const [username, setUsername] = useState('');

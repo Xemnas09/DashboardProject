@@ -9,7 +9,7 @@ class GeminiInterpreter:
         self.api_key = settings.gemini_api_key
         if self.api_key:
             genai.configure(api_key=self.api_key)
-        self.model_name = "gemini-2.5-flash-lite"
+        self.model_name = "gemini-2.0-flash"
 
     async def interpret_chart(self, chart_type: str, x_column: str, y_column: str | None, summary: dict, language: str) -> str:
         if not self.api_key:

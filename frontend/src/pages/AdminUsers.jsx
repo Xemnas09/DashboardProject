@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Users, UserPlus, Key, Trash2, Edit2, ShieldAlert, X, Shield, Lock, User as UserIcon, Send, Bell } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { useRealtime } from '../contexts/RealtimeContext';
-import { customFetch } from '../utils/session';
+import { useAuth } from '../features/auth/AuthContext';
+import { useRealtime } from '../features/realtime/RealtimeContext';
+import { customFetch } from '../features/auth/session';
 
 export default function AdminUsers({ addNotification }) {
     const [users, setUsers] = useState([]);

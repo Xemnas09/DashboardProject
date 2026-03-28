@@ -134,7 +134,7 @@ function App() {
       </Routes>
 
       {/* Toast Notifications Overlay */}
-      <div className="fixed top-6 inset-x-0 flex flex-col items-center z-[100] space-y-3 pointer-events-none">
+      <div className="fixed top-6 inset-x-0 flex flex-col items-center z-[100001] space-y-3 pointer-events-none">
         {notifications.map(n => {
           const cat = n.category || 'info';
           let borderColor, bgColor, textColor, icon;

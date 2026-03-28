@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-secret-change-me-in-production"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 240
-    refresh_token_expire_days: int = 7
+    refresh_token_expire_days: int = 1   # 24 heures
     gemini_api_key: str | None = None
 
     # Filesystem uploads (Moved outside of dashboard_app to prevent uvicorn reloads on watch)

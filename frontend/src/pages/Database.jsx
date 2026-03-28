@@ -11,7 +11,7 @@ import {
 import {
     Database as DatabaseIcon,
     Type,
-    ShieldCheck,
+    ShieldAlert,
     Calculator,
     FileDown,
     Trash2,
@@ -506,7 +506,7 @@ const AnomalyConfigModal = ({ isOpen, onClose, columns, selectedCols, onToggleCo
     const recommendation = getMethodRecommendation(numericCols);
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Analyse des Anomalies" icon={ShieldCheck} maxWidth="max-w-4xl">
+        <Modal isOpen={isOpen} onClose={onClose} title="Analyse des Anomalies" icon={ShieldAlert} maxWidth="max-w-4xl">
             <div className="space-y-6">
                 {/* Recommendation banner */}
                 <div className="flex items-start gap-3 p-4 bg-violet-50 border border-violet-100 rounded-2xl">
@@ -628,7 +628,7 @@ const AnomalyResultsModal = ({ isOpen, onClose, results, onHighlightInTable, onE
     const displayAnomalies = filteredAnomalies.slice(0, 50);
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Résultats d'Analyse" icon={ShieldCheck} maxWidth="max-w-5xl" noPadding>
+        <Modal isOpen={isOpen} onClose={onClose} title="Résultats d'Analyse" icon={ShieldAlert} maxWidth="max-w-5xl" noPadding>
             {/* Bloc A — Dark header */}
             <div className="bg-gray-950 p-6 rounded-t-sm">
                 <div className="flex items-center justify-between flex-wrap gap-4">
@@ -2338,7 +2338,7 @@ export default function Database({ addNotification }) {
                 {/* Anomaly highlight banner */}
                 {showAnomaliesOnly && anomalyResult && (
                     <div className="mx-4 mt-2 flex items-center gap-3 p-3 bg-violet-50 border border-violet-100 rounded-xl">
-                        <ShieldCheck className="w-4 h-4 text-violet-600" />
+                        <ShieldAlert className="w-4 h-4 text-violet-600" />
                         <p className="text-xs font-bold text-violet-800 flex-1">
                             Affichage filtré : {anomalyResult.anomaly_count} anomalies sur {anomalyResult.total_rows} lignes
                         </p>
