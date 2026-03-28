@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Database, BarChart3, Settings, LogOut, Menu, User, Bell, Shield, ChevronRight, X, Clock } from 'lucide-react';
 import { useAuth } from './contexts/AuthContext';
@@ -148,17 +149,26 @@ export default function Layout({ theme, setTheme }) {
                 {/* Main Content */}
                 <main className="flex-1 flex flex-col h-full overflow-hidden bg-transparent">
                     {/* Premium Header */}
-                    <header className="h-[64px] flex items-center justify-between px-6 bg-white/70 backdrop-blur-xl border-b border-gray-100/80 z-20">
+                    <header className="h-[64px] flex items-center justify-between px-6 bg-white backdrop-blur-xl border-b border-gray-100/80 sticky top-0 z-[100]">
                         <div className="flex-1"></div>
                         <div className="flex items-center gap-3">
                             {/* Notification Bell */}
                             <div className="relative">
-                                <button onClick={() => setShowNotifMenu(!showNotifMenu)} className="p-2.5 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all relative">
+                                <button id="notif-bell" onClick={() => setShowNotifMenu(!showNotifMenu)} className="p-2.5 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all relative">
                                     <Bell size={20} />
                                     {unreadCount > 0 && <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white animate-pulse"></span>}
                                 </button>
-                                {showNotifMenu && (
-                                    <div className="origin-top-right absolute right-0 mt-2 w-[340px] rounded-2xl shadow-2xl bg-white ring-1 ring-black/5 z-50 overflow-hidden border border-gray-100">
+                                {showNotifMenu && ReactDOM.createPortal(
+                                    <div 
+                                        style={{ 
+                                            position: 'fixed', 
+                                            top: '70px', 
+                                            right: '24px', 
+                                            width: '340px',
+                                            zIndex: 9999
+                                        }}
+                                        className="rounded-2xl shadow-2xl bg-white ring-1 ring-black/5 overflow-hidden border border-gray-100 animate-in fade-in slide-in-from-top-2"
+                                    >
                                         <div className="px-5 py-3.5 bg-gray-950 flex justify-between items-center">
                                             <h3 className="text-sm font-black text-white uppercase tracking-wider">Notifications</h3>
                                             <button onClick={() => setShowNotifMenu(false)} className="text-white/40 hover:text-white/80 transition-colors">
@@ -193,7 +203,8 @@ export default function Layout({ theme, setTheme }) {
                                                 Voir tout l'historique de la session
                                             </button>
                                         </div>
-                                    </div>
+                                    </div>,
+                                    document.body
                                 )}
                             </div>
 

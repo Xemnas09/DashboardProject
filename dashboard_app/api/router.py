@@ -14,6 +14,7 @@ from routers.database import router as database_router
 from routers.reports import router as reports_router
 from routers.notifications import router as notifications_router
 from routers.dashboard import router as dashboard_router
+from routers.anomalies import router as anomalies_router
 
 api_router = APIRouter()
 
@@ -25,3 +26,4 @@ api_router.include_router(database_router)
 api_router.include_router(reports_router)
 api_router.include_router(notifications_router)
 api_router.include_router(dashboard_router)
+api_router.include_router(anomalies_router)

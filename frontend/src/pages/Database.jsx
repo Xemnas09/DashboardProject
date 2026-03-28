@@ -93,11 +93,11 @@ const TYPE_LABELS = {
 
 // ─── STABLE SUB-COMPONENTS ────────────────────────
 
-const Modal = ({ isOpen, onClose, title, icon: Icon, children, infoBlock, maxWidth = "max-w-2xl" }) => {
+const Modal = ({ isOpen, onClose, title, icon: Icon, children, infoBlock, maxWidth = "max-w-2xl", noPadding = false }) => {
     const [isMaximized, setIsMaximized] = useState(false);
     if (!isOpen) return null;
     return (
-        <div className={`fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center animate-in fade-in duration-200 ${isMaximized ? 'p-0' : 'p-4 md:p-12'}`}>
+        <div className={`fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[200] flex items-center justify-center animate-in fade-in duration-200 ${isMaximized ? 'p-0' : 'p-4 md:p-12'}`}>
             <div className={`bg-white shadow-2xl w-full flex flex-col animate-modal relative overflow-hidden transition-all duration-300 ${isMaximized ? 'h-full rounded-none' : `rounded-[2rem] ${maxWidth} h-fit max-h-[90vh]`}`}>
                 <div className="h-16 px-8 flex items-center justify-between border-b border-gray-100 shrink-0">
                     <div className="flex items-center gap-3">
@@ -122,7 +122,7 @@ const Modal = ({ isOpen, onClose, title, icon: Icon, children, infoBlock, maxWid
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto custom-scrollbar p-8 pt-6">
+                <div className={`flex-1 overflow-y-auto custom-scrollbar ${noPadding ? '' : 'p-8 pt-6'}`}>
                     {infoBlock && (
                         <div className="bg-bank-50/50 rounded-2xl p-6 mb-8 border border-bank-100/50">
                             <div className="flex gap-4">
@@ -167,7 +167,7 @@ const Header = ({ rowCount, loadedRows, activeToolTab, onOpenToolTab, onOpenStat
     }, []);
 
     return (
-        <header className="h-16 flex items-center justify-between px-6 bg-white border-b border-gray-100 relative z-30 shrink-0">
+        <header className="h-16 flex items-center justify-between px-6 bg-white border-b border-gray-100 relative z-[60] shrink-0">
             <div className="flex items-center justify-between w-full">
                 {/* Brand & Stats */}
                 <div className="flex items-center gap-4">
@@ -198,7 +198,7 @@ const Header = ({ rowCount, loadedRows, activeToolTab, onOpenToolTab, onOpenStat
                                 <ChevronDown className="w-3 h-3 opacity-50 hidden sm:inline" />
                             </button>
 
-                            <div className="absolute top-full mt-2 right-0 md:right-auto md:left-0 w-48 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 opacity-0 invisible group-hover/tools:opacity-100 group-hover/tools:visible transition-all z-50 animate-in fade-in slide-in-from-top-2">
+                            <div className="absolute top-full mt-2 right-0 md:right-auto md:left-0 w-48 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 opacity-0 invisible group-hover/tools:opacity-100 group-hover/tools:visible transition-all z-[70] animate-in fade-in slide-in-from-top-2">
                                 <button
                                     onClick={() => onOpenToolTab('anomalies')}
                                     className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${activeToolTab === 'anomalies' ? 'bg-bank-50 text-bank-700' : 'hover:bg-gray-50 text-gray-700'}`}
@@ -389,7 +389,7 @@ const Footer = ({ currentPage, totalPages, pageSize, totalRows, loadedRows, tabl
 const AnomalyBanner = ({ anomalyResult, isExpanded, setIsExpanded, onExport }) => {
     if (!anomalyResult) return null;
     return (
-        <div className="absolute top-0 left-0 right-0 z-20 bg-amber-50 border-b border-amber-200 transition-all duration-300 shadow-sm overflow-hidden">
+        <div className="absolute top-0 left-0 right-0 z-50 bg-amber-50 border-b border-amber-200 transition-all duration-300 shadow-sm overflow-hidden">
             <div
                 onClick={() => setIsExpanded(!isExpanded)}
                 className="px-6 py-2.5 flex items-center justify-between cursor-pointer hover:bg-amber-100/50 transition-colors select-none"
@@ -484,118 +484,288 @@ const VariablesModal = ({ isOpen, onClose, columnsInfo, onTypeChange, onRecommen
     );
 };
 
-const AnomaliesModal = ({ isOpen, onClose, columns, selectedCols, onToggleCol, method, setMethod, threshold, setThreshold, onAnalyze, isLoading, hasResult, onReopenBanner }) => {
+// ─── Method recommendation logic ─────────────────────────────────────────────
+function getMethodRecommendation(columns) {
+    const numCols = columns?.length || 0;
+    if (numCols >= 5) {
+        return { method: "isolation_forest", reason: `${numCols} colonnes numériques — Isolation Forest analyse les combinaisons anormales entre colonnes.` };
+    }
+    return { method: "iqr", reason: "Peu de colonnes — IQR est robuste et ne fait aucune hypothèse sur la distribution." };
+}
+
+// ─── AnomalyConfigModal ──────────────────────────────────────────────────────
+const METHODS_CONFIG = [
+    { id: 'iqr', label: 'IQR', sublabel: 'Interquartile Range', description: 'Robuste, aucune hypothèse sur la distribution. Idéal pour données financières.' },
+    { id: 'zscore', label: 'Z-Score', sublabel: 'Écart-type', description: 'Rapide et interprétable. Fonctionne mieux sur distributions symétriques.' },
+    { id: 'isolation_forest', label: 'Isolation Forest', sublabel: 'Machine Learning', description: 'Détecte des patterns complexes multivariés. Recommandé pour données à nombreuses colonnes.' },
+];
+
+const AnomalyConfigModal = ({ isOpen, onClose, columns, selectedCols, onToggleCol, method, setMethod, sensitivity, setSensitivity, onAnalyze, isLoading }) => {
     if (!isOpen) return null;
+    const numericCols = columns?.filter(c => c.type === 'number' || c?.isNumeric) || columns || [];
+    const recommendation = getMethodRecommendation(numericCols);
+
     return (
-        <Modal
-            isOpen={isOpen}
-            onClose={onClose}
-            title="Analyse d'Anomalies IA"
-            icon={Sparkles}
-            infoBlock={{
-                title: "Qu'est-ce que la détection d'anomalies ?",
-                content: "L'IA analyse vos colonnes numériques pour identifier les valeurs inhabituelles ou suspectes — des valeurs trop élevées, trop basses, ou statistiquement incohérentes avec le reste des données.",
-                example: "dans un dataset médical, un patient avec une tension artérielle de 400 serait immédiatement signalé comme anormal.",
-                warning: "Plus le seuil est bas, plus l'analyse est sensitive — vous détecterez plus d'anomalies mais avec plus de faux positifs."
-            }}
-        >
-            <div className="space-y-8">
-                <div className="flex items-center justify-between mb-2">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Variables Numériques</p>
-                    <div className="flex gap-2">
-                        <button
-                            onClick={() => columns.forEach(c => !selectedCols.includes(c.field) && onToggleCol(c.field))}
-                            className="text-[9px] font-black text-bank-600 bg-bank-50 px-2 py-1 rounded-lg hover:bg-bank-100 transition-all uppercase tracking-tighter"
-                        >
-                            Tout sélectionner
-                        </button>
-                        <button
-                            onClick={() => selectedCols.forEach(c => onToggleCol(c))}
-                            className="text-[9px] font-black text-gray-400 bg-gray-50 px-2 py-1 rounded-lg hover:bg-gray-100 transition-all uppercase tracking-tighter"
-                        >
-                            Désélectionner
-                        </button>
+        <Modal isOpen={isOpen} onClose={onClose} title="Analyse des Anomalies" icon={ShieldCheck} maxWidth="max-w-4xl">
+            <div className="space-y-6">
+                {/* Recommendation banner */}
+                <div className="flex items-start gap-3 p-4 bg-violet-50 border border-violet-100 rounded-2xl">
+                    <Sparkles className="w-5 h-5 text-violet-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                        <p className="text-xs font-black text-violet-800 mb-0.5">Recommandation automatique</p>
+                        <p className="text-[11px] text-violet-600 font-medium leading-relaxed">{recommendation.reason}</p>
                     </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                    {Array.isArray(columns) && columns.map(col => (
-                        <button
-                            key={col.field}
-                            onClick={() => onToggleCol(col.field)}
-                            className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${selectedCols?.includes(col.field) ? 'border-bank-500 bg-bank-50/30' : 'border-gray-50 bg-gray-50/50 hover:bg-gray-50 text-gray-400'}`}
-                        >
-                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${selectedCols?.includes(col.field) ? 'bg-bank-500 border-bank-500 text-white' : 'border-gray-300'}`}>
-                                {selectedCols?.includes(col.field) && <Check className="w-3 h-3" />}
-                            </div>
-                            <span className="text-[10px] font-black uppercase tracking-tight truncate">{col.title}</span>
-                        </button>
-                    ))}
-                    {(!Array.isArray(columns) || columns.length === 0) && (
-                        <div className="col-span-2 py-8 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                            Aucune variable numérique disponible
-                        </div>
-                    )}
+
+                {/* Method cards */}
+                <div>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Méthode de Détection</p>
+                    <div className="grid grid-cols-3 gap-3">
+                        {METHODS_CONFIG.map(m => (
+                            <button key={m.id} onClick={() => setMethod(m.id)}
+                                className={`relative p-4 rounded-2xl border-2 text-left transition-all ${method === m.id ? 'border-bank-500 bg-bank-50/50 shadow-md' : 'border-gray-100 bg-white hover:border-gray-200'}`}>
+                                {recommendation.method === m.id && (
+                                    <span className="absolute top-2 right-2 text-[9px] font-black px-2 py-0.5 bg-bank-100 text-bank-700 rounded-full uppercase tracking-wider">Recommandé</span>
+                                )}
+                                <p className="font-black text-sm text-gray-900">{m.label}</p>
+                                <p className="text-[10px] font-bold text-gray-400 mb-2">{m.sublabel}</p>
+                                <p className="text-xs text-gray-500 leading-relaxed">{m.description}</p>
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
-                <div className="p-6 bg-gray-900 rounded-2xl space-y-6">
-                    <div className="space-y-3">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Méthode de Détection</label>
-                        <select
-                            value={method}
-                            onChange={(e) => setMethod(e.target.value)}
-                            className="w-full bg-slate-800 border-none text-white rounded-xl py-3 px-4 text-xs font-black cursor-pointer"
-                        >
-                            <option value="iqr">Statistique : IQR (Recommandé)</option>
-                            <option value="zscore">Statistique : Z-Score</option>
-                            <option value="isolation_forest">IA : Isolation Forest</option>
-                        </select>
+                {/* Sensitivity */}
+                <div>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Sensibilité</p>
+                    <div className="grid grid-cols-3 gap-2">
+                        {[
+                            { value: 'strict', label: 'Strict', hint: 'Peu d\'anomalies, haute précision' },
+                            { value: 'standard', label: 'Standard', hint: 'Équilibre précision / rappel' },
+                            { value: 'loose', label: 'Large', hint: 'Plus d\'anomalies, exploration' },
+                        ].map(s => (
+                            <button key={s.value} onClick={() => setSensitivity(s.value)}
+                                className={`p-3 rounded-xl border-2 text-left transition-all ${sensitivity === s.value ? 'border-bank-500 bg-bank-50/30' : 'border-gray-100 hover:border-gray-200'}`}>
+                                <p className="text-xs font-black text-gray-900">{s.label}</p>
+                                <p className="text-[10px] text-gray-400 font-medium">{s.hint}</p>
+                            </button>
+                        ))}
                     </div>
-
-                    <div className="space-y-4 pt-2">
-                        <div className="flex justify-between items-center">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Sensibilité du Seuil</label>
-                            <span className="text-[11px] font-black text-bank-400 uppercase tracking-widest">{threshold}%</span>
-                        </div>
-                        <input
-                            type="range"
-                            min="0.1"
-                            max="5"
-                            step="0.1"
-                            value={threshold}
-                            onChange={(e) => setThreshold(Number(e.target.value))}
-                            className="w-full accent-bank-500 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer"
-                        />
-                        <div className="flex justify-between text-[9px] font-black text-gray-500 uppercase tracking-widest">
-                            <span>Précis</span>
-                            <span>Sensible</span>
-                        </div>
-                    </div>
-
-                    <button
-                        onClick={onAnalyze}
-                        disabled={isLoading || (selectedCols?.length || 0) === 0}
-                        className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-20 text-white rounded-xl font-black text-xs uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 shadow-xl shadow-emerald-900/10"
-                    >
-                        {isLoading ? (
-                            <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
-                        ) : (
-                            <Sparkles className="w-4 h-4" />
-                        )}
-                        Lancer l'Analyse Expert
-                    </button>
-                    {hasResult && (
-                        <button
-                            onClick={onReopenBanner}
-                            className="w-full py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-black text-[9px] uppercase tracking-widest transition-all"
-                        >
-                            Revoir le dernier rapport
-                        </button>
-                    )}
                 </div>
+
+                {/* Columns */}
+                <div>
+                    <div className="flex items-center justify-between mb-3">
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Colonnes à analyser ({selectedCols?.length || 0})</p>
+                        <div className="flex gap-2">
+                            <button onClick={() => (columns || []).forEach(c => !selectedCols.includes(c.field) && onToggleCol(c.field))}
+                                className="text-[9px] font-black text-bank-600 bg-bank-50 px-2 py-1 rounded-lg hover:bg-bank-100 transition-all uppercase">Tout</button>
+                            <button onClick={() => selectedCols.forEach(c => onToggleCol(c))}
+                                className="text-[9px] font-black text-gray-400 bg-gray-50 px-2 py-1 rounded-lg hover:bg-gray-100 transition-all uppercase">Aucun</button>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-36 overflow-y-auto pr-1 custom-scrollbar">
+                        {(columns || []).map(col => (
+                            <button key={col.field} onClick={() => onToggleCol(col.field)}
+                                className={`flex items-center gap-2 p-2.5 rounded-xl border transition-all text-left ${selectedCols?.includes(col.field) ? 'border-bank-500 bg-bank-50/30' : 'border-gray-100 bg-white hover:bg-gray-50 text-gray-400'}`}>
+                                <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-all ${selectedCols?.includes(col.field) ? 'bg-bank-500 border-bank-500 text-white' : 'border-gray-300'}`}>
+                                    {selectedCols?.includes(col.field) && <Check className="w-2.5 h-2.5" />}
+                                </div>
+                                <span className="text-[10px] font-bold uppercase tracking-tight truncate">{col.title}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Action */}
+                <button onClick={onAnalyze} disabled={isLoading || (selectedCols?.length || 0) === 0}
+                    className="w-full py-4 bg-gradient-to-r from-gray-900 to-gray-800 hover:from-gray-800 hover:to-gray-700 disabled:opacity-20 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 shadow-xl">
+                    {isLoading ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div> : <Sparkles className="w-4 h-4" />}
+                    {isLoading ? 'Analyse en cours...' : 'Lancer l\'analyse'}
+                </button>
             </div>
         </Modal>
     );
 };
+
+// ─── AnomalyResultsModal ────────────────────────────────────────────────────
+const AnomalyResultsModal = ({ isOpen, onClose, results, onHighlightInTable, onExportCSV }) => {
+    const [severityFilter, setSeverityFilter] = useState('Tous');
+    const [interpretation, setInterpretation] = useState(null);
+    const [interpretationLoading, setInterpretationLoading] = useState(false);
+
+    // Load LLM interpretation asynchronously
+    useEffect(() => {
+        if (!results || !isOpen) return;
+        setInterpretationLoading(true);
+        setInterpretation(null);
+        customFetch('/api/anomalies/interpret', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                method_label: results.method_label || results.method,
+                total_rows: results.total_rows,
+                anomaly_count: results.anomaly_count,
+                anomaly_rate: results.anomaly_rate,
+                top_columns: results.summary_stats?.top_columns || [],
+                by_severity: results.summary_stats?.by_severity || {},
+                col_count: results.columns_analyzed?.length || 0,
+            }),
+        })
+            .then(r => r.json())
+            .then(d => setInterpretation(d.interpretation))
+            .catch(() => setInterpretation("Analyse contextuelle indisponible."))
+            .finally(() => setInterpretationLoading(false));
+    }, [results, isOpen]);
+
+    if (!isOpen || !results) return null;
+
+    const { anomalies = [], anomaly_count, anomaly_rate, severity, severity_label, method_label } = results;
+    const bySeverity = results.summary_stats?.by_severity || { high: 0, moderate: 0, low: 0 };
+
+    const FILTER_MAP = { 'Tous': null, 'Critiques': 'high', 'Modérées': 'moderate', 'Faibles': 'low' };
+    const filteredAnomalies = severityFilter === 'Tous' ? anomalies : anomalies.filter(a => a.severity === FILTER_MAP[severityFilter]);
+    const displayAnomalies = filteredAnomalies.slice(0, 50);
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title="Résultats d'Analyse" icon={ShieldCheck} maxWidth="max-w-5xl" noPadding>
+            {/* Bloc A — Dark header */}
+            <div className="bg-gray-950 p-6 rounded-t-sm">
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                    <div className="flex items-center gap-4">
+                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${severity === 'high' ? 'bg-red-500/20 border border-red-500/30' : severity === 'moderate' ? 'bg-amber-500/20 border border-amber-500/30' : 'bg-emerald-500/20 border border-emerald-500/30'}`}>
+                            <AlertTriangle className={`w-7 h-7 ${severity === 'high' ? 'text-red-400' : severity === 'moderate' ? 'text-amber-400' : 'text-emerald-400'}`} />
+                        </div>
+                        <div>
+                            <p className="text-white font-black text-2xl">{anomaly_count?.toLocaleString('fr-FR')} anomalies</p>
+                            <p className="text-white/40 text-xs font-medium">{(anomaly_rate * 100).toFixed(2)}% du dataset · méthode {method_label}</p>
+                        </div>
+                    </div>
+                    <div className="flex gap-2">
+                        {[
+                            { key: 'high', label: 'Critiques', color: 'bg-red-500/20 text-red-400' },
+                            { key: 'moderate', label: 'Modérées', color: 'bg-amber-500/20 text-amber-400' },
+                            { key: 'low', label: 'Faibles', color: 'bg-gray-500/20 text-gray-400' },
+                        ].map(({ key, label, color }) => (
+                            <div key={key} className={`px-3 py-2 rounded-xl ${color} text-center min-w-[70px]`}>
+                                <p className="text-lg font-black">{bySeverity[key] || 0}</p>
+                                <p className="text-[10px] font-bold uppercase tracking-wider">{label}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* Bloc B — LLM interpretation */}
+            <div className="px-6 py-5 border-b border-gray-100">
+                <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-violet-50 border border-violet-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <Sparkles className="w-4 h-4 text-violet-600" />
+                    </div>
+                    <div className="flex-1">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Analyse contextuelle</p>
+                        {interpretationLoading ? (
+                            <div className="space-y-2">
+                                {[100, 80, 60].map(w => <div key={w} className="h-3 bg-gray-100 rounded animate-pulse" style={{ width: `${w}%` }} />)}
+                            </div>
+                        ) : (
+                            <p className="text-sm text-gray-600 leading-relaxed font-medium">{interpretation}</p>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Bloc C — Table */}
+            <div className="px-6 py-4">
+                <div className="flex items-center justify-between mb-3">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Détail des anomalies</p>
+                    <div className="flex gap-1">
+                        {['Tous', 'Critiques', 'Modérées', 'Faibles'].map(f => (
+                            <button key={f} onClick={() => setSeverityFilter(f)}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all ${severityFilter === f ? 'bg-bank-600 text-white' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}>
+                                {f}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="rounded-2xl border border-gray-100 overflow-hidden">
+                    <table className="w-full text-sm">
+                        <thead>
+                            <tr className="bg-gray-50 border-b border-gray-100">
+                                <th className="px-4 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-wider">Sévérité</th>
+                                <th className="px-4 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-wider">Ligne #</th>
+                                <th className="px-4 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-wider">Colonnes impliquées</th>
+                                <th className="px-4 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-wider">Déviation</th>
+                                <th className="px-4 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-wider">Valeurs</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                            {displayAnomalies.map((anomaly, i) => (
+                                <tr key={i}
+                                    className={`hover:bg-gray-50/50 transition-colors ${anomaly.severity === 'high' ? 'border-l-2 border-l-red-400' : anomaly.severity === 'moderate' ? 'border-l-2 border-l-amber-400' : ''}`}>
+                                    <td className="px-4 py-3">
+                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black
+                                            ${anomaly.severity === 'high' ? 'bg-red-50 text-red-600 border border-red-100'
+                                            : anomaly.severity === 'moderate' ? 'bg-amber-50 text-amber-600 border border-amber-100'
+                                            : 'bg-gray-50 text-gray-500 border border-gray-100'}`}>
+                                            <span className={`w-1.5 h-1.5 rounded-full ${anomaly.severity === 'high' ? 'bg-red-500' : anomaly.severity === 'moderate' ? 'bg-amber-500' : 'bg-gray-400'}`} />
+                                            {anomaly.severity_label}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-3"><span className="font-mono text-xs text-gray-400 font-bold">#{anomaly.row_index + 1}</span></td>
+                                    <td className="px-4 py-3">
+                                        <div className="flex flex-wrap gap-1">
+                                            {(anomaly.contributing_columns || []).map(col => (
+                                                <span key={col} className="px-2 py-0.5 bg-violet-50 border border-violet-100 text-violet-700 text-[10px] font-black rounded-md">{col}</span>
+                                            ))}
+                                        </div>
+                                    </td>
+                                    <td className="px-4 py-3"><span className="text-xs font-black text-gray-700">{anomaly.score_label}</span></td>
+                                    <td className="px-4 py-3">
+                                        <div className="flex flex-col gap-0.5">
+                                            {(anomaly.contributing_columns || []).map(col => (
+                                                <span key={col} className="text-xs text-gray-500 font-medium">
+                                                    <span className="text-gray-400">{col}: </span>
+                                                    <span className="font-bold text-gray-700">{anomaly.values?.[col]}</span>
+                                                    {anomaly.normal_ranges?.[col]?.median != null && (
+                                                        <span className="text-gray-400 font-normal"> (méd. {anomaly.normal_ranges[col].median?.toLocaleString('fr-FR')})</span>
+                                                    )}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    {anomaly_count > 50 && (
+                        <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 text-center">
+                            <p className="text-xs text-gray-400 font-medium">Affichage des 50 anomalies les plus sévères sur {anomaly_count}. Exportez pour voir tout.</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Bloc D — Actions */}
+            <div className="px-6 pb-6 flex gap-3 border-t border-gray-100 pt-4">
+                <button onClick={onExportCSV}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-black text-gray-600 hover:border-bank-300 hover:text-bank-600 transition-all">
+                    <Download size={14} /> Exporter CSV ({anomaly_count} lignes)
+                </button>
+                <button onClick={onHighlightInTable}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-black text-gray-600 hover:border-violet-300 hover:text-violet-600 transition-all">
+                    <Search size={14} /> Voir dans la table
+                </button>
+                <button onClick={onClose}
+                    className="ml-auto px-5 py-2.5 bg-gradient-to-r from-gray-900 to-gray-800 text-white rounded-xl font-black text-xs shadow-lg hover:-translate-y-0.5 transition-all">
+                    Fermer
+                </button>
+            </div>
+        </Modal>
+    );
+};
+
 
 const CalculatedFieldsModal = ({ isOpen, onClose, columns, onAdd, isLoading, error }) => {
     const [expressionName, setExpressionName] = useState('');
@@ -1251,7 +1421,7 @@ const StatisticsModal = ({ isOpen, onClose, columns }) => {
     const config = currentColStats ? TYPE_CONFIG[currentColStats.type] : null;
 
     return (
-        <div className={`fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200 ${isMaximized ? 'p-0' : 'p-4 md:p-6'}`}>
+        <div className={`fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200 ${isMaximized ? 'p-0' : 'p-4 md:p-6'}`}>
             <div className={`flex flex-col bg-white shadow-2xl w-full overflow-hidden animate-in zoom-in-95 duration-200 ${isMaximized ? 'h-full rounded-none' : 'max-w-5xl h-[85vh] rounded-3xl'}`}>
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
@@ -1480,12 +1650,12 @@ export default function Database({ addNotification }) {
         setPagination(prev => ({ ...prev, pageSize }));
     }, [pageSize]);
 
-    const [anomalyMethod, setAnomalyMethod] = useState('zscore');
-    const [anomalyThreshold, setAnomalyThreshold] = useState(3.0);
+    const [anomalyMethod, setAnomalyMethod] = useState('iqr');
+    const [anomalySensitivity, setAnomalySensitivity] = useState('standard');
     const [isTableMaximized, setIsTableMaximized] = useState(false);
     const [anomalyResult, setAnomalyResult] = useState(null);
     const [anomalyLoading, setAnomalyLoading] = useState(false);
-    const [isAnomalyBannerExpanded, setIsAnomalyBannerExpanded] = useState(false);
+    const [isResultsModalOpen, setIsResultsModalOpen] = useState(false);
     const [showAnomaliesOnly, setShowAnomaliesOnly] = useState(false);
 
     const [columnsInfo, setColumnsInfo] = useState([]);
@@ -1778,23 +1948,21 @@ export default function Database({ addNotification }) {
         }
         setAnomalyLoading(true);
         try {
-            const res = await customFetch('/api/anomalies', {
+            const res = await customFetch('/api/anomalies/detect', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     columns: selectedAnomalyCols,
                     method: anomalyMethod,
-                    threshold: parseFloat(anomalyThreshold),
-                    language: 'fr'
+                    sensitivity: anomalySensitivity,
                 }),
-                credentials: 'include',
             });
             const data = await res.json();
-            if (res.ok) {
+            if (res.ok && data.status === 'success') {
                 setAnomalyResult(data);
-                setIsAnomalyBannerExpanded(true);
                 setActiveToolTab(null);
-                addNotification(`${data.anomaly_count} anomalies détectées.`, data.anomaly_rate > 5 ? "error" : "success");
+                setIsResultsModalOpen(true);
+                addNotification(`${data.anomaly_count} anomalies détectées via ${data.method_label}.`, data.anomaly_rate > 0.05 ? "error" : "success");
             } else {
                 addNotification(data.message || "Erreur de détection", "error");
             }
@@ -1807,19 +1975,17 @@ export default function Database({ addNotification }) {
 
     const handleExportAnomalies = () => {
         if (!anomalyResult?.anomalies) return;
-        const headers = ["ID", "Variables Impactées", "Type d'Anomalie", "Score"];
-        const fields = ["id", "impacted_cols", "type", "score"];
-
+        const headers = ["Ligne", "Sévérité", "Score", "Colonnes impliquées", "Déviation"];
         const csvRows = [
             headers.join(','),
             ...anomalyResult.anomalies.map(a => [
-                a.id,
-                `"${(a.impacted_cols || []).join('; ')}"`,
-                a.type,
-                a.score
+                a.row_index + 1,
+                a.severity_label,
+                a.score,
+                `"${(a.contributing_columns || []).join('; ')}"`,
+                `"${a.score_label}"`
             ].join(','))
         ];
-
         const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
@@ -1827,6 +1993,11 @@ export default function Database({ addNotification }) {
         link.setAttribute("download", `datavera_anomalies_${new Date().toISOString().split('T')[0]}.csv`);
         link.click();
         addNotification("Export des anomalies réussi.", "success");
+    };
+
+    const handleHighlightInTable = () => {
+        setShowAnomaliesOnly(true);
+        setIsResultsModalOpen(false);
     };
 
     const saveColumnTypes = async () => {
@@ -2164,12 +2335,19 @@ export default function Database({ addNotification }) {
             />
 
             <div className="flex-1 flex flex-col relative overflow-hidden bg-gray-50">
-                <AnomalyBanner
-                    anomalyResult={anomalyResult}
-                    isExpanded={isAnomalyBannerExpanded}
-                    setIsExpanded={setIsAnomalyBannerExpanded}
-                    onExport={handleExportAnomalies}
-                />
+                {/* Anomaly highlight banner */}
+                {showAnomaliesOnly && anomalyResult && (
+                    <div className="mx-4 mt-2 flex items-center gap-3 p-3 bg-violet-50 border border-violet-100 rounded-xl">
+                        <ShieldCheck className="w-4 h-4 text-violet-600" />
+                        <p className="text-xs font-bold text-violet-800 flex-1">
+                            Affichage filtré : {anomalyResult.anomaly_count} anomalies sur {anomalyResult.total_rows} lignes
+                        </p>
+                        <button onClick={() => setShowAnomaliesOnly(false)}
+                            className="text-[10px] font-black text-violet-600 bg-white px-3 py-1 rounded-lg border border-violet-200 hover:bg-violet-100 transition-all uppercase">Tout afficher</button>
+                        <button onClick={() => setIsResultsModalOpen(true)}
+                            className="text-[10px] font-black text-white bg-violet-600 px-3 py-1 rounded-lg hover:bg-violet-700 transition-all uppercase">Revoir le rapport</button>
+                    </div>
+                )}
 
                 <div className={`flex-1 overflow-auto border-gray-100 shadow-sm relative transition-all duration-500 ${isTableMaximized ? 'opacity-0 pointer-events-none' : 'rounded-t-2xl border-x border-t mx-4 mt-2 mb-0 bg-white'}`}>
                     {renderTable()}
@@ -2202,7 +2380,7 @@ export default function Database({ addNotification }) {
                     isSaving={isSavingTypes}
                 />
 
-                <AnomaliesModal
+                <AnomalyConfigModal
                     isOpen={activeToolTab === 'anomalies'}
                     onClose={() => setActiveToolTab(null)}
                     columns={dataPreview?.columns}
@@ -2212,12 +2390,18 @@ export default function Database({ addNotification }) {
                     }}
                     method={anomalyMethod}
                     setMethod={setAnomalyMethod}
-                    threshold={anomalyThreshold}
-                    setThreshold={setAnomalyThreshold}
+                    sensitivity={anomalySensitivity}
+                    setSensitivity={setAnomalySensitivity}
                     onAnalyze={handleAnalyzeAnomalies}
                     isLoading={anomalyLoading}
-                    hasResult={!!anomalyResult}
-                    onReopenBanner={() => { setIsAnomalyBannerExpanded(true); setActiveToolTab(null); }}
+                />
+
+                <AnomalyResultsModal
+                    isOpen={isResultsModalOpen}
+                    onClose={() => setIsResultsModalOpen(false)}
+                    results={anomalyResult}
+                    onHighlightInTable={handleHighlightInTable}
+                    onExportCSV={handleExportAnomalies}
                 />
 
                 <CalculatedFieldsModal
