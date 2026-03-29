@@ -1,3 +1,9 @@
+## [0.5.4] - 2026-03-29
+### Fixed
+- **Crash `col_warnings`** : Ajout d'optional chaining sur `col_warnings?.length` dans l'action "Corriger les types".
+- **`credentials: 'include'` Redondant** : Suppression de 4 occurrences dans `Dashboard.jsx` (déjà géré par `customFetch`).
+- **Robustesse API** : Validation minimale de la réponse `/api/dashboard/summary` avec fallback `{ has_data: false }` en cas d'erreur ou de réponse malformée.
+
 ## [0.5.3] - 2026-03-29
 ### Fixed
 - **Compteur Anomalies Dashboard** : Mise à jour du `last_anomaly_count` dans le cache après chaque détection — la card KPI reflète désormais le résultat réel.

@@ -342,7 +342,7 @@ function DataState({ summary, username, onNewUpload }) {
             { icon: Database, color: 'bg-bank-600', title: 'Explorer les données', description: `Visualisez et filtrez vos ${summary.row_count.toLocaleString('fr-FR')} lignes`, to: '/database', badge: null },
             { icon: BarChart3, color: 'bg-violet-600', title: 'Créer des rapports', description: 'Graphiques, tableaux croisés dynamiques', to: '/reports', badge: null },
             ...(summary.anomaly_count > 0 ? [{ icon: ShieldAlert, color: 'bg-red-500', title: `${summary.anomaly_count} anomalies détectées`, description: 'Des valeurs suspectes ont été trouvées dans vos données', to: '/database', badge: 'Attention', badgeColor: 'bg-red-100 text-red-600' }] : []),
-            ...(summary.quality_score < 80 ? [{ icon: Settings2, color: 'bg-amber-500', title: 'Corriger les types de colonnes', description: `${summary.col_warnings.length} colonne(s) avec des problèmes de qualité`, to: '/database', badge: 'Recommandé', badgeColor: 'bg-amber-100 text-amber-600' }] : []),
+            ...(summary.quality_score < 80 ? [{ icon: Settings2, color: 'bg-amber-500', title: 'Corriger les types de colonnes', description: `${summary.col_warnings?.length || 0} colonne(s) avec des problèmes de qualité`, to: '/database', badge: 'Recommandé', badgeColor: 'bg-amber-100 text-amber-600' }] : []),
           ].map((action, i) => (
             <Link key={i} to={action.to} className="group flex items-center gap-4 p-4 bg-white rounded-2xl border border-gray-100 shadow-sm hover:border-bank-200 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
               <div className={`w-10 h-10 ${action.color} rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-110 transition-transform`}>
@@ -400,13 +400,22 @@ export default function Dashboard({ addNotification }) {
     const fetchSummary = async () => {
         try {
             setSummaryLoading(true);
-            const res = await customFetch('/api/dashboard/summary', { credentials: 'include' });
+            const res = await customFetch('/api/dashboard/summary');
             if (res.ok) {
                 const data = await res.json();
-                setSummary(data);
+                // Validation minimale du contrat API avant d'utiliser les données
+                if (data && typeof data.has_data === 'boolean') {
+                    setSummary(data);
+                } else {
+                    console.error("Unexpected summary response shape", data);
+                    setSummary({ has_data: false });
+                }
+            } else {
+                setSummary({ has_data: false });
             }
         } catch (e) {
             console.error("Failed to fetch dashboard summary", e);
+            setSummary({ has_data: false });
         } finally {
             setSummaryLoading(false);
         }
@@ -512,7 +521,6 @@ export default function Dashboard({ addNotification }) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url: urlInput }),
-                credentials: 'include',
                 signal: abortControllerRef.current.signal
             });
             const result = await res.json();
@@ -551,7 +559,6 @@ export default function Dashboard({ addNotification }) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ sheet_name: sheetName }),
-                credentials: 'include',
             });
             const result = await res.json();
             if (res.ok && result.status === 'success') {
@@ -577,7 +584,6 @@ export default function Dashboard({ addNotification }) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ sheet_name: selectedSheet }),
-                credentials: 'include',
                 signal: abortControllerRef.current.signal
             });
             const result = await res.json();
