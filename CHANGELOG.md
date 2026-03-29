@@ -1,3 +1,13 @@
+## [0.5.3] - 2026-03-29
+### Fixed
+- **Compteur Anomalies Dashboard** : Mise à jour du `last_anomaly_count` dans le cache après chaque détection — la card KPI reflète désormais le résultat réel.
+- **Imports Morts** : Suppression de `DatabaseIcon` et `TrendingUp` inutilisés dans `Dashboard.jsx`.
+- **HTML Invalide** : `<p>` → `<div>` dans `KpiCard` pour supporter le JSX complexe dans la prop `sub`.
+- **Sémantique Icône URL** : `AlertCircle` → `Link2` dans l'onglet d'import URL.
+- **State Annulation Upload** : Réinitialisation de `uploadPhase` et `uploadProgress` lors d'une annulation.
+- **Anti-Pattern Re-render** : Remplacement de l'objet `handlers` par des props individuelles dans `EmptyState`.
+- **Spinner Chargement** : Ajout du label "Chargement du tableau de bord…" sur le spinner initial.
+
 ## [0.5.2] - 2026-03-28
 ### Fixed
 - **Fichier Mort Backend** : Suppression de `formula_parser.py` (doublon non importé de `expression_parser.py`).

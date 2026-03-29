@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
-  UploadCloud, CheckCircle2, DatabaseIcon, BarChart3, 
+  UploadCloud, CheckCircle2, BarChart3, 
   FileSpreadsheet, ArrowRight, AlertCircle, AlertTriangle, 
-  ShieldAlert, Settings2, Layers, Database, TrendingUp
+  ShieldAlert, Settings2, Layers, Database, Link2
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthContext';
@@ -41,7 +41,7 @@ function KpiCard({ label, value, sub, icon: Icon, color }) {
         <div className="flex-1 min-w-0">
           <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2">{label}</p>
           <p className="text-2xl font-black text-gray-900 tracking-tight truncate">{value}</p>
-          <p className="text-[10px] font-bold text-gray-400 mt-1.5">{sub}</p>
+          <div className="text-[10px] font-bold text-gray-400 mt-1.5">{sub}</div>
         </div>
         <div className={`w-10 h-10 rounded-xl ${c.bg} ${c.text} flex items-center justify-center border ${c.border} flex-shrink-0 ml-3 group-hover:scale-110 transition-transform`}>
           <Icon size={18} />
@@ -51,7 +51,13 @@ function KpiCard({ label, value, sub, icon: Icon, color }) {
   );
 }
 
-function EmptyState({ username, handlers }) {
+function EmptyState({
+    username,
+    handleDrag, handleDrop, handleChange,
+    isUploading, uploadSuccess, dragActive, fileInputRef,
+    activeTab, setActiveTab, urlInput, setUrlInput, handleUrlSubmit,
+    uploadPhase, uploadProgress, handleCancelUpload
+}) {
   return (
     <div className="min-h-[80vh] flex flex-col items-center justify-center gap-8 animate-fade-in-up">
       <div className="text-center">
@@ -63,18 +69,18 @@ function EmptyState({ username, handlers }) {
       <div className="w-full max-w-2xl">
         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
           {/* Cancelable Upload Modal Portal */}
-          {handlers.isUploading && createPortal(
+          {isUploading && createPortal(
             <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 animate-fade-in">
               <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-sm w-full text-center border border-gray-100 flex flex-col items-center">
                 <div className="w-16 h-16 border-4 border-bank-100 border-t-bank-600 rounded-full animate-spin mb-6"></div>
                 <h3 className="text-xl font-black text-gray-900 mb-2">Importation en cours</h3>
                 <p className="text-sm font-medium text-gray-500 mb-8">
-                  {handlers.uploadPhase === 'processing' 
+                  {uploadPhase === 'processing' 
                     ? 'Analyse Polars en cours...' 
-                    : `Envoi au serveur... ${handlers.uploadProgress}%`}
+                    : `Envoi au serveur... ${uploadProgress}%`}
                 </p>
                 <button 
-                  onClick={handlers.handleCancelUpload}
+                  onClick={handleCancelUpload}
                   className="w-full py-3 px-4 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 font-bold rounded-xl transition-colors ring-1 ring-red-100"
                 >
                   Annuler l'importation
@@ -87,10 +93,10 @@ function EmptyState({ username, handlers }) {
           {/* Tabs */}
           <div className="flex border-b border-gray-100">
             <button
-              onClick={() => handlers.setActiveTab('local')}
-              disabled={handlers.isUploading}
+              onClick={() => setActiveTab('local')}
+              disabled={isUploading}
               className={`flex-1 py-4 text-sm font-black uppercase tracking-wider transition-all ${
-                handlers.activeTab === 'local'
+                activeTab === 'local'
                   ? 'text-bank-600 border-b-2 border-bank-500 bg-bank-50/30'
                   : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
               } disabled:opacity-50 disabled:cursor-not-allowed`}
@@ -98,10 +104,10 @@ function EmptyState({ username, handlers }) {
               📁 Fichier Local
             </button>
             <button
-              onClick={() => handlers.setActiveTab('url')}
-              disabled={handlers.isUploading}
+              onClick={() => setActiveTab('url')}
+              disabled={isUploading}
               className={`flex-1 py-4 text-sm font-black uppercase tracking-wider transition-all ${
-                handlers.activeTab === 'url'
+                activeTab === 'url'
                   ? 'text-bank-600 border-b-2 border-bank-500 bg-bank-50/30'
                   : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
               } disabled:opacity-50 disabled:cursor-not-allowed`}
@@ -110,25 +116,25 @@ function EmptyState({ username, handlers }) {
             </button>
           </div>
 
-          {handlers.activeTab === 'local' ? (
+          {activeTab === 'local' ? (
             <>
               <div
-                onDragEnter={handlers.handleDrag}
-                onDragLeave={handlers.handleDrag}
-                onDragOver={handlers.handleDrag}
-                onDrop={handlers.handleDrop}
-                onClick={!handlers.isUploading ? () => handlers.fileInputRef.current.click() : undefined}
-                className={`p-16 text-center transition-all duration-300 ${!handlers.isUploading ? 'cursor-pointer hover:bg-gray-50/50' : ''} ${handlers.dragActive ? 'bg-bank-50/80 border-bank-400' : ''}`}
+                onDragEnter={handleDrag}
+                onDragLeave={handleDrag}
+                onDragOver={handleDrag}
+                onDrop={handleDrop}
+                onClick={!isUploading ? () => fileInputRef.current.click() : undefined}
+                className={`p-16 text-center transition-all duration-300 ${!isUploading ? 'cursor-pointer hover:bg-gray-50/50' : ''} ${dragActive ? 'bg-bank-50/80 border-bank-400' : ''}`}
               >
                 <input
-                  ref={handlers.fileInputRef}
+                  ref={fileInputRef}
                   type="file"
                   className="hidden"
-                  onChange={handlers.handleChange}
+                  onChange={handleChange}
                   accept=".csv,.tsv,.xlsx,.xls,.json,.parquet"
                 />
 
-                {handlers.uploadSuccess ? (
+                {uploadSuccess ? (
                   <div className="py-8 flex flex-col items-center justify-center animate-fade-in-up">
                     <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
                       <CheckCircle2 className="w-10 h-10 text-emerald-500" />
@@ -136,7 +142,7 @@ function EmptyState({ username, handlers }) {
                     <h3 className="text-xl font-black text-emerald-600 mb-1">Succès !</h3>
                     <p className="text-gray-400 text-sm font-medium">Chargement du tableau de bord...</p>
                   </div>
-                ) : !handlers.isUploading ? (
+                ) : !isUploading ? (
               <>
                 <div className="relative mx-auto w-24 h-24 mb-8">
                   <div className="absolute inset-0 bg-bank-100 rounded-3xl animate-pulse opacity-60" />
@@ -170,7 +176,7 @@ function EmptyState({ username, handlers }) {
           </>
           ) : (
             <div className="p-10 flex flex-col items-center justify-center text-center">
-              {handlers.uploadSuccess ? (
+              {uploadSuccess ? (
                   <div className="py-8 flex flex-col items-center justify-center animate-fade-in-up">
                     <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
                       <CheckCircle2 className="w-10 h-10 text-emerald-500" />
@@ -178,10 +184,10 @@ function EmptyState({ username, handlers }) {
                     <h3 className="text-xl font-black text-emerald-600 mb-1">Succès !</h3>
                     <p className="text-gray-400 text-sm font-medium">Chargement du tableau de bord...</p>
                   </div>
-              ) : !handlers.isUploading ? (
+              ) : !isUploading ? (
                 <>
                   <div className="w-16 h-16 bg-bank-50 rounded-2xl flex items-center justify-center mb-6">
-                    <AlertCircle className="w-8 h-8 text-bank-600" />
+                    <Link2 className="w-8 h-8 text-bank-600" />
                   </div>
                   <h3 className="text-xl font-black text-gray-900 mb-2">Lien vers vos données</h3>
                   <p className="text-gray-500 text-sm font-medium mb-8 max-w-md">
@@ -192,14 +198,14 @@ function EmptyState({ username, handlers }) {
                     <input
                       type="url"
                       placeholder="https://docs.google.com/spreadsheets/d/..."
-                      value={handlers.urlInput}
-                      onChange={(e) => handlers.setUrlInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handlers.urlInput && handlers.handleUrlSubmit()}
+                      value={urlInput}
+                      onChange={(e) => setUrlInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && urlInput && handleUrlSubmit()}
                       className="w-full px-5 py-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-bank-500 focus:bg-white outline-none transition-all pr-32 font-medium text-gray-700"
                     />
                     <button
-                      onClick={handlers.handleUrlSubmit}
-                      disabled={!handlers.urlInput}
+                      onClick={handleUrlSubmit}
+                      disabled={!urlInput}
                       className="absolute right-2 top-2 bottom-2 px-6 bg-bank-600 text-white font-black text-sm rounded-xl hover:bg-bank-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Importer
@@ -383,6 +389,8 @@ export default function Dashboard({ addNotification }) {
     const handleCancelUpload = () => {
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
+            setUploadPhase('sending');
+            setUploadProgress(0);
         }
     };
 
@@ -606,20 +614,32 @@ export default function Dashboard({ addNotification }) {
     return (
         <div className="max-w-7xl mx-auto space-y-6">
             {summaryLoading ? (
-                <div className="min-h-[60vh] flex items-center justify-center">
+                <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
                     <div className="w-12 h-12 border-4 border-bank-200 border-t-bank-600 rounded-full animate-spin"></div>
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest animate-pulse">
+                        Chargement du tableau de bord...
+                    </p>
                 </div>
             ) : hasData ? (
                 <DataState summary={summary} username={username} onNewUpload={handleNewUpload} />
             ) : (
                 <EmptyState 
-                    username={username} 
-                    handlers={{
-                        handleDrag, handleDrop, handleChange, isUploading, uploadSuccess,
-                        dragActive, fileInputRef,
-                        activeTab, setActiveTab, urlInput, setUrlInput, handleUrlSubmit,
-                        uploadPhase, uploadProgress, handleCancelUpload
-                    }} 
+                    username={username}
+                    handleDrag={handleDrag}
+                    handleDrop={handleDrop}
+                    handleChange={handleChange}
+                    isUploading={isUploading}
+                    uploadSuccess={uploadSuccess}
+                    dragActive={dragActive}
+                    fileInputRef={fileInputRef}
+                    activeTab={activeTab}
+                    setActiveTab={setActiveTab}
+                    urlInput={urlInput}
+                    setUrlInput={setUrlInput}
+                    handleUrlSubmit={handleUrlSubmit}
+                    uploadPhase={uploadPhase}
+                    uploadProgress={uploadProgress}
+                    handleCancelUpload={handleCancelUpload}
                 />
             )}
 

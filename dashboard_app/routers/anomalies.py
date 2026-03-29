@@ -42,6 +42,11 @@ async def api_detect_anomalies(
         columns=body.columns,
     )
 
+    # Update cache so Dashboard card reflects latest anomaly count
+    entry.last_anomaly_count = result["anomaly_count"]
+    entry.summary_metadata = None  # invalidate summary cache to force recalculation
+    await cache_manager.set(user.cache_id, entry)
+
     logger.info(
         f"[Anomalies] method={body.method} sensitivity={body.sensitivity} "
         f"rows={result['total_rows']} anomalies={result['anomaly_count']}"
